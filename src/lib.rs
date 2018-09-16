@@ -12,7 +12,7 @@ extern crate proptest;
 extern crate assert_matches;
 
 ///A dlt message header
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct DltHeader {
     pub big_endian: bool,
     pub version: u8,
@@ -24,7 +24,7 @@ pub struct DltHeader {
     pub extended_header: Option<ExtendedDltHeader>
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct ExtendedDltHeader {
     pub message_info: u8,
     pub number_of_arguments: u8,
@@ -217,7 +217,6 @@ mod tests {
         }
     }
 
-
     proptest! {
         #[test]
         fn write_read(ref dlt_header in dlt_header_any()) {
@@ -247,5 +246,35 @@ mod tests {
             let mut buffer = Vec::new();
             assert_matches!(input.write(&mut buffer), Err(WriteError::VersionTooLarge(_)));
         }
+    }
+    #[test]
+    fn test_debug() {
+        {
+            use ReadError::*;
+            for value in [
+                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+            ].iter() {
+                println!("{:?}", value);
+            }
+        }
+        {
+            use WriteError::*;
+            for value in [
+                VersionTooLarge(123),
+                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+            ].iter() {
+                println!("{:?}", value);
+            }
+        }
+    }
+    #[test]
+    fn set_verbose() {
+        let mut header: ExtendedDltHeader = Default::default();
+        let original = header.clone();
+        header.set_verbose(true);
+        assert_eq!(true, header.verbose());
+        header.set_verbose(false);
+        assert_eq!(false, header.verbose());
+        assert_eq!(original, header);
     }
 }
