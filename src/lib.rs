@@ -7,8 +7,12 @@ use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 #[macro_use]
 extern crate proptest;
 
+#[cfg(test)]
+#[macro_use]
+extern crate assert_matches;
+
 ///A dlt message header
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct DltHeader {
     pub big_endian: bool,
     pub version: u8,
@@ -20,7 +24,7 @@ pub struct DltHeader {
     pub extended_header: Option<ExtendedDltHeader>
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ExtendedDltHeader {
     pub message_info: u8,
     pub number_of_arguments: u8,
@@ -42,7 +46,6 @@ impl From<io::Error> for ReadError {
 #[derive(Debug)]
 pub enum WriteError {
     VersionTooLarge(u8),
-    MessageTypeAndInfoTooLarge(u8),
     IoError(io::Error)
 }
 
@@ -223,6 +226,26 @@ mod tests {
             let mut reader = Cursor::new(&buffer[..]);
             let result = DltHeader::read(&mut reader).unwrap();
             assert_eq!(dlt_header, &result);
+        }
+    }
+    proptest! {
+        #[test]
+        fn read_length_error(ref dlt_header in dlt_header_any()) {
+            let mut buffer = Vec::new();
+            dlt_header.write(&mut buffer).unwrap();
+            let reduced_len = buffer.len() - 1;
+            let mut reader = Cursor::new(&buffer[..reduced_len]);
+            assert_matches!(DltHeader::read(&mut reader), Err(ReadError::IoError(_)));
+        }
+    }
+    proptest! {
+        #[test]
+        fn write_version_error(ref dlt_header in dlt_header_any(),
+                               version in MAX_VERSION+1..std::u8::MAX) {
+            let mut input = dlt_header.clone();
+            input.version = version;
+            let mut buffer = Vec::new();
+            assert_matches!(input.write(&mut buffer), Err(WriteError::VersionTooLarge(_)));
         }
     }
 }

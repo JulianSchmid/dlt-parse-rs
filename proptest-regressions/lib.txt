@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+xs 4236928652 48947830 2096379890 2123546847 # shrinks to ref dlt_header = DltHeader { big_endian: false, version: 0, message_counter: 0, length: 0, ecu_id: None, session_id: None, timestamp: None, extended_header: None }, version = 7
