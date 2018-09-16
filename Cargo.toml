@@ -2,5 +2,22 @@
 name = "dlt_parse"
 version = "0.1.0"
 authors = ["Julian Schmid <info@julianschmid.name>"]
+description = "A library for parsing the \"Diagnostic Log and Trace\" network protocol (without payload interpretation)."
+repository = "https://github.com/JulianSchmid/dlt-parse-rs"
+categories = ["network-programming", "parser-implementations"]
+keywords = ["dlt", "autosar"]
+license = "BSD-3-Clause"
+readme = "README.md"
+exclude = [
+    ".gitignore",
+    ".travis.yml",
+    ".gitlab-ci.yml",
+    ".travis/*"
+]
 
 [dependencies]
+byteorder = "1.2.6"
+
+[dev-dependencies]
+assert_matches = "1.3.0"
+proptest = "0.8.6"
