@@ -247,6 +247,14 @@ mod tests {
             assert_matches!(input.write(&mut buffer), Err(WriteError::VersionTooLarge(_)));
         }
     }
+    proptest! {
+        #[test]
+        fn write_io_error(ref dlt_header in dlt_header_any()) {
+            let mut buffer: [u8;1] = [0];
+            let mut writer = Cursor::new(&mut buffer[..]);
+            assert_matches!(dlt_header.write(&mut writer), Err(WriteError::IoError(_)));
+        }
+    }
     #[test]
     fn test_debug() {
         {
@@ -261,8 +269,8 @@ mod tests {
             use WriteError::*;
             for value in [
                 VersionTooLarge(123),
-                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-            ].iter() {
+                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))].iter()
+            {
                 println!("{:?}", value);
             }
         }
