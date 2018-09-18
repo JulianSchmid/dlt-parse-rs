@@ -1,7 +1,7 @@
 use std::io;
 
 extern crate byteorder;
-use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
 #[cfg(test)]
 #[macro_use]
@@ -32,8 +32,19 @@ pub struct ExtendedDltHeader {
     pub context_id: u32
 }
 
+///A slice containing an dlt header & payload.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DltPacketSlice<'a> {
+    slice: &'a [u8],
+    header_size: usize
+}
+
 #[derive(Debug)]
 pub enum ReadError {
+    ///Error if the slice is smaller then dlt length field or minimal size.
+    UnexpectedEndOfSlice { minimum_size: usize, actual_size: usize},
+    ///Error if the dlt length is smaller then the header the calculated header size based on the flags
+    LengthSmallerThenHeader { required_header_length: usize, length: usize },
     IoError(io::Error)
 }
 
@@ -155,6 +166,31 @@ impl DltHeader {
         }
         Ok(())
     }
+
+    ///Returns if the package is a verbose package
+    pub fn verbose(&self) -> bool {
+        match &self.extended_header {
+            None => false, //only packages with extended headers can be verbose
+            Some(ext) => ext.verbose() 
+        }
+    }
+
+    ///Return the byte/octed size of the serialized header
+    pub fn header_len(&self) -> u16 {
+        4 + match self.ecu_id {
+            Some(_) => 4,
+            None => 0
+        } + match self.session_id {
+            Some(_) => 4,
+            None => 0
+        } + match self.timestamp {
+            Some(_) => 4,
+            None => 0
+        } + match self.extended_header {
+            Some(_) => 10,
+            None => 0
+        }
+    }
 }
 
 impl ExtendedDltHeader {
@@ -171,6 +207,99 @@ impl ExtendedDltHeader {
     }
 }
 
+impl<'a> DltPacketSlice<'a> {
+
+    ///Read the dlt header and create a slice containing the dlt header & payload.
+    pub fn from_slice(slice: &'a [u8]) -> Result<DltPacketSlice, ReadError> {
+
+        if slice.len() < 4 {
+            return Err(ReadError::UnexpectedEndOfSlice{ minimum_size: 4, actual_size: slice.len()})
+        }
+        
+        let length = BigEndian::read_u16(&slice[2..4]) as usize;
+        if slice.len() < length {
+            return Err(ReadError::UnexpectedEndOfSlice { minimum_size: length, actual_size: slice.len() });
+        }
+
+        //calculate the minimum size based on the header flags
+        let header_type = slice[0];
+        let mut header_size = 4;
+        if 0 != header_type & EXTDENDED_HEADER_FLAG {
+            header_size += 10;
+        }
+        if 0 != header_type & ECU_ID_FLAG {
+            header_size += 4;
+        }
+        if 0 != header_type & SESSION_ID_FLAG {
+            header_size += 4;
+        }
+        if 0 != header_type & TIMESTAMP_FLAG {
+            header_size += 4;
+        }
+        if length < header_size {
+
+            return Err(ReadError::LengthSmallerThenHeader { 
+                required_header_length: header_size, 
+                length: length 
+            });
+        }
+
+        //looks ok -> create the DltPacketSlice
+        Ok(DltPacketSlice {
+            slice: &slice[..length],
+            header_size: header_size
+        })
+    }
+
+    ///Returns a slice containing the payload of the dlt message
+    pub fn payload(&self) -> &'a [u8] {
+        &self.slice[self.header_size..]
+    }
+
+    ///Deserialize the dlt header
+    pub fn header(&self) -> DltHeader {
+        let mut offset = 4;
+        let header_type = self.slice[0];
+        DltHeader {
+            big_endian: 0 != header_type & BIG_ENDIAN_FLAG,
+            version: (header_type >> 5) & MAX_VERSION,
+            message_counter: self.slice[1],
+            length: BigEndian::read_u16(&self.slice[2..4]),
+            ecu_id: if 0 != header_type & ECU_ID_FLAG {
+                let start = offset;
+                offset += 4;
+                Some(BigEndian::read_u32(&self.slice[start..offset]))
+            } else {
+                None
+            },
+            session_id: if 0 != header_type & SESSION_ID_FLAG {
+                let start = offset;
+                offset += 4;
+                Some(BigEndian::read_u32(&self.slice[start..offset]))
+            } else {
+                None
+            },
+            timestamp: if 0 != header_type & TIMESTAMP_FLAG {
+                let start = offset;
+                offset += 4;
+                Some(BigEndian::read_u32(&self.slice[start..offset]))
+            } else {
+                None
+            },
+            extended_header: if 0 != header_type & EXTDENDED_HEADER_FLAG {
+                Some(ExtendedDltHeader {
+                    message_info: self.slice[offset],
+                    number_of_arguments: self.slice[offset + 1],
+                    application_id: BigEndian::read_u32(&self.slice[offset + 2 .. offset + 6]),
+                    context_id: BigEndian::read_u32(&self.slice[offset + 6 .. offset + 10])
+                })
+            } else {
+                None
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -178,6 +307,7 @@ mod tests {
     use proptest::*;
     use proptest::prelude::*;
     use std::io::Cursor;
+    use std::io::Write;
 
     prop_compose! {
         fn extended_dlt_header_any()(message_info in any::<u8>(),
@@ -191,6 +321,41 @@ mod tests {
                 application_id: application_id,
                 context_id: context_id
             }
+        }
+    }
+
+    prop_compose! {
+        fn dlt_header_with_payload_any()(
+            payload_length in 0u32..1234 //limit it a bit so that not too much memory is allocated during testing
+        )(
+            big_endian in any::<bool>(),
+            version in prop::bits::u8::between(0,3),
+            message_counter in any::<u8>(),
+            ecu_id in any::<Option<u32>>(),
+            session_id in any::<Option<u32>>(),
+            timestamp in any::<Option<u32>>(),
+            extended_header in option::of(extended_dlt_header_any()),
+            payload in proptest::collection::vec(any::<u8>(), payload_length as usize)
+        ) -> (DltHeader, Vec<u8>)
+        {
+            (
+                {
+                    let mut header = DltHeader {
+                        big_endian: big_endian,
+                        version: version,
+                        message_counter: message_counter,
+                        length: payload.len() as u16,
+                        ecu_id: ecu_id,
+                        session_id: session_id,
+                        timestamp: timestamp,
+                        extended_header: extended_header
+                    };
+                    let header_size = header.header_len();
+                    header.length = header_size + (payload.len() as u16);
+                    header
+                },
+                payload
+            )
         }
     }
 
@@ -255,6 +420,19 @@ mod tests {
             assert_matches!(dlt_header.write(&mut writer), Err(WriteError::IoError(_)));
         }
     }
+    proptest! {
+        #[test]
+        fn packet_from_slice(ref packet in dlt_header_with_payload_any()) {
+            let mut buffer = Vec::new();
+            packet.0.write(&mut buffer).unwrap();
+            buffer.write(&packet.1[..]).unwrap();
+            //read the slice
+            let slice = DltPacketSlice::from_slice(&buffer[..]).unwrap();
+            //check the results are matching the input
+            assert_eq!(slice.header(), packet.0);
+            assert_eq!(slice.payload(), &packet.1[..]);
+        }
+    }
     #[test]
     fn test_debug() {
         {
@@ -276,7 +454,7 @@ mod tests {
         }
     }
     #[test]
-    fn set_verbose() {
+    fn ext_set_verbose() {
         let mut header: ExtendedDltHeader = Default::default();
         let original = header.clone();
         header.set_verbose(true);
@@ -284,5 +462,17 @@ mod tests {
         header.set_verbose(false);
         assert_eq!(false, header.verbose());
         assert_eq!(original, header);
+    }
+    #[test]
+    fn verbose() {
+
+        let mut header: DltHeader = Default::default();
+        assert_eq!(false, header.verbose());
+        //add an extended header without the verbose flag
+        header.extended_header = Some(Default::default());
+        assert_eq!(false, header.verbose());
+        //set the verbose flag
+        header.extended_header.as_mut().unwrap().set_verbose(true);
+        assert_eq!(true, header.verbose());
     }
 }
