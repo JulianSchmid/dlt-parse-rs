@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 xs 4236928652 48947830 2096379890 2123546847 # shrinks to ref dlt_header = DltHeader { big_endian: false, version: 0, message_counter: 0, length: 0, ecu_id: None, session_id: None, timestamp: None, extended_header: None }, version = 7
+xs 1285569421 471825135 3568656765 1299307238 # shrinks to ref packet = (DltHeader { big_endian: false, version: 0, message_counter: 0, length: 4, ecu_id: None, session_id: None, timestamp: None, extended_header: None }, [])

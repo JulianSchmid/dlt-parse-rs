@@ -43,8 +43,8 @@ pub struct DltPacketSlice<'a> {
 pub enum ReadError {
     ///Error if the slice is smaller then dlt length field or minimal size.
     UnexpectedEndOfSlice { minimum_size: usize, actual_size: usize},
-    ///Error if the dlt length is smaller then the header the calculated header size based on the flags
-    LengthSmallerThenHeader { required_header_length: usize, length: usize },
+    ///Error if the dlt length is smaller then the header the calculated header size based on the flags (+ minimum payload size of 4 bytes/octetets)
+    LengthSmallerThenMinimum { required_length: usize, length: usize },
     IoError(io::Error)
 }
 
@@ -223,7 +223,8 @@ impl<'a> DltPacketSlice<'a> {
 
         //calculate the minimum size based on the header flags
         let header_type = slice[0];
-        let mut header_size = 4;
+        //the header size has at least 4 bytes
+        let mut header_size = 4; 
         if 0 != header_type & EXTDENDED_HEADER_FLAG {
             header_size += 10;
         }
@@ -236,10 +237,12 @@ impl<'a> DltPacketSlice<'a> {
         if 0 != header_type & TIMESTAMP_FLAG {
             header_size += 4;
         }
-        if length < header_size {
-
-            return Err(ReadError::LengthSmallerThenHeader { 
-                required_header_length: header_size, 
+        //the minimum size is composed out of the header size
+        // + the minimum size for the payload (4 for message id in non verbose
+        // or 4 for the typeinfo in verbose)
+        if length < header_size + 4 {
+            return Err(ReadError::LengthSmallerThenMinimum { 
+                required_length: header_size + 4, 
                 length: length 
             });
         }
@@ -326,7 +329,7 @@ mod tests {
 
     prop_compose! {
         fn dlt_header_with_payload_any()(
-            payload_length in 0u32..1234 //limit it a bit so that not too much memory is allocated during testing
+            payload_length in 4u32..1234 //limit it a bit so that not too much memory is allocated during testing
         )(
             big_endian in any::<bool>(),
             version in prop::bits::u8::between(0,3),
@@ -431,6 +434,47 @@ mod tests {
             //check the results are matching the input
             assert_eq!(slice.header(), packet.0);
             assert_eq!(slice.payload(), &packet.1[..]);
+            //check that a too small slice produces an error
+            {
+                let len = buffer.len();
+                assert_matches!(DltPacketSlice::from_slice(&buffer[..len-1]), Err(ReadError::UnexpectedEndOfSlice{ 
+                    minimum_size: _, 
+                    actual_size: _
+                }));
+            }
+        }
+    }
+    #[test]
+    fn packet_from_slice_header_len_eof_errors() {
+        //too small for header
+        {
+            let buffer = [1,2,3];
+            assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::UnexpectedEndOfSlice{ 
+                minimum_size: 4, 
+                actual_size: 3
+            }));
+        }
+        //too small for the length
+        {
+            let mut header: DltHeader = Default::default();
+            header.length = 5;
+            let mut buffer = Vec::new();
+            header.write(&mut buffer).unwrap();
+            assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::UnexpectedEndOfSlice{ 
+                minimum_size: 5, 
+                actual_size: 4
+            }));
+        }
+    }
+    proptest! {
+        #[test]
+        fn packet_from_slice_header_variable_len_eof_errors(ref input in dlt_header_any()) {
+            let mut header = input.clone();
+            header.length = header.header_len() + 3; //minimum payload size is 4
+            let mut buffer = Vec::new();
+            header.write(&mut buffer).unwrap();
+            buffer.write(&[1,2,3]).unwrap();
+            assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::LengthSmallerThenMinimum{required_length: _, length: _}));
         }
     }
     #[test]
@@ -438,6 +482,8 @@ mod tests {
         {
             use ReadError::*;
             for value in [
+                UnexpectedEndOfSlice { minimum_size: 1, actual_size: 2},
+                LengthSmallerThenMinimum { required_length: 3, length: 4 },
                 IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
             ].iter() {
                 println!("{:?}", value);
@@ -465,7 +511,6 @@ mod tests {
     }
     #[test]
     fn verbose() {
-
         let mut header: DltHeader = Default::default();
         assert_eq!(false, header.verbose());
         //add an extended header without the verbose flag
