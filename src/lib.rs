@@ -4,7 +4,6 @@ extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
 #[cfg(test)]
-#[macro_use]
 extern crate proptest;
 
 #[cfg(test)]
@@ -171,7 +170,7 @@ impl DltHeader {
     pub fn verbose(&self) -> bool {
         match &self.extended_header {
             None => false, //only packages with extended headers can be verbose
-            Some(ext) => ext.verbose() 
+            Some(ext) => ext.is_verbose() 
         }
     }
 
@@ -194,11 +193,11 @@ impl DltHeader {
 }
 
 impl ExtendedDltHeader {
-    pub fn verbose(&self) -> bool {
+    pub fn is_verbose(&self) -> bool {
         0 != self.message_info & 0b1 
     }
 
-    pub fn set_verbose(&mut self, is_verbose: bool) {
+    pub fn set_is_verbose(&mut self, is_verbose: bool) {
         if is_verbose {
             self.message_info |= 0b1;
         } else {
@@ -500,24 +499,24 @@ mod tests {
         }
     }
     #[test]
-    fn ext_set_verbose() {
+    fn ext_set_is_verbose() {
         let mut header: ExtendedDltHeader = Default::default();
         let original = header.clone();
-        header.set_verbose(true);
-        assert_eq!(true, header.verbose());
-        header.set_verbose(false);
-        assert_eq!(false, header.verbose());
+        header.set_is_verbose(true);
+        assert_eq!(true, header.is_verbose());
+        header.set_is_verbose(false);
+        assert_eq!(false, header.is_verbose());
         assert_eq!(original, header);
     }
     #[test]
-    fn verbose() {
+    fn is_verbose() {
         let mut header: DltHeader = Default::default();
         assert_eq!(false, header.verbose());
         //add an extended header without the verbose flag
         header.extended_header = Some(Default::default());
         assert_eq!(false, header.verbose());
         //set the verbose flag
-        header.extended_header.as_mut().unwrap().set_verbose(true);
+        header.extended_header.as_mut().unwrap().set_is_verbose(true);
         assert_eq!(true, header.verbose());
     }
 }
