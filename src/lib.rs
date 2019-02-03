@@ -253,6 +253,11 @@ impl<'a> DltPacketSlice<'a> {
         })
     }
 
+    ///Returns the slice containing the dlt header + payload.
+    pub fn slice(&self) -> &'a [u8] {
+        self.slice
+    }
+
     ///Returns a slice containing the payload of the dlt message
     pub fn payload(&self) -> &'a [u8] {
         &self.slice[self.header_size..]
@@ -298,6 +303,49 @@ impl<'a> DltPacketSlice<'a> {
             } else {
                 None
             }
+        }
+    }
+}
+
+///Allows iterating over the someip message in a udp or tcp payload.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SliceIterator<'a> {
+    slice: &'a [u8]
+}
+
+impl<'a> SliceIterator<'a> {
+    pub fn new(slice: &'a [u8]) -> SliceIterator<'a> {
+        SliceIterator {
+            slice
+        }
+    }
+}
+
+impl<'a> Iterator for SliceIterator<'a> {
+    type Item = Result<DltPacketSlice<'a>, ReadError>;
+
+    fn next(&mut self) -> Option<Result<DltPacketSlice<'a>, ReadError>> {
+        if !self.slice.is_empty() {
+            //parse
+            let result = DltPacketSlice::from_slice(self.slice);
+
+            //move the slice depending on the result
+            match &result {
+                Err(_) => {
+                    //error => move the slice to an len = 0 position so that the iterator ends
+                    let len = self.slice.len();
+                    self.slice = &self.slice[len..];
+                }
+                Ok(ref value) => {
+                    //by the length just taken by the slice
+                    self.slice = &self.slice[value.slice().len()..];
+                }
+            }
+
+            //return parse result
+            Some(result)
+        } else {
+            None
         }
     }
 }
@@ -394,6 +442,7 @@ mod tests {
             assert_eq!(dlt_header, &result);
         }
     }
+
     proptest! {
         #[test]
         fn read_length_error(ref dlt_header in dlt_header_any()) {
@@ -404,6 +453,7 @@ mod tests {
             assert_matches!(DltHeader::read(&mut reader), Err(ReadError::IoError(_)));
         }
     }
+
     proptest! {
         #[test]
         fn write_version_error(ref dlt_header in dlt_header_any(),
@@ -414,6 +464,7 @@ mod tests {
             assert_matches!(input.write(&mut buffer), Err(WriteError::VersionTooLarge(_)));
         }
     }
+
     proptest! {
         #[test]
         fn write_io_error(ref dlt_header in dlt_header_any()) {
@@ -422,6 +473,7 @@ mod tests {
             assert_matches!(dlt_header.write(&mut writer), Err(WriteError::IoError(_)));
         }
     }
+
     proptest! {
         #[test]
         fn packet_from_slice(ref packet in dlt_header_with_payload_any()) {
@@ -443,6 +495,66 @@ mod tests {
             }
         }
     }
+
+    proptest! {
+        #[test]
+        fn iterator(ref packets in prop::collection::vec(dlt_header_with_payload_any(), 1..5)) {
+            //serialize the packets
+            let mut buffer = Vec::with_capacity(
+                (*packets).iter().fold(0, |acc, x| acc + usize::from(x.0.header_len()) + x.1.len())
+            );
+
+            let mut offsets: Vec<(usize, usize)> = Vec::with_capacity(packets.len());
+
+            for packet in packets {
+
+                //save the start for later processing
+                let start = buffer.len();
+
+                //header & payload
+                packet.0.write(&mut buffer).unwrap();
+                buffer.write_all(&packet.1).unwrap();
+
+                //safe the offset for later
+                offsets.push((start, buffer.len()));
+            }
+
+            //determine the expected output
+            let mut expected: Vec<DltPacketSlice> = Vec::with_capacity(packets.len());
+            for offset in &offsets {
+                //create the expected slice
+                let slice = &buffer[offset.0..offset.1];
+                let e = DltPacketSlice::from_slice(slice).unwrap();
+                assert_eq!(e.slice(), slice);
+                expected.push(e);
+            }
+
+            //iterate over packets
+            assert_eq!(expected, SliceIterator::new(&buffer).map(|x| x.unwrap()).collect::<Vec<DltPacketSlice>>());
+
+            //check for error return when the slice is too small
+            //first entry
+            {
+                let o = offsets.first().unwrap();
+                let mut it = SliceIterator::new(&buffer[..(o.1 - 1)]);
+
+                assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice{minimum_size: _, actual_size: _})));
+                //check that the iterator does not continue
+                assert_matches!(it.next(), None);
+            }
+            //last entry
+            {
+                let o = offsets.last().unwrap();
+                let it = SliceIterator::new(&buffer[..(o.1 - 1)]);
+                let mut it = it.skip(offsets.len()-1);
+
+                assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice{minimum_size: _, actual_size: _})));
+                //check that the iterator does not continue
+                assert_matches!(it.next(), None);
+            }
+        }
+    }
+
     #[test]
     fn packet_from_slice_header_len_eof_errors() {
         //too small for header
@@ -465,6 +577,7 @@ mod tests {
             }));
         }
     }
+
     proptest! {
         #[test]
         fn packet_from_slice_header_variable_len_eof_errors(ref input in dlt_header_any()) {
@@ -476,6 +589,7 @@ mod tests {
             assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::LengthSmallerThenMinimum{required_length: _, length: _}));
         }
     }
+
     #[test]
     fn test_debug() {
         {
@@ -505,6 +619,7 @@ mod tests {
             println!("{:?}", slice);
         }
     }
+
     #[test]
     fn ext_set_is_verbose() {
         let mut header: ExtendedDltHeader = Default::default();
@@ -515,6 +630,7 @@ mod tests {
         assert_eq!(false, header.is_verbose());
         assert_eq!(original, header);
     }
+
     #[test]
     fn is_verbose() {
         let mut header: DltHeader = Default::default();
