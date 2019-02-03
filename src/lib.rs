@@ -497,6 +497,13 @@ mod tests {
                 println!("{:?}", value);
             }
         }
+        {
+            let header: DltHeader = Default::default();
+            let mut buffer = Vec::new();
+            header.write(&mut buffer).unwrap();
+            let slice = DltPacketSlice::from_slice(&buffer);
+            println!("{:?}", slice);
+        }
     }
     #[test]
     fn ext_set_is_verbose() {
