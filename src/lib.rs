@@ -135,24 +135,25 @@ impl DltHeader {
             if self.timestamp.is_some() {
                 result |= TIMESTAMP_FLAG;
             }
-            result |= (self.version << 5) & 0b11100000;
+            result |= (self.version << 5) & 0b1110_0000;
             result
         })?;
         //write the rest of the standard header fields
         writer.write_u8(self.message_counter)?;
         writer.write_u16::<BigEndian>(self.length)?;
-        match self.ecu_id {
-            Some(value) => writer.write_u32::<BigEndian>(value)?,
-            None => {}
+
+        if let Some(value) = self.ecu_id { 
+            writer.write_u32::<BigEndian>(value)?;
         }
-        match self.session_id {
-            Some(value) => writer.write_u32::<BigEndian>(value)?,
-            None => {}
+
+        if let Some(value) = self.session_id {
+            writer.write_u32::<BigEndian>(value)?;
         }
-        match self.timestamp {
-            Some(value) => writer.write_u32::<BigEndian>(value)?,
-            None => {}
+
+        if let Some(value) = self.timestamp {
+            writer.write_u32::<BigEndian>(value)?;
         }
+
         //write the extended header if it exists
         match &self.extended_header {
             Some(value) => {
@@ -242,14 +243,14 @@ impl<'a> DltPacketSlice<'a> {
         if length < header_size + 4 {
             return Err(ReadError::LengthSmallerThenMinimum { 
                 required_length: header_size + 4, 
-                length: length 
+                length 
             });
         }
 
         //looks ok -> create the DltPacketSlice
         Ok(DltPacketSlice {
             slice: &slice[..length],
-            header_size: header_size
+            header_size
         })
     }
 
@@ -265,44 +266,54 @@ impl<'a> DltPacketSlice<'a> {
 
     ///Deserialize the dlt header
     pub fn header(&self) -> DltHeader {
-        let mut offset = 4;
         let header_type = self.slice[0];
+        let (big_endian, version) = {
+            let header_type = self.slice[0];
+
+            (0 != header_type & BIG_ENDIAN_FLAG, 
+             (header_type >> 5) & MAX_VERSION)
+        };
+        let message_counter = self.slice[1];
+        let length = BigEndian::read_u16(&self.slice[2..4]);
+
+        let (ecu_id, slice) = if 0 != header_type & ECU_ID_FLAG {
+            (Some(BigEndian::read_u32(&self.slice[4..8])), &self.slice[8..])
+        } else {
+            (None, &self.slice[4..])
+        };
+
+        let (session_id, slice) = if 0 != header_type & SESSION_ID_FLAG {
+            (Some(BigEndian::read_u32(&slice[..4])), &slice[4..])
+        } else {
+            (None, slice)
+        };
+
+        let (timestamp, slice) = if 0 != header_type & TIMESTAMP_FLAG {
+            (Some(BigEndian::read_u32(&slice[..4])), &slice[4..])
+        } else {
+            (None, slice)
+        };
+
+        let extended_header = if 0 != header_type & EXTDENDED_HEADER_FLAG {
+            Some(ExtendedDltHeader {
+                message_info: slice[0],
+                number_of_arguments: slice[1],
+                application_id: BigEndian::read_u32(&slice[2..6]),
+                context_id: BigEndian::read_u32(&slice[6..10])
+            })
+        } else {
+            None
+        };
+
         DltHeader {
-            big_endian: 0 != header_type & BIG_ENDIAN_FLAG,
-            version: (header_type >> 5) & MAX_VERSION,
-            message_counter: self.slice[1],
-            length: BigEndian::read_u16(&self.slice[2..4]),
-            ecu_id: if 0 != header_type & ECU_ID_FLAG {
-                let start = offset;
-                offset += 4;
-                Some(BigEndian::read_u32(&self.slice[start..offset]))
-            } else {
-                None
-            },
-            session_id: if 0 != header_type & SESSION_ID_FLAG {
-                let start = offset;
-                offset += 4;
-                Some(BigEndian::read_u32(&self.slice[start..offset]))
-            } else {
-                None
-            },
-            timestamp: if 0 != header_type & TIMESTAMP_FLAG {
-                let start = offset;
-                offset += 4;
-                Some(BigEndian::read_u32(&self.slice[start..offset]))
-            } else {
-                None
-            },
-            extended_header: if 0 != header_type & EXTDENDED_HEADER_FLAG {
-                Some(ExtendedDltHeader {
-                    message_info: self.slice[offset],
-                    number_of_arguments: self.slice[offset + 1],
-                    application_id: BigEndian::read_u32(&self.slice[offset + 2 .. offset + 6]),
-                    context_id: BigEndian::read_u32(&self.slice[offset + 6 .. offset + 10])
-                })
-            } else {
-                None
-            }
+            big_endian,
+            version,
+            message_counter,
+            length,
+            ecu_id,
+            session_id,
+            timestamp,
+            extended_header
         }
     }
 }
