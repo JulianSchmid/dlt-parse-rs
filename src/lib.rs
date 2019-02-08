@@ -1,7 +1,33 @@
+//! A zero allocation rust library for basic parsing & writing DLT (Diagnostic Log and Trace)
+//! packets. Currently only the parsing and writing of the header is supported (excluding the 
+//! verbose packet definitions).
+//!
+//! # Usage:
+//! 
+//! First, add the following to your `Cargo.toml`:
+//! 
+//! ```toml
+//! [dependencies]
+//! dlt_parse = "0.1.0"
+//! ```
+//! 
+//! Next, add this to your crate root:
+//! 
+//! ```
+//! extern crate dlt_parse;
+//! ```
+//!
+//! # Slicing the packet
+//! ```
+//! 
+//! ```
+//!
+//! # References
+//! * (Log and Trace Protocol Specification)[https://www.autosar.org/fileadmin/user_upload/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf]
 use std::io;
 
 extern crate byteorder;
-use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
+use self::byteorder::{ByteOrder, BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 
 #[cfg(test)]
 extern crate proptest;
@@ -13,7 +39,8 @@ extern crate assert_matches;
 ///A dlt message header
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct DltHeader {
-    pub big_endian: bool,
+    ///If true the payload is encoded in big endian. This does not influence the fields of the dlt header, which is always encoded in big endian.
+    pub is_big_endian: bool,
     pub version: u8,
     pub message_counter: u8,
     pub length: u16,
@@ -21,21 +48,6 @@ pub struct DltHeader {
     pub session_id: Option<u32>,
     pub timestamp: Option<u32>,
     pub extended_header: Option<ExtendedDltHeader>
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub struct ExtendedDltHeader {
-    pub message_info: u8,
-    pub number_of_arguments: u8,
-    pub application_id: u32,
-    pub context_id: u32
-}
-
-///A slice containing an dlt header & payload.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DltPacketSlice<'a> {
-    slice: &'a [u8],
-    header_size: usize
 }
 
 #[derive(Debug)]
@@ -79,7 +91,7 @@ impl DltHeader {
         let header_type = reader.read_u8()?;
         //let extended_header = 0 != header_type & EXTDENDED_HEADER_FLAG;
         Ok(DltHeader{
-            big_endian: 0 != header_type & BIG_ENDIAN_FLAG,
+            is_big_endian: 0 != header_type & BIG_ENDIAN_FLAG,
             version: (header_type >> 5) & MAX_VERSION,
             message_counter: reader.read_u8()?,
             length: reader.read_u16::<BigEndian>()?,
@@ -123,7 +135,7 @@ impl DltHeader {
             if self.extended_header.is_some() {
                 result |= EXTDENDED_HEADER_FLAG;
             }
-            if self.big_endian {
+            if self.is_big_endian {
                 result |= BIG_ENDIAN_FLAG;
             }
             if self.ecu_id.is_some() {
@@ -168,7 +180,7 @@ impl DltHeader {
     }
 
     ///Returns if the package is a verbose package
-    pub fn verbose(&self) -> bool {
+    pub fn is_verbose(&self) -> bool {
         match &self.extended_header {
             None => false, //only packages with extended headers can be verbose
             Some(ext) => ext.is_verbose() 
@@ -193,6 +205,14 @@ impl DltHeader {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
+pub struct ExtendedDltHeader {
+    pub message_info: u8,
+    pub number_of_arguments: u8,
+    pub application_id: u32,
+    pub context_id: u32
+}
+
 impl ExtendedDltHeader {
     pub fn is_verbose(&self) -> bool {
         0 != self.message_info & 0b1 
@@ -205,6 +225,13 @@ impl ExtendedDltHeader {
             self.message_info &= 0b1111_1110;
         }
     }
+}
+
+///A slice containing an dlt header & payload.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DltPacketSlice<'a> {
+    slice: &'a [u8],
+    header_len: usize
 }
 
 impl<'a> DltPacketSlice<'a> {
@@ -224,25 +251,36 @@ impl<'a> DltPacketSlice<'a> {
         //calculate the minimum size based on the header flags
         let header_type = slice[0];
         //the header size has at least 4 bytes
-        let mut header_size = 4; 
-        if 0 != header_type & EXTDENDED_HEADER_FLAG {
-            header_size += 10;
-        }
-        if 0 != header_type & ECU_ID_FLAG {
-            header_size += 4;
-        }
-        if 0 != header_type & SESSION_ID_FLAG {
-            header_size += 4;
-        }
-        if 0 != header_type & TIMESTAMP_FLAG {
-            header_size += 4;
-        }
+        let header_len = if 0 != header_type & ECU_ID_FLAG {
+            4 + 4
+        } else {
+            4
+        };
+
+        let header_len = if 0 != header_type & SESSION_ID_FLAG {
+            header_len + 4
+        } else {
+            header_len
+        };
+
+        let header_len = if 0 != header_type & TIMESTAMP_FLAG {
+            header_len + 4
+        } else {
+            header_len
+        };
+
+        let header_len = if 0 != header_type & EXTDENDED_HEADER_FLAG {
+            header_len + 10
+        } else {
+            header_len
+        };
+
         //the minimum size is composed out of the header size
         // + the minimum size for the payload (4 for message id in non verbose
         // or 4 for the typeinfo in verbose)
-        if length < header_size + 4 {
+        if length < header_len + 4 {
             return Err(ReadError::LengthSmallerThenMinimum { 
-                required_length: header_size + 4, 
+                required_length: header_len + 4, 
                 length 
             });
         }
@@ -250,8 +288,41 @@ impl<'a> DltPacketSlice<'a> {
         //looks ok -> create the DltPacketSlice
         Ok(DltPacketSlice {
             slice: &slice[..length],
-            header_size
+            header_len
         })
+    }
+
+    ///Returns if an extended header is present.
+    pub fn has_extended_header(&self) -> bool {
+        0 != self.slice[0] & 0b1
+    }
+
+    ///Returns if the numbers in the payload are encoded in big endian.
+    pub fn is_big_endian(&self) -> bool {
+        0 != self.slice[0] & 0b10
+    }
+
+    ///Returns if the dlt package is verbose or non verbose.
+    pub fn is_verbose(&self) -> bool {
+        if self.has_extended_header() {
+            0 != self.slice[self.header_len - 10] & 0b1
+        } else {
+            false
+        }
+    }
+
+    ///Returns the message id if the message is a non verbose message otherwise None is returned.
+    pub fn message_id(&self) -> Option<u32> {
+        if self.is_verbose() {
+            None
+        } else {
+            let id_slice = &self.slice[self.header_len .. self.header_len + 4];
+            if self.is_big_endian() {
+                Some(BigEndian::read_u32(id_slice))
+            } else {
+                Some(LittleEndian::read_u32(id_slice))
+            }
+        }
     }
 
     ///Returns the slice containing the dlt header + payload.
@@ -261,13 +332,13 @@ impl<'a> DltPacketSlice<'a> {
 
     ///Returns a slice containing the payload of the dlt message
     pub fn payload(&self) -> &'a [u8] {
-        &self.slice[self.header_size..]
+        &self.slice[self.header_len..]
     }
 
     ///Deserialize the dlt header
     pub fn header(&self) -> DltHeader {
         let header_type = self.slice[0];
-        let (big_endian, version) = {
+        let (is_big_endian, version) = {
             let header_type = self.slice[0];
 
             (0 != header_type & BIG_ENDIAN_FLAG, 
@@ -306,7 +377,7 @@ impl<'a> DltPacketSlice<'a> {
         };
 
         DltHeader {
-            big_endian,
+            is_big_endian,
             version,
             message_counter,
             length,
@@ -389,7 +460,7 @@ mod tests {
         fn dlt_header_with_payload_any()(
             payload_length in 4u32..1234 //limit it a bit so that not too much memory is allocated during testing
         )(
-            big_endian in any::<bool>(),
+            is_big_endian in any::<bool>(),
             version in prop::bits::u8::between(0,3),
             message_counter in any::<u8>(),
             ecu_id in any::<Option<u32>>(),
@@ -402,14 +473,14 @@ mod tests {
             (
                 {
                     let mut header = DltHeader {
-                        big_endian: big_endian,
-                        version: version,
-                        message_counter: message_counter,
+                        is_big_endian,
+                        version,
+                        message_counter,
                         length: payload.len() as u16,
-                        ecu_id: ecu_id,
-                        session_id: session_id,
-                        timestamp: timestamp,
-                        extended_header: extended_header
+                        ecu_id,
+                        session_id,
+                        timestamp,
+                        extended_header
                     };
                     let header_size = header.header_len();
                     header.length = header_size + (payload.len() as u16);
@@ -421,7 +492,7 @@ mod tests {
     }
 
     prop_compose! {
-        fn dlt_header_any()(big_endian in any::<bool>(),
+        fn dlt_header_any()(is_big_endian in any::<bool>(),
                             version in prop::bits::u8::between(0,3),
                             message_counter in any::<u8>(),
                             length in any::<u16>(),
@@ -431,14 +502,14 @@ mod tests {
                             extended_header in option::of(extended_dlt_header_any())) -> DltHeader
         {
             DltHeader {
-                big_endian: big_endian,
-                version: version,
-                message_counter: message_counter,
-                length: length,
-                ecu_id: ecu_id,
-                session_id: session_id,
-                timestamp: timestamp,
-                extended_header: extended_header
+                is_big_endian,
+                version,
+                message_counter,
+                length,
+                ecu_id,
+                session_id,
+                timestamp,
+                extended_header
             }
         }
     }
@@ -495,6 +566,9 @@ mod tests {
             let slice = DltPacketSlice::from_slice(&buffer[..]).unwrap();
             //check the results are matching the input
             assert_eq!(slice.header(), packet.0);
+            assert_eq!(slice.has_extended_header(), packet.0.extended_header.is_some());
+            assert_eq!(slice.is_big_endian(), packet.0.is_big_endian);
+            assert_eq!(slice.is_verbose(), packet.0.is_verbose());
             assert_eq!(slice.payload(), &packet.1[..]);
             //check that a too small slice produces an error
             {
@@ -645,12 +719,12 @@ mod tests {
     #[test]
     fn is_verbose() {
         let mut header: DltHeader = Default::default();
-        assert_eq!(false, header.verbose());
+        assert_eq!(false, header.is_verbose());
         //add an extended header without the verbose flag
         header.extended_header = Some(Default::default());
-        assert_eq!(false, header.verbose());
+        assert_eq!(false, header.is_verbose());
         //set the verbose flag
         header.extended_header.as_mut().unwrap().set_is_verbose(true);
-        assert_eq!(true, header.verbose());
+        assert_eq!(true, header.is_verbose());
     }
 }

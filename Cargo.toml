@@ -21,3 +21,12 @@ byteorder = "1.2.7"
 [dev-dependencies]
 assert_matches = "1.3.0"
 proptest = "0.8.7"
+
+# for examples
+etherparse = "0.8.0"
+structopt = "0.2.14"
+rpcap = "0.3.0"
+
+[badges]
+travis-ci = { repository = "JulianSchmid/dlt-parse-rs", branch = "master" }
+codecov = { repository = "JulianSchmid/dlt-parse-rs", branch = "master", service = "github" }
