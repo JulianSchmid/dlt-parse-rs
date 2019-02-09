@@ -17,13 +17,8 @@
 //! extern crate dlt_parse;
 //! ```
 //!
-//! # Slicing the packet
-//! ```
-//! 
-//! ```
-//!
 //! # References
-//! * (Log and Trace Protocol Specification)[https://www.autosar.org/fileadmin/user_upload/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf]
+//! * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/user_upload/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
 use std::io;
 
 extern crate byteorder;
@@ -50,12 +45,14 @@ pub struct DltHeader {
     pub extended_header: Option<ExtendedDltHeader>
 }
 
+///Errors that can occure on reading a dlt header.
 #[derive(Debug)]
 pub enum ReadError {
     ///Error if the slice is smaller then dlt length field or minimal size.
     UnexpectedEndOfSlice { minimum_size: usize, actual_size: usize},
     ///Error if the dlt length is smaller then the header the calculated header size based on the flags (+ minimum payload size of 4 bytes/octetets)
     LengthSmallerThenMinimum { required_length: usize, length: usize },
+    ///Standard io error.
     IoError(io::Error)
 }
 
@@ -65,6 +62,7 @@ impl From<io::Error> for ReadError {
     }
 }
 
+///Errors that can occur when serializing a dlt header.
 #[derive(Debug)]
 pub enum WriteError {
     VersionTooLarge(u8),
@@ -86,6 +84,8 @@ const SESSION_ID_FLAG: u8 = 0b1000;
 const TIMESTAMP_FLAG: u8  = 0b10000;
 
 impl DltHeader {
+
+    ///Deserialize a DltHeader & TpHeader from the given reader.
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<DltHeader, ReadError> {
         //first lets read the header type
         let header_type = reader.read_u8()?;
@@ -123,6 +123,7 @@ impl DltHeader {
         })
     }
 
+    ///Serializes the header to the given writer.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         //pre check if the ranges of all fields are valid
         if self.version > MAX_VERSION {
@@ -205,6 +206,7 @@ impl DltHeader {
     }
 }
 
+///Extended dlt header (optional header in the dlt header)
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct ExtendedDltHeader {
     pub message_info: u8,
@@ -214,9 +216,12 @@ pub struct ExtendedDltHeader {
 }
 
 impl ExtendedDltHeader {
+
+    ///Returns true if the extended header flags the message as a verbose message.
     pub fn is_verbose(&self) -> bool {
         0 != self.message_info & 0b1 
     }
+
 
     pub fn set_is_verbose(&mut self, is_verbose: bool) {
         if is_verbose {
