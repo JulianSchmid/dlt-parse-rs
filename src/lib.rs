@@ -25,7 +25,7 @@
 //!
 //! # Slicing non-verbose packets
 //!
-//! Slicing the packets allows reading a dlt header & payload without reading the entire packet.
+//! Slicing the packets allows reading a dlt header & payload without deserializing all fields of the dlt headers.
 //!
 //! ```
 //! use self::dlt_parse::{DltHeader, DltExtendedHeader, SliceIterator};

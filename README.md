@@ -31,7 +31,7 @@ extern crate dlt_parse;
 
 ## Slicing non-verbose packets
 
-Slicing the packets allows reading a dlt header & payload without reading the entire packet.
+Slicing the packets allows reading a dlt header & payload without deserializing all fields of the dlt headers.
 
 ```rust
 use self::dlt_parse::{DltHeader, DltExtendedHeader, SliceIterator};
