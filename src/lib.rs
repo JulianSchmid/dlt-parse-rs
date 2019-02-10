@@ -1,5 +1,5 @@
 //! A zero allocation rust library for basic parsing & writing DLT (Diagnostic Log and Trace)
-//! packets. Currently only the parsing and writing of the header is supported (excluding the 
+//! packets. Currently only the parsing and writing of the header is supported (excluding the
 //! verbose packet definitions).
 //!
 //! # Usage:
@@ -17,8 +17,68 @@
 //! extern crate dlt_parse;
 //! ```
 //!
+//! # Slicing non-verbose packets
+//!
+//! Slicing the packets allows reading a dlt header & payload without reading the entire packet.
+//!
+//! ```
+//! use dlt_parse::{DltHeader, DltExtendedHeader, SliceIterator};
+//!
+//! let header = {
+//!     let mut header = DltHeader {
+//!         is_big_endian: true, //payload & message id are encoded with big endian
+//!         version: 0,
+//!         message_counter: 0,
+//!         length: 0,
+//!         ecu_id: None,
+//!         session_id: None,
+//!         timestamp: None,
+//!         extended_header: Some(DltExtendedHeader::new_non_verbose(
+//!             123,//application id
+//!             1,//context id
+//!         ))
+//!     };
+//!     header.length = header.header_len() + 4 + 4; //header + message id + payload
+//!
+//!     header
+//! };
+//!
+//! //buffer to store serialized header & payload
+//! /*let mut buffer = Vec::<u8>::with_capacity(usize::from(header.length));
+//! header.write(&mut buffer).unwrap();
+//!
+//! //byteorder crate is used for writing with endianess
+//! extern crate byteorder;
+//! use byteorder::{BigEndian, WriteBytesExt};
+//!
+//! //message id & payload
+//! buffer.write_u32::<BigEndian>(1234).unwrap(); //message id
+//! buffer.write_all(&[1,2,3,4]); //payload
+//!
+//! //packets can contain multiple dlt messages, iterate through them
+//! for dlt_message in SliceIterator::new(&buffer) {
+//! 
+//!     match dlt_message {
+//!         Ok(dlt_slice) => {
+//!             //check if the message is verbose or non verbose (non verbose messages have message ids)
+//!             if let Some(message_id) = dlt_slice.message_id() {
+//!                 println!("non verbose message {:x}", message_id);
+//!                 println!("  with payload {:?}", dlt_slice.non_verbose_payload());
+//!             } else {
+//!                 println!("verbose message (parsing not yet supported)");
+//!             }
+//!         },
+//!         Err(err) => {
+//!             //error parsing the dlt packet
+//!             println!("ERROR: {:?}", err);
+//!         }
+//!     }
+//! }*/
+//! ```
+//!
 //! # References
 //! * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/user_upload/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
+
 use std::io;
 
 extern crate byteorder;
@@ -42,7 +102,7 @@ pub struct DltHeader {
     pub ecu_id: Option<u32>,
     pub session_id: Option<u32>,
     pub timestamp: Option<u32>,
-    pub extended_header: Option<ExtendedDltHeader>
+    pub extended_header: Option<DltExtendedHeader>
 }
 
 ///Errors that can occure on reading a dlt header.
@@ -111,7 +171,7 @@ impl DltHeader {
                 None
             },
             extended_header: if 0 != header_type & EXTDENDED_HEADER_FLAG {
-                Some(ExtendedDltHeader{
+                Some(DltExtendedHeader{
                     message_info: reader.read_u8()?,
                     number_of_arguments: reader.read_u8()?,
                     application_id: reader.read_u32::<BigEndian>()?,
@@ -208,21 +268,31 @@ impl DltHeader {
 
 ///Extended dlt header (optional header in the dlt header)
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub struct ExtendedDltHeader {
+pub struct DltExtendedHeader {
     pub message_info: u8,
     pub number_of_arguments: u8,
     pub application_id: u32,
     pub context_id: u32
 }
 
-impl ExtendedDltHeader {
+impl DltExtendedHeader {
+
+    ///Create a extended header for a non verbose message with given application id & context id.
+    pub fn new_non_verbose(application_id: u32, context_id: u32) -> DltExtendedHeader {
+        DltExtendedHeader {
+            message_info: 0,
+            number_of_arguments: 0,
+            application_id: application_id,
+            context_id: context_id
+        }
+    }
 
     ///Returns true if the extended header flags the message as a verbose message.
     pub fn is_verbose(&self) -> bool {
         0 != self.message_info & 0b1 
     }
 
-
+    ///Sets or unsets the is_verbose bit in the DltExtendedHeader.
     pub fn set_is_verbose(&mut self, is_verbose: bool) {
         if is_verbose {
             self.message_info |= 0b1;
@@ -340,6 +410,11 @@ impl<'a> DltPacketSlice<'a> {
         &self.slice[self.header_len..]
     }
 
+    ///Returns a slice containing the payload of a non verbose message (after the message id).
+    pub fn non_verbose_payload(&self) -> &'a [u8] {
+        &self.slice[usize::from(self.header_len) + 4..]
+    }
+
     ///Deserialize the dlt header
     pub fn header(&self) -> DltHeader {
         let header_type = self.slice[0];
@@ -371,7 +446,7 @@ impl<'a> DltPacketSlice<'a> {
         };
 
         let extended_header = if 0 != header_type & EXTDENDED_HEADER_FLAG {
-            Some(ExtendedDltHeader {
+            Some(DltExtendedHeader {
                 message_info: slice[0],
                 number_of_arguments: slice[1],
                 application_id: BigEndian::read_u32(&slice[2..6]),
@@ -450,9 +525,9 @@ mod tests {
         fn extended_dlt_header_any()(message_info in any::<u8>(),
                                      number_of_arguments in any::<u8>(),
                                      application_id in any::<u32>(),
-                                     context_id in any::<u32>()) -> ExtendedDltHeader
+                                     context_id in any::<u32>()) -> DltExtendedHeader
         {
-            ExtendedDltHeader {
+            DltExtendedHeader {
                 message_info: message_info,
                 number_of_arguments: number_of_arguments,
                 application_id: application_id,
@@ -710,9 +785,22 @@ mod tests {
         }
     }
 
+    proptest! {
+        #[test]
+        fn new_non_verbose(application_id in any::<u32>(),
+                           context_id in any::<u32>())
+        {
+            let header = DltExtendedHeader::new_non_verbose(application_id, context_id);
+            assert_eq!(0, header.message_info);
+            assert_eq!(0, header.number_of_arguments);
+            assert_eq!(application_id, header.application_id);
+            assert_eq!(context_id, header.context_id);
+        }
+    }
+
     #[test]
     fn ext_set_is_verbose() {
-        let mut header: ExtendedDltHeader = Default::default();
+        let mut header: DltExtendedHeader = Default::default();
         let original = header.clone();
         header.set_is_verbose(true);
         assert_eq!(true, header.is_verbose());
@@ -743,7 +831,7 @@ mod tests {
                     let mut header: DltHeader = Default::default();
                     header.extended_header = Some(
                         {
-                            let mut ext: ExtendedDltHeader = Default::default();
+                            let mut ext: DltExtendedHeader = Default::default();
                             ext.set_is_verbose(true);
                             ext
                         }
@@ -759,7 +847,7 @@ mod tests {
                     let mut header: DltHeader = Default::default();
                     header.extended_header = Some(
                         {
-                            let mut ext: ExtendedDltHeader = Default::default();
+                            let mut ext: DltExtendedHeader = Default::default();
                             ext.set_is_verbose(false);
                             ext
                         }
@@ -769,7 +857,7 @@ mod tests {
                 true
             ),
 
-            //without extended header
+            //without extended header (always non verbose)
             (
                 {
                     let mut header: DltHeader = Default::default();

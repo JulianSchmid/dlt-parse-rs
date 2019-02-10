@@ -72,10 +72,10 @@ fn read(arguments: CommandLineArguments) -> Result<(),Error> {
 
                                 if let Some(message_id) = dlt_slice.message_id() {
                                     println!("non verbose message {:x}", message_id);
+                                    println!("  with payload {:?}", dlt_slice.non_verbose_payload());
                                 } else {
                                     println!("verbose message (parsing not yet supported)");
                                 }
-                                println!("  with payload {:?}", dlt_slice.payload())
                             },
                             Err(err) => {
                                 //error parsing the dlt packet
