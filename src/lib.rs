@@ -11,17 +11,23 @@
 //! dlt_parse = "0.1.0"
 //! ```
 //! 
-//! Next, add this to your crate root:
+//! Next, add this to your crate:
 //! 
 //! ```
 //! use dlt_parse;
 //! ```
 //!
-//! Or for pre 2018 Rust:
+//! # What is dlt_parse?
+//! dlt_parse is a library that aims to provide serialisation & deserialisation funtions for DLT (Diagnostic Log and Trace) packets.
+//! It should make it possible to anlyse recordings of DLT packets as fast as possible, as well as writing servers 
+//! that send DLT packets to the network.
 //!
-//! ```
-//! extern crate dlt_parse;
-//! ```
+//! Some key points are:
+//!
+//! * It is completly written in Rust and thoroughly tested.
+//! * Special attention has been paid to not use allocations or syscalls.
+//! * The package is still in development and can & will still change.
+//! * Methods for parsing verbose DLT packets are still missing (but maybe implemented in future versions).
 //!
 //! # Example: Serializing & Slicing/Deserializing DLT Packets
 //!
