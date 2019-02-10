@@ -188,7 +188,7 @@ impl DltHeader {
         }
     }
 
-    ///Return the byte/octed size of the serialized header
+    ///Return the byte/octed size of the serialized header (including extended header)
     pub fn header_len(&self) -> u16 {
         4 + match self.ecu_id {
             Some(_) => 4,
@@ -731,5 +731,108 @@ mod tests {
         //set the verbose flag
         header.extended_header.as_mut().unwrap().set_is_verbose(true);
         assert_eq!(true, header.is_verbose());
+    }
+
+    #[test]
+    fn message_id() {
+        //pairs of (header, expected_some)
+        let tests = [
+            //verbose (does not have message id)
+            (
+                {
+                    let mut header: DltHeader = Default::default();
+                    header.extended_header = Some(
+                        {
+                            let mut ext: ExtendedDltHeader = Default::default();
+                            ext.set_is_verbose(true);
+                            ext
+                        }
+                    );
+                    header
+                },
+                false
+            ),
+            
+            //with extended header non-verbose
+            (
+                {
+                    let mut header: DltHeader = Default::default();
+                    header.extended_header = Some(
+                        {
+                            let mut ext: ExtendedDltHeader = Default::default();
+                            ext.set_is_verbose(false);
+                            ext
+                        }
+                    );
+                    header
+                },
+                true
+            ),
+
+            //without extended header
+            (
+                {
+                    let mut header: DltHeader = Default::default();
+                    header.extended_header = None;
+                    header
+                },
+                true
+            ),
+
+        ];
+        //verbose (does not have message id)
+        for t in tests.iter() {
+            //big endian
+            {
+                let header = {
+                    let mut header = t.0.clone();
+                    header.is_big_endian = true;
+                    header.length = header.header_len() + 4;
+                    header
+                };
+
+                //serialize
+                let mut buffer = Vec::<u8>::new();
+                header.write(&mut buffer).unwrap();
+                buffer.write_u32::<BigEndian>(0x1234_5678).unwrap();
+
+                //slice
+                let slice = DltPacketSlice::from_slice(&buffer).unwrap();
+                assert_eq!(
+                    slice.message_id(),
+                    if t.1 {
+                        Some(0x1234_5678)
+                    } else {
+                        None
+                    }
+                );
+            }
+
+            //little endian
+            {
+                let header = {
+                    let mut header = t.0.clone();
+                    header.is_big_endian = false;
+                    header.length = header.header_len() + 4;
+                    header
+                };
+
+                //serialize
+                let mut buffer = Vec::<u8>::new();
+                header.write(&mut buffer).unwrap();
+                buffer.write_u32::<LittleEndian>(0x1234_5678).unwrap();
+
+                //slice
+                let slice = DltPacketSlice::from_slice(&buffer).unwrap();
+                assert_eq!(
+                    slice.message_id(),
+                    if t.1 {
+                        Some(0x1234_5678)
+                    } else {
+                        None
+                    }
+                );
+            }
+        }
     }
 }
