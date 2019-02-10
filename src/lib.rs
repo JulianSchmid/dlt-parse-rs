@@ -23,9 +23,12 @@
 //! extern crate dlt_parse;
 //! ```
 //!
-//! # Slicing non-verbose packets
+//! # Example: Serializing & Slicing/Deserializing DLT Packets
 //!
-//! Slicing the packets allows reading a dlt header & payload without deserializing all fields of the dlt headers.
+//! In this example a non verbose DLT packet is serialized and deserialized again. Specificly the serialized packet is 
+//! converted into a DltPacketSlice. This has the advantage, that not all fields have to be deserialied to 
+//! access the payload or specific fields in the header. Note that it is also possible to completely deserialize
+//! DLT headers with the DltHeader::read function. This can make sense, if most fields of the header are used anyways.
 //!
 //! ```
 //! use self::dlt_parse::{DltHeader, DltExtendedHeader, SliceIterator};
@@ -67,7 +70,6 @@
 //!
 //! //packets can contain multiple dlt messages, iterate through them
 //! for dlt_message in SliceIterator::new(&buffer) {
-//! 
 //!     match dlt_message {
 //!         Ok(dlt_slice) => {
 //!             //check if the message is verbose or non verbose (non verbose messages have message ids)
