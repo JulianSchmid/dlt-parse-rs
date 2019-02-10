@@ -14,6 +14,12 @@
 //! Next, add this to your crate root:
 //! 
 //! ```
+//! use dlt_parse;
+//! ```
+//!
+//! Or for pre 2018 Rust:
+//!
+//! ```
 //! extern crate dlt_parse;
 //! ```
 //!
@@ -22,7 +28,7 @@
 //! Slicing the packets allows reading a dlt header & payload without reading the entire packet.
 //!
 //! ```
-//! use dlt_parse::{DltHeader, DltExtendedHeader, SliceIterator};
+//! use self::dlt_parse::{DltHeader, DltExtendedHeader, SliceIterator};
 //!
 //! let header = {
 //!     let mut header = DltHeader {
@@ -44,16 +50,20 @@
 //! };
 //!
 //! //buffer to store serialized header & payload
-//! /*let mut buffer = Vec::<u8>::with_capacity(usize::from(header.length));
+//! let mut buffer = Vec::<u8>::with_capacity(usize::from(header.length));
 //! header.write(&mut buffer).unwrap();
 //!
-//! //byteorder crate is used for writing with endianess
-//! extern crate byteorder;
-//! use byteorder::{BigEndian, WriteBytesExt};
+//! //write payload (message id 1234 & non verbose payload)
+//! {
+//!     //for write_all
+//!     use std::io::Write;
+//!     //byteorder crate is used for writing the message id with  the correct endianess
+//!     use byteorder::{BigEndian, WriteBytesExt};
 //!
-//! //message id & payload
-//! buffer.write_u32::<BigEndian>(1234).unwrap(); //message id
-//! buffer.write_all(&[1,2,3,4]); //payload
+//!     //write the message id & payload
+//!     buffer.write_u32::<BigEndian>(1234).unwrap(); //message id
+//!     buffer.write_all(&[1,2,3,4]); //payload
+//! }
 //!
 //! //packets can contain multiple dlt messages, iterate through them
 //! for dlt_message in SliceIterator::new(&buffer) {
@@ -73,8 +83,10 @@
 //!             println!("ERROR: {:?}", err);
 //!         }
 //!     }
-//! }*/
+//! }
 //! ```
+//! 
+//! An complete example which includes the parsing of the ethernet & udp headers can be found in [examples/print_messages_ids.rs](https://github.com/JulianSchmid/dlt-parse-rs/blob/0.1.0/examples/print_messages_ids.rs)
 //!
 //! # References
 //! * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/user_upload/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
