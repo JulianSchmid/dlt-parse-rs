@@ -81,7 +81,7 @@
 
 use std::io;
 
-extern crate byteorder;
+use byteorder;
 use self::byteorder::{ByteOrder, BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 
 #[cfg(test)]
@@ -312,7 +312,7 @@ pub struct DltPacketSlice<'a> {
 impl<'a> DltPacketSlice<'a> {
 
     ///Read the dlt header and create a slice containing the dlt header & payload.
-    pub fn from_slice(slice: &'a [u8]) -> Result<DltPacketSlice, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<DltPacketSlice<'_>, ReadError> {
 
         if slice.len() < 4 {
             return Err(ReadError::UnexpectedEndOfSlice{ minimum_size: 4, actual_size: slice.len()})
@@ -685,7 +685,7 @@ mod tests {
             }
 
             //determine the expected output
-            let mut expected: Vec<DltPacketSlice> = Vec::with_capacity(packets.len());
+            let mut expected: Vec<DltPacketSlice<'_>> = Vec::with_capacity(packets.len());
             for offset in &offsets {
                 //create the expected slice
                 let slice = &buffer[offset.0..offset.1];
@@ -695,7 +695,7 @@ mod tests {
             }
 
             //iterate over packets
-            assert_eq!(expected, SliceIterator::new(&buffer).map(|x| x.unwrap()).collect::<Vec<DltPacketSlice>>());
+            assert_eq!(expected, SliceIterator::new(&buffer).map(|x| x.unwrap()).collect::<Vec<DltPacketSlice<'_>>>());
 
             //check for error return when the slice is too small
             //first entry
@@ -758,7 +758,7 @@ mod tests {
     #[test]
     fn test_debug() {
         {
-            use ReadError::*;
+            use crate::ReadError::*;
             for value in [
                 UnexpectedEndOfSlice { minimum_size: 1, actual_size: 2},
                 LengthSmallerThenMinimum { required_length: 3, length: 4 },
@@ -768,7 +768,7 @@ mod tests {
             }
         }
         {
-            use WriteError::*;
+            use crate::WriteError::*;
             for value in [
                 VersionTooLarge(123),
                 IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))].iter()

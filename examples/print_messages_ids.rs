@@ -1,18 +1,18 @@
-extern crate structopt;
+use structopt;
 
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-extern crate etherparse;
+use etherparse;
 use self::etherparse::*;
 
-extern crate rpcap;
+use rpcap;
 use self::rpcap::read::PcapReader;
 
 use std::io::BufReader;
 use std::fs::File;
 
-extern crate dlt_parse;
+
 use dlt_parse::*;
 
 /// Expected command line arguments
@@ -57,7 +57,7 @@ fn read(arguments: CommandLineArguments) -> Result<(),Error> {
 
         //only use the packet if the parsing from ethernet layer to transport layer was error free
         if let Ok(sliced_packet) = sliced {
-            use TransportSlice::*;
+            use crate::TransportSlice::*;
 
             //check that it is an udp packet
             if let Some(Udp(udp_slice)) = sliced_packet.transport {
