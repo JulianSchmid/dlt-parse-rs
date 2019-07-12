@@ -320,6 +320,224 @@ impl DltExtendedHeader {
             self.message_info &= 0b1111_1110;
         }
     }
+
+    ///Returns message type or `Option::None` for reserved values.
+    pub fn mstp(&self) -> Option<Mstp> {
+        Mstp::from_u8((self.message_info >> 1) & 0b111)
+    }
+
+    ///Returns message type info or `Option::None` for reserved values.
+    pub fn mtin(&self) -> Option<Mtin> {
+        let mstp = self.mstp()?;
+        Mtin::from_u8(mstp, (self.message_info >> 4) & 0b1111)
+    }
+
+    ///Set message type info and based on that the message type.
+    pub fn set_mstp_mtin(&mut self, mtin: Mtin) {
+        match mtin {
+            Mtin::DltLogMessage(mtin) => {
+                self.message_info |= ((Mstp::DltTypeLog as u8) << 1) & 0b0000_1110;
+                self.message_info |= ((mtin as u8) << 4) & 0b1111_0000;
+            },
+            Mtin::DltTraceMessage(mtin) => {
+                self.message_info |= ((Mstp::DltTypeAppTrace as u8)<< 1) & 0b0000_1110;
+                self.message_info |= ((mtin as u8) << 4) & 0b1111_0000;
+            },
+            Mtin::DltNetworkMessage(mtin) => {
+                self.message_info |= ((Mstp::DltTypeNwTrace as u8) << 1) & 0b0000_1110;
+                self.message_info |= (mtin.to_u8() << 4) & 0b1111_0000;
+            },
+            Mtin::DltControlMessage(mtin) => {
+                self.message_info |= ((Mstp::DltTypeControl as u8) << 1) & 0b0000_1110;
+                self.message_info |= ((mtin as u8) << 4) & 0b1111_0000;
+            },
+        }
+    }
+}
+
+///Message type
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Mstp {
+    ///Dlt log message.
+    DltTypeLog = 0x0,
+    ///Dlt trace message.
+    DltTypeAppTrace = 0x1,
+    ///Dlt network message.
+    DltTypeNwTrace = 0x2,
+    ///Dlt control message.
+    DltTypeControl = 0x3
+}
+
+impl Mstp {
+    ///Attempts to convert a raw mstp value to the enum.
+    ///Returns `Option::None` for reserved values.
+    fn from_u8(value: u8) -> Option<Mstp> {
+        match value {
+            0x0 => Some(Mstp::DltTypeLog),
+            0x1 => Some(Mstp::DltTypeAppTrace),
+            0x2 => Some(Mstp::DltTypeNwTrace),
+            0x3 => Some(Mstp::DltTypeControl),
+            //Reserved values
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MtinDltLogMessage {
+    ///Fatal system error.
+    DltLogFatal = 0x1,
+    ///SWC error.
+    DltLogError = 0x2,
+    ///Correct behavior cannot be ensured.
+    DltLogWarn = 0x3,
+    ///Message of LogLevel type “Information”.
+    DltLogInfo = 0x4,
+    ///Message of LogLevel type “Debug”.
+    DltLogDebug = 0x5,
+    ///Message of LogLevel type "Verbose".
+    DltLogVerbose = 0x6,
+}
+
+impl MtinDltLogMessage {
+    ///Attempts to convert a raw mtin value to the enum.
+    ///Returns `Option::None` for reserved values.
+    fn from_u8(value: u8) -> Option<Mtin> {
+        match value {
+            0x1 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogFatal)),
+            0x2 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogError)),
+            0x3 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogWarn)),
+            0x4 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogInfo)),
+            0x5 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogDebug)),
+            0x6 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogVerbose)),
+            //Reserved values
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MtinDltTraceMessage {
+    ///Value of variable.
+    DltTraceVariable = 0x1,
+    ///Call of a function.
+    DltTraceFunctionIn = 0x2,
+    ///Return of a function.
+    DltTraceFunctionOut = 0x3,
+    ///State of a state machine.
+    DltTraceState = 0x4,
+    ///RTE Events.
+    DltTraceVfb = 0x5,
+}
+
+impl MtinDltTraceMessage {
+    ///Attempts to convert a raw mtin value to the enum.
+    ///Returns `Option::None` for reserved values.
+    fn from_u8(value: u8) -> Option<Mtin> {
+        match value {
+            0x1 => Some(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceVariable)),
+            0x2 => Some(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceFunctionIn)),
+            0x3 => Some(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceFunctionOut)),
+            0x4 => Some(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceState)),
+            0x5 => Some(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceVfb)),
+            //Reserved values
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MtinDltNetworkMessage {
+    ///Inter-Process-Communication.
+    DltNwTraceIpc,
+    ///CAN communication bus.
+    DltNwTraceCan,
+    ///FlexRay communication bus.
+    DltNwTraceFlexray,
+    ///Most communication bus.
+    DltNwTraceMost,
+    ///Ethernet communication bus.
+    DltNwTraceEthernet,
+    ///SOME/IP communication.
+    DltNwTraceSomeIp,
+    ///User defined settings.
+    DltNwUserDefined(u8),
+}
+
+impl MtinDltNetworkMessage {
+    ///Attempts to convert a raw mtin value to the enum.
+    ///Returns `Option::None` for reserved values.
+    fn from_u8(value: u8) -> Option<Mtin> {
+        match value {
+            0x1 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceIpc)),
+            0x2 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceCan)),
+            0x3 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceFlexray)),
+            0x4 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceMost)),
+            0x5 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceEthernet)),
+            0x6 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceSomeIp)),
+            //User defined
+            0x7 ..= 0xF => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(value))),
+            //Mtin is only 4 bit
+            _ => None
+        }
+    }
+
+    fn to_u8(&self) -> u8 {
+        match self {
+            MtinDltNetworkMessage::DltNwTraceIpc => 0x1,
+            MtinDltNetworkMessage::DltNwTraceCan => 0x2,
+            MtinDltNetworkMessage::DltNwTraceFlexray => 0x3,
+            MtinDltNetworkMessage::DltNwTraceMost => 0x4,
+            MtinDltNetworkMessage::DltNwTraceEthernet => 0x5,
+            MtinDltNetworkMessage::DltNwTraceSomeIp => 0x6,
+            //User defined
+            MtinDltNetworkMessage::DltNwUserDefined(value) => *value,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MtinDltControlMessage {
+    ///Request control message.
+    DltControlRequest = 0x1,
+    ///Respond control message.
+    DltControlResponse = 0x2
+}
+
+impl MtinDltControlMessage {
+    ///Attempts to convert a raw mtin value to the enum.
+    ///Returns `Option::None` for reserved values.
+    fn from_u8(value: u8) -> Option<Mtin> {
+        match value {
+            0x1 => Some(Mtin::DltControlMessage(MtinDltControlMessage::DltControlRequest)),
+            0x2 => Some(Mtin::DltControlMessage(MtinDltControlMessage::DltControlResponse)),
+            //Reserved values
+            _ => None,
+        }
+    }
+}
+
+///Message type info field
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Mtin {
+    DltLogMessage(MtinDltLogMessage),
+    DltTraceMessage(MtinDltTraceMessage),
+    DltNetworkMessage(MtinDltNetworkMessage),
+    DltControlMessage(MtinDltControlMessage),
+}
+
+impl Mtin {
+
+    ///Attempts to convert a raw mtin value to the enum.
+    ///Returns `Option::None` for reserved values.
+    fn from_u8(mstp: Mstp, value: u8) -> Option<Mtin> {
+        match mstp {
+            Mstp::DltTypeLog => MtinDltLogMessage::from_u8(value),
+            Mstp::DltTypeAppTrace => MtinDltTraceMessage::from_u8(value),
+            Mstp::DltTypeNwTrace => MtinDltNetworkMessage::from_u8(value),
+            Mstp::DltTypeControl => MtinDltControlMessage::from_u8(value)
+        }
+    }
 }
 
 ///A slice containing an dlt header & payload.
@@ -614,6 +832,42 @@ mod tests {
         }
     }
 
+    fn mtin_any() -> impl Strategy<Value = Mtin> {
+        prop_oneof![
+            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogFatal)),
+            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogError)),
+            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogWarn)),
+            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogInfo)),
+            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogDebug)),
+            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogVerbose)),
+
+            Just(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceVariable)),
+            Just(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceFunctionIn)),
+            Just(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceFunctionOut)),
+            Just(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceState)),
+            Just(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceVfb)),
+
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceIpc)),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceCan)),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceFlexray)),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceMost)),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceEthernet)),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceSomeIp)),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0x7))),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0x8))),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0x9))),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xA))),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xB))),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xC))),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xD))),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xE))),
+            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xF))),
+
+            Just(Mtin::DltControlMessage(MtinDltControlMessage::DltControlRequest)),
+            Just(Mtin::DltControlMessage(MtinDltControlMessage::DltControlResponse)),
+        ]
+    }
+
     proptest! {
         #[test]
         fn write_read(ref dlt_header in dlt_header_any()) {
@@ -670,6 +924,14 @@ mod tests {
             assert_eq!(slice.is_big_endian(), packet.0.is_big_endian);
             assert_eq!(slice.is_verbose(), packet.0.is_verbose());
             assert_eq!(slice.payload(), &packet.1[..]);
+
+            if let Some(packet_ext_header) = packet.0.extended_header.as_ref() {
+                let slice_header = slice.header();
+                let slice_ext_header = slice_header.extended_header.as_ref().unwrap();
+                assert_eq!(slice_ext_header.mtin(), packet_ext_header.mtin());
+                assert_eq!(slice_ext_header.mstp(), packet_ext_header.mstp());
+            }
+
             //check that a too small slice produces an error
             {
                 let len = buffer.len();
@@ -737,6 +999,24 @@ mod tests {
                 //check that the iterator does not continue
                 assert_matches!(it.next(), None);
             }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn ext_header_mstp_mtin(mtin in mtin_any()) {
+            let mut header: DltExtendedHeader = Default::default();
+            header.set_mstp_mtin(mtin.clone());
+
+            //check that mstp matches mstin
+            match mtin {
+                Mtin::DltLogMessage(_) => assert_eq!(header.mstp(), Some(Mstp::DltTypeLog)),
+                Mtin::DltTraceMessage(_) => assert_eq!(header.mstp(), Some(Mstp::DltTypeAppTrace)),
+                Mtin::DltNetworkMessage(_) => assert_eq!(header.mstp(), Some(Mstp::DltTypeNwTrace)),
+                Mtin::DltControlMessage(_) => assert_eq!(header.mstp(), Some(Mstp::DltTypeControl)),
+            }
+
+            assert_eq!(header.mtin(), Some(mtin));
         }
     }
 
