@@ -43,7 +43,7 @@ access the payload or specific fields in the header. Note that it is also possib
 DLT headers with the DltHeader::read function. This can make sense, if most fields of the header are used anyways.
 
 ```rust
-use self::dlt_parse::{DltHeader, DltExtendedHeader, SliceIterator};
+use self::dlt_parse::{DltHeader, DltLogLevel, DltExtendedHeader, SliceIterator};
 
 let header = {
     let mut header = DltHeader {
@@ -54,7 +54,8 @@ let header = {
         ecu_id: None,
         session_id: None,
         timestamp: None,
-        extended_header: Some(DltExtendedHeader::new_non_verbose(
+        extended_header: Some(DltExtendedHeader::new_non_verbose_log(
+            DltLogLevel::Debug,
             123,//application id
             1,//context id
         ))
