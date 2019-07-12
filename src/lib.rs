@@ -924,6 +924,14 @@ mod tests {
             assert_eq!(slice.is_big_endian(), packet.0.is_big_endian);
             assert_eq!(slice.is_verbose(), packet.0.is_verbose());
             assert_eq!(slice.payload(), &packet.1[..]);
+
+            if let Some(packet_ext_header) = packet.0.extended_header.as_ref() {
+                let slice_header = slice.header();
+                let slice_ext_header = slice_header.extended_header.as_ref().unwrap();
+                assert_eq!(slice_ext_header.mtin(), packet_ext_header.mtin());
+                assert_eq!(slice_ext_header.mstp(), packet_ext_header.mstp());
+            }
+
             //check that a too small slice produces an error
             {
                 let len = buffer.len();
