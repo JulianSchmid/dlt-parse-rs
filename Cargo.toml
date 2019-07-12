@@ -17,15 +17,15 @@ exclude = [
 ]
 
 [dependencies]
-byteorder = "1.2.7"
+byteorder = "1.3.2"
 
 [dev-dependencies]
 assert_matches = "1.3.0"
-proptest = "0.8.7"
+proptest = "0.9.4"
 
 # for examples
-etherparse = "0.8.0"
-structopt = "0.2.14"
+etherparse = "0.8.2"
+structopt = "0.2.18"
 rpcap = "0.3.0"
 
 [badges]
