@@ -37,7 +37,7 @@
 //! DLT headers with the DltHeader::read function. This can make sense, if most fields of the header are used anyways.
 //!
 //! ```
-//! use self::dlt_parse::{DltHeader, DltExtendedHeader, SliceIterator};
+//! use self::dlt_parse::{DltHeader, DltLogLevel, DltExtendedHeader, SliceIterator};
 //!
 //! let header = {
 //!     let mut header = DltHeader {
@@ -48,7 +48,8 @@
 //!         ecu_id: None,
 //!         session_id: None,
 //!         timestamp: None,
-//!         extended_header: Some(DltExtendedHeader::new_non_verbose(
+//!         extended_header: Some(DltExtendedHeader::new_non_verbose_log(
+//!             DltLogLevel::Debug,
 //!             123,//application id
 //!             1,//context id
 //!         ))
@@ -155,6 +156,12 @@ impl From<io::Error> for WriteError {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum RangeError {
+    ///Error if the user defined network type is greater then 0xf
+    NetworkTypekUserDefinedTooLarge(u8)
+}
+
 const MAX_VERSION: u8 = 0b111;
 
 const EXTDENDED_HEADER_FLAG: u8 = 0b1;
@@ -162,6 +169,15 @@ const BIG_ENDIAN_FLAG: u8 = 0b10;
 const ECU_ID_FLAG: u8     = 0b100;
 const SESSION_ID_FLAG: u8 = 0b1000;
 const TIMESTAMP_FLAG: u8  = 0b10000;
+
+///Shifted value in the msin extended header field for dlt "log" messages.
+const EXT_MSIN_MSTP_TYPE_LOG: u8 = 0x0 << 1;
+///Shifted value in the msin extended header field for dlt "trace" messages.
+const EXT_MSIN_MSTP_TYPE_TRACE: u8 = 0x1 << 1;
+///Shifted value in the msin extended header field for dlt "network trace" messages.
+const EXT_MSIN_MSTP_TYPE_NW_TRACE: u8 = 0x2 << 1;
+///Shifted value in the msin extended header field for dlt "control" messages.
+const EXT_MSIN_MSTP_TYPE_CONTROL: u8 = 0x3 << 1;
 
 impl DltHeader {
 
@@ -297,14 +313,24 @@ pub struct DltExtendedHeader {
 
 impl DltExtendedHeader {
 
-    ///Create a extended header for a non verbose message with given application id & context id.
-    pub fn new_non_verbose(application_id: u32, context_id: u32) -> DltExtendedHeader {
+    ///Create a extended header for a non verbose log message with given application id & context id.
+    pub fn new_non_verbose_log(log_level: DltLogLevel, application_id: u32, context_id: u32) -> DltExtendedHeader {
         DltExtendedHeader {
-            message_info: 0,
+            message_info: DltMessageType::Log(log_level).encode_to_message_info_byte().unwrap(),
             number_of_arguments: 0,
-            application_id: application_id,
-            context_id: context_id
+            application_id,
+            context_id
         }
+    }
+
+    ///Create a extended header for a non verbose message with given message type, application id & context id.
+    pub fn new_non_verbose(message_type: DltMessageType, application_id: u32, context_id: u32) -> Result<DltExtendedHeader, RangeError> {
+        Ok(DltExtendedHeader {
+            message_info: message_type.encode_to_message_info_byte()?,
+            number_of_arguments: 0,
+            application_id,
+            context_id
+        })
     }
 
     ///Returns true if the extended header flags the message as a verbose message.
@@ -321,222 +347,203 @@ impl DltExtendedHeader {
         }
     }
 
-    ///Returns message type or `Option::None` for reserved values.
-    pub fn mstp(&self) -> Option<Mstp> {
-        Mstp::from_u8((self.message_info >> 1) & 0b111)
-    }
-
     ///Returns message type info or `Option::None` for reserved values.
-    pub fn mtin(&self) -> Option<Mtin> {
-        let mstp = self.mstp()?;
-        Mtin::from_u8(mstp, (self.message_info >> 4) & 0b1111)
+    pub fn message_type(&self) -> Option<DltMessageType> {
+        DltMessageType::from_message_info_encoded(self.message_info)
     }
 
     ///Set message type info and based on that the message type.
-    pub fn set_mstp_mtin(&mut self, mtin: Mtin) {
-        match mtin {
-            Mtin::DltLogMessage(mtin) => {
-                self.message_info |= ((Mstp::DltTypeLog as u8) << 1) & 0b0000_1110;
-                self.message_info |= ((mtin as u8) << 4) & 0b1111_0000;
-            },
-            Mtin::DltTraceMessage(mtin) => {
-                self.message_info |= ((Mstp::DltTypeAppTrace as u8)<< 1) & 0b0000_1110;
-                self.message_info |= ((mtin as u8) << 4) & 0b1111_0000;
-            },
-            Mtin::DltNetworkMessage(mtin) => {
-                self.message_info |= ((Mstp::DltTypeNwTrace as u8) << 1) & 0b0000_1110;
-                self.message_info |= (mtin.to_u8() << 4) & 0b1111_0000;
-            },
-            Mtin::DltControlMessage(mtin) => {
-                self.message_info |= ((Mstp::DltTypeControl as u8) << 1) & 0b0000_1110;
-                self.message_info |= ((mtin as u8) << 4) & 0b1111_0000;
-            },
-        }
+    pub fn set_message_type(&mut self, value: DltMessageType) -> Result<(),RangeError> {
+        
+        let encoded = value.encode_to_message_info_byte()?;
+
+        //unset old message type & set the new one
+        self.message_info &= 0b0000_0001;
+        self.message_info |= encoded;
+
+        //all good
+        Ok(())
     }
 }
 
-///Message type
+///Log level for dlt log messages.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Mstp {
-    ///Dlt log message.
-    DltTypeLog = 0x0,
-    ///Dlt trace message.
-    DltTypeAppTrace = 0x1,
-    ///Dlt network message.
-    DltTypeNwTrace = 0x2,
-    ///Dlt control message.
-    DltTypeControl = 0x3
-}
-
-impl Mstp {
-    ///Attempts to convert a raw mstp value to the enum.
-    ///Returns `Option::None` for reserved values.
-    fn from_u8(value: u8) -> Option<Mstp> {
-        match value {
-            0x0 => Some(Mstp::DltTypeLog),
-            0x1 => Some(Mstp::DltTypeAppTrace),
-            0x2 => Some(Mstp::DltTypeNwTrace),
-            0x3 => Some(Mstp::DltTypeControl),
-            //Reserved values
-            _ => None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MtinDltLogMessage {
+pub enum DltLogLevel {
     ///Fatal system error.
-    DltLogFatal = 0x1,
+    Fatal = 0x1,
     ///SWC error.
-    DltLogError = 0x2,
+    Error = 0x2,
     ///Correct behavior cannot be ensured.
-    DltLogWarn = 0x3,
+    Warn = 0x3,
     ///Message of LogLevel type “Information”.
-    DltLogInfo = 0x4,
+    Info = 0x4,
     ///Message of LogLevel type “Debug”.
-    DltLogDebug = 0x5,
+    Debug = 0x5,
     ///Message of LogLevel type "Verbose".
-    DltLogVerbose = 0x6,
+    Verbose = 0x6,
 }
 
-impl MtinDltLogMessage {
-    ///Attempts to convert a raw mtin value to the enum.
-    ///Returns `Option::None` for reserved values.
-    fn from_u8(value: u8) -> Option<Mtin> {
-        match value {
-            0x1 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogFatal)),
-            0x2 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogError)),
-            0x3 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogWarn)),
-            0x4 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogInfo)),
-            0x5 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogDebug)),
-            0x6 => Some(Mtin::DltLogMessage(MtinDltLogMessage::DltLogVerbose)),
-            //Reserved values
-            _ => None,
-        }
-    }
-}
-
+///Types of application trace messages that can be sent via dlt if the message type 
+///is specified as "trace".
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MtinDltTraceMessage {
+pub enum DltTraceType {
     ///Value of variable.
-    DltTraceVariable = 0x1,
+    Variable = 0x1,
     ///Call of a function.
-    DltTraceFunctionIn = 0x2,
+    FunctionIn = 0x2,
     ///Return of a function.
-    DltTraceFunctionOut = 0x3,
+    FunctionOut = 0x3,
     ///State of a state machine.
-    DltTraceState = 0x4,
+    State = 0x4,
     ///RTE Events.
-    DltTraceVfb = 0x5,
+    Vfb = 0x5,
 }
 
-impl MtinDltTraceMessage {
-    ///Attempts to convert a raw mtin value to the enum.
-    ///Returns `Option::None` for reserved values.
-    fn from_u8(value: u8) -> Option<Mtin> {
-        match value {
-            0x1 => Some(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceVariable)),
-            0x2 => Some(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceFunctionIn)),
-            0x3 => Some(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceFunctionOut)),
-            0x4 => Some(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceState)),
-            0x5 => Some(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceVfb)),
-            //Reserved values
-            _ => None,
-        }
-    }
+///Network type specified in a network trace dlt message.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DltNetworkType {
+    ///Inter-Process-Communication.
+    Ipc,
+    ///CAN communication bus.
+    Can,
+    ///FlexRay communication bus.
+    Flexray,
+    ///Most communication bus.
+    Most,
+    ///Ethernet communication bus.
+    Ethernet,
+    ///SOME/IP communication.
+    SomeIp,
+    ///User defined settings (note that the maximum allowed value is 0xf or 15).
+    UserDefined(u8),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MtinDltNetworkMessage {
-    ///Inter-Process-Communication.
-    DltNwTraceIpc,
-    ///CAN communication bus.
-    DltNwTraceCan,
-    ///FlexRay communication bus.
-    DltNwTraceFlexray,
-    ///Most communication bus.
-    DltNwTraceMost,
-    ///Ethernet communication bus.
-    DltNwTraceEthernet,
-    ///SOME/IP communication.
-    DltNwTraceSomeIp,
-    ///User defined settings.
-    DltNwUserDefined(u8),
+pub enum DltControlMessageType {
+    ///Request control message.
+    Request = 0x1,
+    ///Respond control message.
+    Response = 0x2
 }
 
-impl MtinDltNetworkMessage {
-    ///Attempts to convert a raw mtin value to the enum.
-    ///Returns `Option::None` for reserved values.
-    fn from_u8(value: u8) -> Option<Mtin> {
-        match value {
-            0x1 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceIpc)),
-            0x2 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceCan)),
-            0x3 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceFlexray)),
-            0x4 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceMost)),
-            0x5 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceEthernet)),
-            0x6 => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceSomeIp)),
-            //User defined
-            0x7 ..= 0xF => Some(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(value))),
-            //Mtin is only 4 bit
+///Message type info field (contains the the information of the message type & message type info field)
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DltMessageType {
+    ///Dlt log message with a log level
+    Log(DltLogLevel),
+    ///Message tracing the value of a function, variable or other parts of the system.
+    Trace(DltTraceType),
+    ///Message containing tracing informations from a networking system.
+    NetworkTrace(DltNetworkType),
+    ///A dlt control message (e.g. for setting the log level).
+    Control(DltControlMessageType),
+}
+
+impl DltMessageType {
+
+    ///Attempts to read the message type from the first byte of 
+    ///the dlt extended message header.
+    fn from_message_info_encoded(value: u8) -> Option<DltMessageType> {
+        use DltMessageType::*;
+
+        const MSIN_MASK: u8 = 0b1111_0000;
+
+        match value & 0b0000_1110 {
+            EXT_MSIN_MSTP_TYPE_LOG => {
+                use DltLogLevel::*;
+                match (value & MSIN_MASK) >> 4 {
+                    0x1 => Some(Log(Fatal)),
+                    0x2 => Some(Log(Error)),
+                    0x3 => Some(Log(Warn)),
+                    0x4 => Some(Log(Info)),
+                    0x5 => Some(Log(Debug)),
+                    0x6 => Some(Log(Verbose)),
+                    //undefined values
+                    _ => None,
+                }
+            },
+            EXT_MSIN_MSTP_TYPE_TRACE => {
+                use DltTraceType::*;
+                match (value & MSIN_MASK) >> 4 {
+                    0x1 => Some(Trace(Variable)),
+                    0x2 => Some(Trace(FunctionIn)),
+                    0x3 => Some(Trace(FunctionOut)),
+                    0x4 => Some(Trace(State)),
+                    0x5 => Some(Trace(Vfb)),
+                    //undefined values
+                    _ => None,
+                }
+            },
+            EXT_MSIN_MSTP_TYPE_NW_TRACE => {
+                use DltNetworkType::*;
+                match (value & MSIN_MASK) >> 4 {
+                    0x1 => Some(NetworkTrace(Ipc)),
+                    0x2 => Some(NetworkTrace(Can)),
+                    0x3 => Some(NetworkTrace(Flexray)),
+                    0x4 => Some(NetworkTrace(Most)),
+                    0x5 => Some(NetworkTrace(Ethernet)),
+                    0x6 => Some(NetworkTrace(SomeIp)),
+                    //user defined
+                    other => Some(NetworkTrace(UserDefined(other)))
+                }
+            }
+            EXT_MSIN_MSTP_TYPE_CONTROL => {
+                use DltControlMessageType::*;
+                match (value & MSIN_MASK) >> 4 {
+                    0x1 => Some(Control(Request)),
+                    0x2 => Some(Control(Response)),
+                    //undefined values
+                    _ => None,
+                }
+            },
             _ => None
         }
     }
 
-    fn to_u8(&self) -> u8 {
-        match self {
-            MtinDltNetworkMessage::DltNwTraceIpc => 0x1,
-            MtinDltNetworkMessage::DltNwTraceCan => 0x2,
-            MtinDltNetworkMessage::DltNwTraceFlexray => 0x3,
-            MtinDltNetworkMessage::DltNwTraceMost => 0x4,
-            MtinDltNetworkMessage::DltNwTraceEthernet => 0x5,
-            MtinDltNetworkMessage::DltNwTraceSomeIp => 0x6,
-            //User defined
-            MtinDltNetworkMessage::DltNwUserDefined(value) => *value,
+    ///Set message type info and based on that the message type.
+    pub fn encode_to_message_info_byte(&self) -> Result<u8,RangeError> {
+        use DltMessageType::*;
+        use DltNetworkType::UserDefined;
+        use RangeError::NetworkTypekUserDefinedTooLarge;
+        
+        //check ranges
+        if let NetworkTrace(UserDefined(user_defined_value)) = *self {
+            if user_defined_value > 0xf {
+                return Err(NetworkTypekUserDefinedTooLarge(user_defined_value));
+            }
         }
-    }
-}
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MtinDltControlMessage {
-    ///Request control message.
-    DltControlRequest = 0x1,
-    ///Respond control message.
-    DltControlResponse = 0x2
-}
+        //determine message type & message type info
+        let (message_type, message_type_info) = match self {
+            Log(ref level) => (
+                EXT_MSIN_MSTP_TYPE_LOG,
+                level.clone() as u8
+            ),
+            Trace(ref trace_type) => (
+                EXT_MSIN_MSTP_TYPE_TRACE,
+                trace_type.clone() as u8
+            ),
+            NetworkTrace(ref nw_trace_type) => {
+                use DltNetworkType::*;
 
-impl MtinDltControlMessage {
-    ///Attempts to convert a raw mtin value to the enum.
-    ///Returns `Option::None` for reserved values.
-    fn from_u8(value: u8) -> Option<Mtin> {
-        match value {
-            0x1 => Some(Mtin::DltControlMessage(MtinDltControlMessage::DltControlRequest)),
-            0x2 => Some(Mtin::DltControlMessage(MtinDltControlMessage::DltControlResponse)),
-            //Reserved values
-            _ => None,
-        }
-    }
-}
+                (EXT_MSIN_MSTP_TYPE_NW_TRACE,
+                 match *nw_trace_type {
+                    Ipc => 0x1,
+                    Can => 0x2,
+                    Flexray => 0x3,
+                    Most => 0x4,
+                    Ethernet => 0x5,
+                    SomeIp => 0x6,
+                    UserDefined(value) => value,
+                })
+            },
+            Control(ref control_msg_type) => (
+                EXT_MSIN_MSTP_TYPE_CONTROL,
+                control_msg_type.clone() as u8
+            ),
+        };
 
-///Message type info field
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Mtin {
-    DltLogMessage(MtinDltLogMessage),
-    DltTraceMessage(MtinDltTraceMessage),
-    DltNetworkMessage(MtinDltNetworkMessage),
-    DltControlMessage(MtinDltControlMessage),
-}
-
-impl Mtin {
-
-    ///Attempts to convert a raw mtin value to the enum.
-    ///Returns `Option::None` for reserved values.
-    fn from_u8(mstp: Mstp, value: u8) -> Option<Mtin> {
-        match mstp {
-            Mstp::DltTypeLog => MtinDltLogMessage::from_u8(value),
-            Mstp::DltTypeAppTrace => MtinDltTraceMessage::from_u8(value),
-            Mstp::DltTypeNwTrace => MtinDltNetworkMessage::from_u8(value),
-            Mstp::DltTypeControl => MtinDltControlMessage::from_u8(value)
-        }
+        Ok(message_type | ((message_type_info << 4) & 0b1111_0000))
     }
 }
 
@@ -650,7 +657,7 @@ impl<'a> DltPacketSlice<'a> {
 
     ///Returns a slice containing the payload of a non verbose message (after the message id).
     pub fn non_verbose_payload(&self) -> &'a [u8] {
-        &self.slice[usize::from(self.header_len) + 4..]
+        &self.slice[self.header_len + 4..]
     }
 
     ///Deserialize the dlt header
@@ -832,39 +839,56 @@ mod tests {
         }
     }
 
-    fn mtin_any() -> impl Strategy<Value = Mtin> {
+    fn log_level_any() -> impl Strategy<Value = DltLogLevel> {
+        use DltLogLevel::*;
         prop_oneof![
-            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogFatal)),
-            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogError)),
-            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogWarn)),
-            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogInfo)),
-            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogDebug)),
-            Just(Mtin::DltLogMessage(MtinDltLogMessage::DltLogVerbose)),
+            Just(Fatal),
+            Just(Error),
+            Just(Warn),
+            Just(Info),
+            Just(Debug),
+            Just(Verbose),
+        ]
+    }
 
-            Just(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceVariable)),
-            Just(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceFunctionIn)),
-            Just(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceFunctionOut)),
-            Just(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceState)),
-            Just(Mtin::DltTraceMessage(MtinDltTraceMessage::DltTraceVfb)),
+    fn message_type_any() -> impl Strategy<Value = DltMessageType> {
+        use DltMessageType::*;
+        use DltLogLevel::*;
+        use DltNetworkType::*;
+        use DltTraceType::*;
+        use DltControlMessageType::*;
+        prop_oneof![
+            Just(Log(Fatal)),
+            Just(Log(Error)),
+            Just(Log(Warn)),
+            Just(Log(Info)),
+            Just(Log(Debug)),
+            Just(Log(Verbose)),
 
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceIpc)),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceCan)),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceFlexray)),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceMost)),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceEthernet)),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwTraceSomeIp)),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0x7))),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0x8))),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0x9))),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xA))),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xB))),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xC))),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xD))),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xE))),
-            Just(Mtin::DltNetworkMessage(MtinDltNetworkMessage::DltNwUserDefined(0xF))),
+            Just(Trace(Variable)),
+            Just(Trace(FunctionIn)),
+            Just(Trace(FunctionOut)),
+            Just(Trace(State)),
+            Just(Trace(Vfb)),
 
-            Just(Mtin::DltControlMessage(MtinDltControlMessage::DltControlRequest)),
-            Just(Mtin::DltControlMessage(MtinDltControlMessage::DltControlResponse)),
+            Just(NetworkTrace(Ipc)),
+            Just(NetworkTrace(Can)),
+            Just(NetworkTrace(Flexray)),
+            Just(NetworkTrace(Most)),
+            Just(NetworkTrace(Ethernet)),
+            Just(NetworkTrace(SomeIp)),
+            Just(NetworkTrace(UserDefined(0x7))),
+            Just(NetworkTrace(UserDefined(0x8))),
+            Just(NetworkTrace(UserDefined(0x9))),
+            Just(NetworkTrace(UserDefined(0xA))),
+            Just(NetworkTrace(UserDefined(0xB))),
+            Just(NetworkTrace(UserDefined(0xC))),
+            Just(NetworkTrace(UserDefined(0xD))),
+            Just(NetworkTrace(UserDefined(0xE))),
+            Just(NetworkTrace(UserDefined(0xF))),
+
+            Just(Control(Request)),
+            Just(Control(Response)),
         ]
     }
 
@@ -928,8 +952,7 @@ mod tests {
             if let Some(packet_ext_header) = packet.0.extended_header.as_ref() {
                 let slice_header = slice.header();
                 let slice_ext_header = slice_header.extended_header.as_ref().unwrap();
-                assert_eq!(slice_ext_header.mtin(), packet_ext_header.mtin());
-                assert_eq!(slice_ext_header.mstp(), packet_ext_header.mstp());
+                assert_eq!(slice_ext_header.message_type(), packet_ext_header.message_type());
             }
 
             //check that a too small slice produces an error
@@ -1004,19 +1027,26 @@ mod tests {
 
     proptest! {
         #[test]
-        fn ext_header_mstp_mtin(mtin in mtin_any()) {
+        fn ext_header_message_type(
+            verbose in any::<bool>(),
+            message_type0 in message_type_any(),
+            message_type1 in message_type_any())
+        {
             let mut header: DltExtendedHeader = Default::default();
-            header.set_mstp_mtin(mtin.clone());
 
-            //check that mstp matches mstin
-            match mtin {
-                Mtin::DltLogMessage(_) => assert_eq!(header.mstp(), Some(Mstp::DltTypeLog)),
-                Mtin::DltTraceMessage(_) => assert_eq!(header.mstp(), Some(Mstp::DltTypeAppTrace)),
-                Mtin::DltNetworkMessage(_) => assert_eq!(header.mstp(), Some(Mstp::DltTypeNwTrace)),
-                Mtin::DltControlMessage(_) => assert_eq!(header.mstp(), Some(Mstp::DltTypeControl)),
-            }
+            //set verbose (stored in same field, to ensure no side effects)
+            header.set_is_verbose(verbose);
+            assert_eq!(header.is_verbose(), verbose);
 
-            assert_eq!(header.mtin(), Some(mtin));
+            //set to first message type
+            header.set_message_type(message_type0.clone()).unwrap();
+            assert_eq!(header.is_verbose(), verbose);
+            assert_eq!(header.message_type(), Some(message_type0));
+
+            //set to second message type (to make sure the old type is correctly cleaned)
+            header.set_message_type(message_type1.clone()).unwrap();
+            assert_eq!(header.is_verbose(), verbose);
+            assert_eq!(header.message_type(), Some(message_type1));
         }
     }
 
@@ -1087,11 +1117,13 @@ mod tests {
 
     proptest! {
         #[test]
-        fn new_non_verbose(application_id in any::<u32>(),
+        fn new_non_verbose(log_level in log_level_any(),
+                           application_id in any::<u32>(),
                            context_id in any::<u32>())
         {
-            let header = DltExtendedHeader::new_non_verbose(application_id, context_id);
-            assert_eq!(0, header.message_info);
+            use DltMessageType::Log;
+            let header = DltExtendedHeader::new_non_verbose_log(log_level.clone(), application_id, context_id);
+            assert_eq!(Log(log_level).encode_to_message_info_byte().unwrap(), header.message_info);
             assert_eq!(0, header.number_of_arguments);
             assert_eq!(application_id, header.application_id);
             assert_eq!(context_id, header.context_id);
@@ -1119,6 +1151,64 @@ mod tests {
         //set the verbose flag
         header.extended_header.as_mut().unwrap().set_is_verbose(true);
         assert_eq!(true, header.is_verbose());
+    }
+
+    #[test]
+    fn message_type() {
+        use {DltMessageType::*, DltNetworkType::*, DltLogLevel::*, DltTraceType::*, DltControlMessageType::*};
+
+        //check that setting & resetting does correctly reset the values
+        {
+            let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
+
+            header.set_message_type(NetworkTrace(SomeIp)).unwrap();
+            assert_eq!(false, header.is_verbose());
+            assert_eq!(Some(NetworkTrace(SomeIp)), header.message_type());
+
+            //set to a different value with non overlapping bits (to make sure the values are reset)
+            header.set_message_type(Trace(FunctionIn)).unwrap();
+            assert_eq!(false, header.is_verbose());
+            assert_eq!(Some(Trace(FunctionIn)), header.message_type());
+        }
+
+        //check None return type when a unknown value is presented
+        //message type
+        for message_type_id in 4 ..=0b111 {
+            let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
+            header.message_info = message_type_id << 1;
+            assert_eq!(None, header.message_type());
+        }
+
+        //msin bad values
+        let bad_values = [
+            //bad log level 0 & everything above 6
+            (Log(Fatal), (0u8..1).chain(7u8..=0xf)),
+            //bad trace source (0 & everything above 5)
+            (Trace(FunctionIn), (0u8..1).chain(6u8..=0xf)),
+            //bad control message type (0 & everything above 2)
+            (Control(Request), (0u8..1).chain(3u8..=0xf))
+        ];
+
+        for t in bad_values.iter() {
+            for value in t.1.clone() {
+                let mut header = DltExtendedHeader::new_non_verbose(t.0.clone(), 0, 0).unwrap();
+                println!("{:?}", t.0);
+                header.message_info &= 0b0000_1111;
+                header.message_info |= value << 4;
+                assert_eq!(None, header.message_type());
+            }
+        }
+
+        //check set out of range error
+        {
+            use RangeError::*;
+            use DltLogLevel::Fatal;
+            for i in 0x10..=0xff {
+                let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
+                assert_eq!(Err(NetworkTypekUserDefinedTooLarge(i)), 
+                           header.set_message_type(NetworkTrace(UserDefined(i))));
+            }
+        }
     }
 
     #[test]
