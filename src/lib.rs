@@ -631,6 +631,15 @@ impl<'a> DltPacketSlice<'a> {
         }
     }
 
+    ///Returns the message type if a parsable message type is present
+    pub fn message_type(&self) -> Option<DltMessageType> {
+        if self.has_extended_header() {
+            DltMessageType::from_message_info_encoded(self.slice[self.header_len - 10])
+        } else {
+            None
+        }
+    }
+
     ///Returns the message id if the message is a non verbose message otherwise None is returned.
     pub fn message_id(&self) -> Option<u32> {
         if self.is_verbose() {
@@ -950,9 +959,12 @@ mod tests {
             assert_eq!(slice.payload(), &packet.1[..]);
 
             if let Some(packet_ext_header) = packet.0.extended_header.as_ref() {
-                let slice_header = slice.header();
-                let slice_ext_header = slice_header.extended_header.as_ref().unwrap();
-                assert_eq!(slice_ext_header.message_type(), packet_ext_header.message_type());
+                assert_eq!(slice.message_type(), packet_ext_header.message_type());
+                assert_eq!(slice.header().extended_header.unwrap().message_type(), 
+                           packet.0.extended_header.as_ref().unwrap().message_type());
+            } else {
+                assert_eq!(slice.header().extended_header, None);
+                assert_eq!(slice.message_type(), None);
             }
 
             //check that a too small slice produces an error

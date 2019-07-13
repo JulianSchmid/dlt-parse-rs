@@ -71,7 +71,11 @@ fn read(arguments: CommandLineArguments) -> Result<(),Error> {
                             Ok(dlt_slice) => {
                                 //check if the message is verbose or non verbose (non verbose messages have message ids)
                                 if let Some(message_id) = dlt_slice.message_id() {
-                                    println!("non verbose message {:x}", message_id);
+                                    if let Some(message_type) = dlt_slice.message_type() {
+                                        println!("non verbose message {:x} (type: {:?})", message_id, message_type);
+                                    } else {
+                                        println!("non verbose message {:x}", message_id);
+                                    }
                                     println!("  with payload {:?}", dlt_slice.non_verbose_payload());
                                 } else {
                                     println!("verbose message (parsing not yet supported)");
