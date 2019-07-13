@@ -1,4 +1,5 @@
 [![Crates.io](https://img.shields.io/crates/v/dlt_parse.svg)](https://crates.io/crates/dlt_parse)
+[![docs.rs](https://docs.rs/dlt_parse/badge.svg)](https://docs.rs/dlt_parse)
 [![Build Status](https://travis-ci.org/JulianSchmid/dlt-parse-rs.svg?branch=master)](https://travis-ci.org/JulianSchmid/dlt-parse-rs)
 [![Coverage Status](https://codecov.io/gh/JulianSchmid/dlt-parse-rs/branch/master/graph/badge.svg)](https://codecov.io/gh/JulianSchmid/dlt-parse-rs)
 
