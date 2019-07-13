@@ -631,6 +631,21 @@ impl<'a> DltPacketSlice<'a> {
         }
     }
 
+    ///Returns the dlt extended header if present
+    pub fn extended_header(&self) -> Option<DltExtendedHeader> {
+        if self.has_extended_header() {
+            let slice = &self.slice[self.header_len - 10..];
+            Some(DltExtendedHeader {
+                message_info: slice[0],
+                number_of_arguments: slice[1],
+                application_id: BigEndian::read_u32(&slice[2..6]),
+                context_id: BigEndian::read_u32(&slice[6..10])
+            })
+        } else {
+            None
+        }
+    }
+
     ///Returns the message type if a parsable message type is present
     pub fn message_type(&self) -> Option<DltMessageType> {
         if self.has_extended_header() {
@@ -957,6 +972,7 @@ mod tests {
             assert_eq!(slice.is_big_endian(), packet.0.is_big_endian);
             assert_eq!(slice.is_verbose(), packet.0.is_verbose());
             assert_eq!(slice.payload(), &packet.1[..]);
+            assert_eq!(slice.extended_header(), packet.0.extended_header);
 
             if let Some(packet_ext_header) = packet.0.extended_header.as_ref() {
                 assert_eq!(slice.message_type(), packet_ext_header.message_type());
