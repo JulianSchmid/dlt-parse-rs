@@ -73,14 +73,14 @@ fn read(arguments: CommandLineArguments) -> Result<(),Error> {
                                 if let Some(message_id) = dlt_slice.message_id() {
                                     if let Some(extended_header) = dlt_slice.extended_header() {
                                         if let Some(message_type) = extended_header.message_type() {
-                                            println!("non verbose message {:x} (type: {:?}, application_id: {:x}, context_id: {})", 
+                                            println!("non verbose message 0x{:x} (type: {:?}, application_id: 0x{:x}, context_id: {})", 
                                                      message_id, message_type, extended_header.application_id, extended_header.context_id);
                                         } else {
-                                            println!("non verbose message {:x} (application_id: {:x}, context_id: {})",
+                                            println!("non verbose message 0x{:x} (application_id: 0x{:x}, context_id: {})",
                                                      message_id, extended_header.application_id, extended_header.context_id);
                                         }
                                     } else {
-                                        println!("non verbose message {:x}", message_id);
+                                        println!("non verbose message 0x{:x}", message_id);
                                     }
                                     println!("  with payload {:?}", dlt_slice.non_verbose_payload());
                                 } else {
