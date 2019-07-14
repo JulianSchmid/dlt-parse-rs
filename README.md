@@ -15,7 +15,7 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dlt_parse = "0.2.0"
+dlt_parse = "0.2.1"
 ```
 
 Next, add this to your crate:
