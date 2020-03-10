@@ -34,7 +34,7 @@ Some key points are:
 * It is completly written in Rust and thoroughly tested.
 * Special attention has been paid to not use allocations or syscalls.
 * The package is still in development and can & will still change.
-* Methods for parsing verbose DLT packets are still missing (but will maybe be implemented in future versions).
+* Methods for parsing verbose DLT packets are still missing (but maybe will be implemented in future versions).
 
 ## Example: Serializing & Slicing/Deserializing DLT Packets
 
