@@ -19,12 +19,12 @@ exclude = [
 [dependencies]
 
 [dev-dependencies]
-assert_matches = "1.3.0"
-proptest = "0.9.4"
+assert_matches = "1.5.0"
+proptest = "1.0.0"
 
 # for examples
-etherparse = "0.8.2"
-structopt = "0.2.18"
+etherparse = "0.9.0"
+structopt = "0.3.22"
 rpcap = "0.3.0"
 
 [badges]
