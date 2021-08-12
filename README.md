@@ -74,12 +74,10 @@ header.write(&mut buffer).unwrap();
 {
     //for write_all
     use std::io::Write;
-    //byteorder crate is used for writing the message id with  the correct endianess
-    use byteorder::{BigEndian, WriteBytesExt};
 
     //write the message id & payload
-    buffer.write_u32::<BigEndian>(1234).unwrap(); //message id
-    buffer.write_all(&[1,2,3,4]); //payload
+    buffer.write_all(&1234u32.to_be_bytes()).unwrap(); //message id
+    buffer.write_all(&[5,6,7,9]); //payload
 }
 
 //packets can contain multiple dlt messages, iterate through them

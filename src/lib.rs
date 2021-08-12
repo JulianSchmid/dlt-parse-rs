@@ -67,12 +67,10 @@
 //! {
 //!     //for write_all
 //!     use std::io::Write;
-//!     //byteorder crate is used for writing the message id with  the correct endianess
-//!     use byteorder::{BigEndian, WriteBytesExt};
 //!
 //!     //write the message id & payload
-//!     buffer.write_u32::<BigEndian>(1234).unwrap(); //message id
-//!     buffer.write_all(&[1,2,3,4]); //payload
+//!     buffer.write_all(&1234u32.to_be_bytes()).unwrap(); //message id
+//!     buffer.write_all(&[5,6,7,9]); //payload
 //! }
 //!
 //! //packets can contain multiple dlt messages, iterate through them
@@ -101,9 +99,7 @@
 //! * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/user_upload/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
 
 use std::io;
-
-use byteorder;
-use self::byteorder::{ByteOrder, BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
+use std::slice::from_raw_parts;
 
 #[cfg(test)]
 extern crate proptest;
@@ -183,36 +179,82 @@ impl DltHeader {
 
     ///Deserialize a DltHeader & TpHeader from the given reader.
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<DltHeader, ReadError> {
+
+        // read the standard header that is always present
+        let standard_header_start = {
+            let mut standard_header_start : [u8;4] = [0;4];
+            reader.read_exact(&mut standard_header_start)?;
+            standard_header_start
+        };
+
         //first lets read the header type
-        let header_type = reader.read_u8()?;
+        let header_type = standard_header_start[0];
         //let extended_header = 0 != header_type & EXTDENDED_HEADER_FLAG;
         Ok(DltHeader{
             is_big_endian: 0 != header_type & BIG_ENDIAN_FLAG,
             version: (header_type >> 5) & MAX_VERSION,
-            message_counter: reader.read_u8()?,
-            length: reader.read_u16::<BigEndian>()?,
+            message_counter: standard_header_start[1],
+            length: u16::from_be_bytes(
+                [
+                    standard_header_start[2],
+                    standard_header_start[3],
+                ]
+            ),
             ecu_id: if 0 != header_type & ECU_ID_FLAG {
-                Some(reader.read_u32::<BigEndian>()?)
+                Some({
+                    let mut buffer : [u8;4] = [0;4];
+                    reader.read_exact(&mut buffer)?;
+                    u32::from_be_bytes(buffer)
+                })
             } else {
                 None
             },
             session_id: if 0 != header_type & SESSION_ID_FLAG {
-                Some(reader.read_u32::<BigEndian>()?)
+                Some({
+                    let mut buffer : [u8;4] = [0;4];
+                    reader.read_exact(&mut buffer)?;
+                    u32::from_be_bytes(buffer)
+                })
             } else {
                 None
             },
             timestamp: if 0 != header_type & TIMESTAMP_FLAG {
-                Some(reader.read_u32::<BigEndian>()?)
+                Some({
+                    let mut buffer : [u8;4] = [0;4];
+                    reader.read_exact(&mut buffer)?;
+                    u32::from_be_bytes(buffer)
+                })
             } else {
                 None
             },
             extended_header: if 0 != header_type & EXTDENDED_HEADER_FLAG {
-                Some(DltExtendedHeader{
-                    message_info: reader.read_u8()?,
-                    number_of_arguments: reader.read_u8()?,
-                    application_id: reader.read_u32::<BigEndian>()?,
-                    context_id: reader.read_u32::<BigEndian>()?
-                })
+                Some(
+                    {
+                        let mut buffer : [u8;10] = [0;10];
+                        reader.read_exact(&mut buffer)?;
+
+                        DltExtendedHeader{
+                            message_info: buffer[0],
+                            number_of_arguments: buffer[1],
+                            application_id: u32::from_be_bytes(
+                                [
+                                    buffer[2],
+                                    buffer[3],
+                                    buffer[4],
+                                    buffer[5],
+                                ]
+                            ),
+                            context_id: u32::from_be_bytes(
+                                [
+                                    buffer[6],
+                                    buffer[7],
+                                    buffer[8],
+                                    buffer[9],
+                                ]
+                            )
+                        }
+                    }
+                )
             } else {
                 None
             }
@@ -226,50 +268,68 @@ impl DltHeader {
             return Err(WriteError::VersionTooLarge(self.version))
         }
 
-        //create the header type bitfield
-        writer.write_u8({
-            let mut result = 0;
-            if self.extended_header.is_some() {
-                result |= EXTDENDED_HEADER_FLAG;
-            }
-            if self.is_big_endian {
-                result |= BIG_ENDIAN_FLAG;
-            }
-            if self.ecu_id.is_some() {
-                result |= ECU_ID_FLAG;
-            }
-            if self.session_id.is_some() {
-                result |= SESSION_ID_FLAG;
-            }
-            if self.timestamp.is_some() {
-                result |= TIMESTAMP_FLAG;
-            }
-            result |= (self.version << 5) & 0b1110_0000;
-            result
-        })?;
-        //write the rest of the standard header fields
-        writer.write_u8(self.message_counter)?;
-        writer.write_u16::<BigEndian>(self.length)?;
+        {
+            let length_be = self.length.to_be_bytes();
+            let standard_header_start : [u8;4] = [
+                //header type bitfield
+                {
+                    let mut result = 0;
+                    if self.extended_header.is_some() {
+                        result |= EXTDENDED_HEADER_FLAG;
+                    }
+                    if self.is_big_endian {
+                        result |= BIG_ENDIAN_FLAG;
+                    }
+                    if self.ecu_id.is_some() {
+                        result |= ECU_ID_FLAG;
+                    }
+                    if self.session_id.is_some() {
+                        result |= SESSION_ID_FLAG;
+                    }
+                    if self.timestamp.is_some() {
+                        result |= TIMESTAMP_FLAG;
+                    }
+                    result |= (self.version << 5) & 0b1110_0000;
+                    result
+                },
+                self.message_counter,
+                length_be[0],
+                length_be[1]
+            ];
+
+            writer.write_all(&standard_header_start)?;
+        }
 
         if let Some(value) = self.ecu_id { 
-            writer.write_u32::<BigEndian>(value)?;
+            writer.write_all(&value.to_be_bytes())?;
         }
 
         if let Some(value) = self.session_id {
-            writer.write_u32::<BigEndian>(value)?;
+            writer.write_all(&value.to_be_bytes())?;
         }
 
         if let Some(value) = self.timestamp {
-            writer.write_u32::<BigEndian>(value)?;
+            writer.write_all(&value.to_be_bytes())?;
         }
 
         //write the extended header if it exists
         match &self.extended_header {
             Some(value) => {
-                writer.write_u8(value.message_info)?;
-                writer.write_u8(value.number_of_arguments)?;
-                writer.write_u32::<BigEndian>(value.application_id)?;
-                writer.write_u32::<BigEndian>(value.context_id)?;
+                let app_id_be = value.application_id.to_be_bytes();
+                let context_id_be = value.context_id.to_be_bytes();
+                let bytes : [u8;10] = [
+                    value.message_info,
+                    value.number_of_arguments,
+                    app_id_be[0],
+                    app_id_be[1],
+                    app_id_be[2],
+                    app_id_be[3],
+                    context_id_be[0],
+                    context_id_be[1],
+                    context_id_be[2],
+                    context_id_be[3],
+                ];
+                writer.write_all(&bytes)?;
             },
             None => {}
         }
@@ -277,6 +337,7 @@ impl DltHeader {
     }
 
     ///Returns if the package is a verbose package
+    #[inline]
     pub fn is_verbose(&self) -> bool {
         match &self.extended_header {
             None => false, //only packages with extended headers can be verbose
@@ -285,6 +346,7 @@ impl DltHeader {
     }
 
     ///Return the byte/octed size of the serialized header (including extended header)
+    #[inline]
     pub fn header_len(&self) -> u16 {
         4 + match self.ecu_id {
             Some(_) => 4,
@@ -334,11 +396,13 @@ impl DltExtendedHeader {
     }
 
     ///Returns true if the extended header flags the message as a verbose message.
+    #[inline]
     pub fn is_verbose(&self) -> bool {
         0 != self.message_info & 0b1 
     }
 
     ///Sets or unsets the is_verbose bit in the DltExtendedHeader.
+    #[inline]
     pub fn set_is_verbose(&mut self, is_verbose: bool) {
         if is_verbose {
             self.message_info |= 0b1;
@@ -348,11 +412,13 @@ impl DltExtendedHeader {
     }
 
     ///Returns message type info or `Option::None` for reserved values.
+    #[inline]
     pub fn message_type(&self) -> Option<DltMessageType> {
         DltMessageType::from_message_info_encoded(self.message_info)
     }
 
     ///Set message type info and based on that the message type.
+    #[inline]
     pub fn set_message_type(&mut self, value: DltMessageType) -> Result<(),RangeError> {
         
         let encoded = value.encode_to_message_info_byte()?;
@@ -563,13 +629,31 @@ impl<'a> DltPacketSlice<'a> {
             return Err(ReadError::UnexpectedEndOfSlice{ minimum_size: 4, actual_size: slice.len()})
         }
         
-        let length = BigEndian::read_u16(&slice[2..4]) as usize;
+        let length = u16::from_be_bytes(
+            // SAFETY:
+            // Safe as it is checked beforehand that the slice
+            // has at least 4 bytes.
+            unsafe {
+                [
+                    *slice.get_unchecked(2),
+                    *slice.get_unchecked(3),
+                ]
+            }
+        ) as usize;
+
         if slice.len() < length {
             return Err(ReadError::UnexpectedEndOfSlice { minimum_size: length, actual_size: slice.len() });
         }
 
-        //calculate the minimum size based on the header flags
-        let header_type = slice[0];
+        // calculate the minimum size based on the header flags
+        //
+        // SAFETY:
+        // Safe as it is checked beforehand that the slice
+        // has at least 4 bytes.
+        let header_type = unsafe {
+            slice.get_unchecked(0)
+        };
+
         //the header size has at least 4 bytes
         let header_len = if 0 != header_type & ECU_ID_FLAG {
             4 + 4
@@ -607,119 +691,347 @@ impl<'a> DltPacketSlice<'a> {
 
         //looks ok -> create the DltPacketSlice
         Ok(DltPacketSlice {
-            slice: &slice[..length],
+            // SAFETY:
+            // Safe as it is checked beforehand that the slice
+            // has at least length bytes.
+            slice: unsafe {
+                from_raw_parts(
+                    slice.as_ptr(),
+                    length
+                )
+            },
             header_len
         })
     }
 
     ///Returns if an extended header is present.
+    #[inline]
     pub fn has_extended_header(&self) -> bool {
-        0 != self.slice[0] & 0b1
+        // SAFETY:
+        // Safe as it is checked in from_slice that the slice
+        // has at least a length of 4 bytes.
+        0 != unsafe {
+            self.slice.get_unchecked(0)
+        } & 0b1
     }
 
     ///Returns if the numbers in the payload are encoded in big endian.
+    #[inline]
     pub fn is_big_endian(&self) -> bool {
-        0 != self.slice[0] & 0b10
+        // SAFETY:
+        // Safe as it is checked in from_slice that the slice
+        // has at least a length of 4 bytes.
+        0 != unsafe {
+            self.slice.get_unchecked(0)
+        } & 0b10
     }
 
     ///Returns if the dlt package is verbose or non verbose.
+    #[inline]
     pub fn is_verbose(&self) -> bool {
         if self.has_extended_header() {
-            0 != self.slice[self.header_len - 10] & 0b1
+            // SAFETY:
+            // Safe as if the extended header is present the
+            // header_len is checked in from_slice to be at least
+            // 10 bytes.
+            0 != unsafe {
+                self.slice.get_unchecked(self.header_len - 10)
+            } & 0b1
         } else {
             false
         }
     }
 
     ///Returns the dlt extended header if present
+    #[inline]
     pub fn extended_header(&self) -> Option<DltExtendedHeader> {
         if self.has_extended_header() {
-            let slice = &self.slice[self.header_len - 10..];
-            Some(DltExtendedHeader {
-                message_info: slice[0],
-                number_of_arguments: slice[1],
-                application_id: BigEndian::read_u32(&slice[2..6]),
-                context_id: BigEndian::read_u32(&slice[6..10])
-            })
+            // SAFETY:
+            // Safe as if the extended header is present the
+            // header_len is set in from_slice to be at least
+            // 10 bytes and also checked against the slice length.
+            unsafe {
+                let ext_slice = from_raw_parts(
+                    self.slice.as_ptr().add(self.header_len - 10),
+                    10
+                );
+                Some(
+                    DltExtendedHeader {
+                        message_info: *ext_slice.get_unchecked(0),
+                        number_of_arguments: *ext_slice.get_unchecked(1),
+                        application_id: u32::from_be_bytes(
+                            [
+                                *ext_slice.get_unchecked(2),
+                                *ext_slice.get_unchecked(3),
+                                *ext_slice.get_unchecked(4),
+                                *ext_slice.get_unchecked(5),
+                            ]
+                        ),
+                        context_id: u32::from_be_bytes(
+                            [
+                                *ext_slice.get_unchecked(6),
+                                *ext_slice.get_unchecked(7),
+                                *ext_slice.get_unchecked(8),
+                                *ext_slice.get_unchecked(9),
+                            ]
+                        )
+                    }
+                )
+            }
         } else {
             None
         }
     }
 
     ///Returns the message type if a parsable message type is present
+    #[inline]
     pub fn message_type(&self) -> Option<DltMessageType> {
         if self.has_extended_header() {
-            DltMessageType::from_message_info_encoded(self.slice[self.header_len - 10])
+            DltMessageType::from_message_info_encoded(
+                // SAFETY:
+                // Safe as if the extended header is present the
+                // header_len is set in from_slice to be at least
+                // 10 bytes and also checked against the slice length.
+                unsafe {
+                    *self.slice.get_unchecked(self.header_len - 10)
+                }
+            )
         } else {
             None
         }
     }
 
     ///Returns the message id if the message is a non verbose message otherwise None is returned.
+    #[inline]
     pub fn message_id(&self) -> Option<u32> {
         if self.is_verbose() {
             None
         } else {
-            let id_slice = &self.slice[self.header_len .. self.header_len + 4];
+            // SAFETY:
+            // Safe as the slice len is checked to be at least
+            // header_len + 4 in from_slice.
+            let id_bytes = unsafe {
+                [
+                    *self.slice.get_unchecked(self.header_len),
+                    *self.slice.get_unchecked(self.header_len + 1),
+                    *self.slice.get_unchecked(self.header_len + 2),
+                    *self.slice.get_unchecked(self.header_len + 3),
+                ]
+            };
             if self.is_big_endian() {
-                Some(BigEndian::read_u32(id_slice))
+                Some(u32::from_be_bytes(id_bytes))
             } else {
-                Some(LittleEndian::read_u32(id_slice))
+                Some(u32::from_le_bytes(id_bytes))
             }
         }
     }
 
     ///Returns the slice containing the dlt header + payload.
+    #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
     }
 
     ///Returns a slice containing the payload of the dlt message
+    #[inline]
     pub fn payload(&self) -> &'a [u8] {
-        &self.slice[self.header_len..]
+        // SAFETY:
+        // Safe as the slice len is checked to be at least
+        // header_len + 4 in from_slice.
+        unsafe {
+            from_raw_parts(
+                self.slice.as_ptr().add(self.header_len),
+                self.slice.len() - self.header_len
+            )
+        }
     }
 
     ///Returns a slice containing the payload of a non verbose message (after the message id).
     pub fn non_verbose_payload(&self) -> &'a [u8] {
-        &self.slice[self.header_len + 4..]
+        // SAFETY:
+        // Safe as the slice len is checked to be at least
+        // header_len + 4 in from_slice.
+        unsafe {
+            from_raw_parts(
+                self.slice.as_ptr().add(self.header_len + 4),
+                self.slice.len() - self.header_len - 4
+            )
+        }
     }
 
     ///Deserialize the dlt header
     pub fn header(&self) -> DltHeader {
-        let header_type = self.slice[0];
+        // SAFETY:
+        // Safe as it is checked in from_slice that the slice
+        // has at least a length of 4 bytes.
+        let header_type = unsafe {
+            *self.slice.get_unchecked(0)
+        };
         let (is_big_endian, version) = {
-            let header_type = self.slice[0];
-
             (0 != header_type & BIG_ENDIAN_FLAG, 
              (header_type >> 5) & MAX_VERSION)
         };
-        let message_counter = self.slice[1];
-        let length = BigEndian::read_u16(&self.slice[2..4]);
+        // SAFETY:
+        // Safe as it is checked in from_slice that the slice
+        // has at least a length of 4 bytes.
+        let message_counter = unsafe {
+            *self.slice.get_unchecked(1)
+        };
+        let length = u16::from_be_bytes(
+            // SAFETY:
+            // Safe as it is checked in from_slice that the slice
+            // has at least the length of 4 bytes.
+            unsafe {
+                [
+                    *self.slice.get_unchecked(2),
+                    *self.slice.get_unchecked(3),
+                ]
+            }
+        );
 
         let (ecu_id, slice) = if 0 != header_type & ECU_ID_FLAG {
-            (Some(BigEndian::read_u32(&self.slice[4..8])), &self.slice[8..])
+            (
+                Some(
+                    u32::from_be_bytes(
+                        // SAFETY:
+                        // Safe as it is checked in from_slice that the slice
+                        // has the length to contain the standard & extended header
+                        // based on the flags contained in the standard header.
+                        unsafe {
+                            [
+                                *self.slice.get_unchecked(4),
+                                *self.slice.get_unchecked(5),
+                                *self.slice.get_unchecked(6),
+                                *self.slice.get_unchecked(7),
+                            ]
+                        }
+                    )
+                ),
+                // SAFETY:
+                // Safe as it is checked in from_slice that the slice
+                // has the length to contain the standard & extended header
+                // based on the flags contained in the standard header.
+                unsafe {
+                    from_raw_parts(
+                        self.slice.as_ptr().add(8),
+                        self.slice.len() - 8
+                    )
+                }
+            )
         } else {
-            (None, &self.slice[4..])
+            (
+                None,
+                // SAFETY:
+                // Safe as it is checked in from_slice that the slice
+                // has at least the length of 4 bytes.
+                unsafe {
+                    // go after the standard header base
+                    from_raw_parts(
+                        self.slice.as_ptr().add(4),
+                        self.slice.len() - 4
+                    )
+                }
+            )
         };
 
         let (session_id, slice) = if 0 != header_type & SESSION_ID_FLAG {
-            (Some(BigEndian::read_u32(&slice[..4])), &slice[4..])
+            (
+                Some(
+                    u32::from_be_bytes(
+                        // SAFETY:
+                        // Safe as it is checked in from_slice that the slice
+                        // has the length to contain the standard & extended header
+                        // based on the flags contained in the standard header.
+                        unsafe {
+                            [
+                                *slice.get_unchecked(0),
+                                *slice.get_unchecked(1),
+                                *slice.get_unchecked(2),
+                                *slice.get_unchecked(3),
+                            ]
+                        }
+                    )
+                ),
+                // SAFETY:
+                // Safe as it is checked in from_slice that the slice
+                // has the length to contain the standard & extended header
+                // based on the flags contained in the standard header.
+                unsafe {
+                    from_raw_parts(
+                        slice.as_ptr().add(4),
+                        slice.len() - 4
+                    )
+                }
+            )
         } else {
             (None, slice)
         };
 
         let (timestamp, slice) = if 0 != header_type & TIMESTAMP_FLAG {
-            (Some(BigEndian::read_u32(&slice[..4])), &slice[4..])
+            (
+                Some(
+                    u32::from_be_bytes(
+                        // SAFETY:
+                        // Safe as it is checked in from_slice that the slice
+                        // has the length to contain the standard & extended header
+                        // based on the flags contained in the standard header.
+                        unsafe {
+                            [
+                                *slice.get_unchecked(0),
+                                *slice.get_unchecked(1),
+                                *slice.get_unchecked(2),
+                                *slice.get_unchecked(3),
+                            ]
+                        }
+                    )
+                ),
+                // SAFETY:
+                // Safe as it is checked in from_slice that the slice
+                // has the length to contain the standard & extended header
+                // based on the flags contained in the standard header.
+                unsafe {
+                    from_raw_parts(
+                        slice.as_ptr().add(4),
+                        slice.len() - 4
+                    )
+                }
+            )
         } else {
             (None, slice)
         };
 
         let extended_header = if 0 != header_type & EXTDENDED_HEADER_FLAG {
             Some(DltExtendedHeader {
-                message_info: slice[0],
-                number_of_arguments: slice[1],
-                application_id: BigEndian::read_u32(&slice[2..6]),
-                context_id: BigEndian::read_u32(&slice[6..10])
+                // SAFETY:
+                // Safe as it is checked in from_slice that the slice
+                // has the length to contain the standard & extended header
+                // based on the flags contained in the standard header.
+                message_info: unsafe {
+                    *slice.get_unchecked(0)
+                },
+                number_of_arguments: unsafe {
+                    *slice.get_unchecked(1)
+                },
+                application_id: u32::from_be_bytes(
+                    unsafe {
+                        [
+                            *slice.get_unchecked(2),
+                            *slice.get_unchecked(3),
+                            *slice.get_unchecked(4),
+                            *slice.get_unchecked(5),
+                        ]
+                    }
+                ),
+                context_id: u32::from_be_bytes(
+                    unsafe {
+                        [
+                            *slice.get_unchecked(6),
+                            *slice.get_unchecked(7),
+                            *slice.get_unchecked(8),
+                            *slice.get_unchecked(9),
+                        ]
+                    }
+                )
             })
         } else {
             None
@@ -745,6 +1057,7 @@ pub struct SliceIterator<'a> {
 }
 
 impl<'a> SliceIterator<'a> {
+    #[inline]
     pub fn new(slice: &'a [u8]) -> SliceIterator<'a> {
         SliceIterator {
             slice
@@ -1300,7 +1613,7 @@ mod tests {
                 //serialize
                 let mut buffer = Vec::<u8>::new();
                 header.write(&mut buffer).unwrap();
-                buffer.write_u32::<BigEndian>(0x1234_5678).unwrap();
+                buffer.write_all(&0x1234_5678u32.to_be_bytes()).unwrap();
 
                 //slice
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();
@@ -1326,7 +1639,7 @@ mod tests {
                 //serialize
                 let mut buffer = Vec::<u8>::new();
                 header.write(&mut buffer).unwrap();
-                buffer.write_u32::<LittleEndian>(0x1234_5678).unwrap();
+                buffer.write_all(&0x1234_5678u32.to_le_bytes()).unwrap();
 
                 //slice
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();
