@@ -8,7 +8,7 @@
 //! 
 //! ```toml
 //! [dependencies]
-//! dlt_parse = "0.2.1"
+//! dlt_parse = "0.3.0"
 //! ```
 //! 
 //! Next, add this to your crate:
@@ -100,6 +100,7 @@
 
 use std::io;
 use std::slice::from_raw_parts;
+use std::fmt;
 
 #[cfg(test)]
 extern crate proptest;
@@ -107,20 +108,6 @@ extern crate proptest;
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
-
-///A dlt message header
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub struct DltHeader {
-    ///If true the payload is encoded in big endian. This does not influence the fields of the dlt header, which is always encoded in big endian.
-    pub is_big_endian: bool,
-    pub version: u8,
-    pub message_counter: u8,
-    pub length: u16,
-    pub ecu_id: Option<u32>,
-    pub session_id: Option<u32>,
-    pub timestamp: Option<u32>,
-    pub extended_header: Option<DltExtendedHeader>
-}
 
 ///Errors that can occure on reading a dlt header.
 #[derive(Debug)]
@@ -139,6 +126,31 @@ impl From<io::Error> for ReadError {
     }
 }
 
+impl std::error::Error for ReadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ReadError::IoError(ref err) => Some(err),
+            _ => None
+        }
+    }
+}
+
+impl fmt::Display for ReadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ReadError::*;
+
+        match self {
+            UnexpectedEndOfSlice{minimum_size, actual_size} => {
+                write!(f, "ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", actual_size, minimum_size)
+            },
+            LengthSmallerThenMinimum{required_length, length} => {
+                write!(f, "ReadError: The length of {} in the dlt header is smaller then minimum required size of {} bytes.", length, required_length)
+            },
+            IoError(err) => err.fmt(f),
+        }
+    }
+}
+
 ///Errors that can occur when serializing a dlt header.
 #[derive(Debug)]
 pub enum WriteError {
@@ -152,10 +164,51 @@ impl From<io::Error> for WriteError {
     }
 }
 
+impl std::error::Error for WriteError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            WriteError::IoError(ref err) => Some(err),
+            _ => None
+        }
+    }
+}
+
+impl fmt::Display for WriteError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use WriteError::*;
+
+        match self {
+            VersionTooLarge(version) => {
+                write!(f, "WriteError: DLT version {} is larger then the maximum supported value of {}", version, MAX_VERSION)
+            },
+            IoError(err) => err.fmt(f),
+        }
+    }
+}
+
+/// Error that can occur when an out of range value is passed to a function.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum RangeError {
     ///Error if the user defined network type is greater then 0xf
     NetworkTypekUserDefinedTooLarge(u8)
+}
+
+impl std::error::Error for RangeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl fmt::Display for RangeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use RangeError::*;
+
+        match self {
+            NetworkTypekUserDefinedTooLarge(value) => {
+                write!(f, "RangeError: Message type info field user defined value of {} is larger then the maximum possible value of {}", value, 0xf)
+            },
+        }
+    }
 }
 
 const MAX_VERSION: u8 = 0b111;
@@ -174,6 +227,20 @@ const EXT_MSIN_MSTP_TYPE_TRACE: u8 = 0x1 << 1;
 const EXT_MSIN_MSTP_TYPE_NW_TRACE: u8 = 0x2 << 1;
 ///Shifted value in the msin extended header field for dlt "control" messages.
 const EXT_MSIN_MSTP_TYPE_CONTROL: u8 = 0x3 << 1;
+
+///A dlt message header
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
+pub struct DltHeader {
+    ///If true the payload is encoded in big endian. This does not influence the fields of the dlt header, which is always encoded in big endian.
+    pub is_big_endian: bool,
+    pub version: u8,
+    pub message_counter: u8,
+    pub length: u16,
+    pub ecu_id: Option<u32>,
+    pub session_id: Option<u32>,
+    pub timestamp: Option<u32>,
+    pub extended_header: Option<DltExtendedHeader>
+}
 
 impl DltHeader {
 
@@ -1229,206 +1296,638 @@ mod tests {
         ]
     }
 
-    proptest! {
-        #[test]
-        fn write_read(ref dlt_header in dlt_header_any()) {
-            let mut buffer = Vec::new();
-            dlt_header.write(&mut buffer).unwrap();
-            let mut reader = Cursor::new(&buffer[..]);
-            let result = DltHeader::read(&mut reader).unwrap();
-            assert_eq!(dlt_header, &result);
+    mod dlt_header {
+
+        use super::*;
+
+        proptest! {
+            #[test]
+            fn write_read(ref dlt_header in dlt_header_any()) {
+                let mut buffer = Vec::new();
+                dlt_header.write(&mut buffer).unwrap();
+                let mut reader = Cursor::new(&buffer[..]);
+                let result = DltHeader::read(&mut reader).unwrap();
+                assert_eq!(dlt_header, &result);
+            }
         }
-    }
 
-    proptest! {
-        #[test]
-        fn read_length_error(ref dlt_header in dlt_header_any()) {
-            let mut buffer = Vec::new();
-            dlt_header.write(&mut buffer).unwrap();
-            let reduced_len = buffer.len() - 1;
-            let mut reader = Cursor::new(&buffer[..reduced_len]);
-            assert_matches!(DltHeader::read(&mut reader), Err(ReadError::IoError(_)));
+        proptest! {
+            #[test]
+            fn read_length_error(ref dlt_header in dlt_header_any()) {
+                let mut buffer = Vec::new();
+                dlt_header.write(&mut buffer).unwrap();
+                let reduced_len = buffer.len() - 1;
+                let mut reader = Cursor::new(&buffer[..reduced_len]);
+                assert_matches!(DltHeader::read(&mut reader), Err(ReadError::IoError(_)));
+            }
         }
-    }
 
-    proptest! {
-        #[test]
-        fn write_version_error(ref dlt_header in dlt_header_any(),
-                               version in MAX_VERSION+1..std::u8::MAX) {
-            let mut input = dlt_header.clone();
-            input.version = version;
-            let mut buffer = Vec::new();
-            assert_matches!(input.write(&mut buffer), Err(WriteError::VersionTooLarge(_)));
+        proptest! {
+            #[test]
+            fn write_version_error(ref dlt_header in dlt_header_any(),
+                                   version in MAX_VERSION+1..std::u8::MAX) {
+                let mut input = dlt_header.clone();
+                input.version = version;
+                let mut buffer = Vec::new();
+                assert_matches!(input.write(&mut buffer), Err(WriteError::VersionTooLarge(_)));
+            }
         }
-    }
 
-    proptest! {
-        #[test]
-        fn write_io_error(ref dlt_header in dlt_header_any()) {
-            let mut buffer: [u8;1] = [0];
-            let mut writer = Cursor::new(&mut buffer[..]);
-            assert_matches!(dlt_header.write(&mut writer), Err(WriteError::IoError(_)));
+        proptest! {
+            #[test]
+            fn write_io_error(ref header in dlt_header_any()) {
+                let mut buffer: Vec<u8> = Vec::with_capacity(
+                    header.header_len().into()
+                );
+                for len in 0..header.header_len() {
+                    buffer.resize(len.into(), 0);
+                    let mut writer = Cursor::new(&mut buffer[..]);
+                    assert_matches!(header.write(&mut writer), Err(WriteError::IoError(_)));
+                }
+            }
         }
-    }
 
-    proptest! {
         #[test]
-        fn packet_from_slice(ref packet in dlt_header_with_payload_any()) {
-            let mut buffer = Vec::new();
-            packet.0.write(&mut buffer).unwrap();
-            buffer.write(&packet.1[..]).unwrap();
-            //read the slice
-            let slice = DltPacketSlice::from_slice(&buffer[..]).unwrap();
-            //check the results are matching the input
-            assert_eq!(slice.header(), packet.0);
-            assert_eq!(slice.has_extended_header(), packet.0.extended_header.is_some());
-            assert_eq!(slice.is_big_endian(), packet.0.is_big_endian);
-            assert_eq!(slice.is_verbose(), packet.0.is_verbose());
-            assert_eq!(slice.payload(), &packet.1[..]);
-            assert_eq!(slice.extended_header(), packet.0.extended_header);
+        fn is_verbose() {
+            let mut header: DltHeader = Default::default();
+            assert_eq!(false, header.is_verbose());
+            //add an extended header without the verbose flag
+            header.extended_header = Some(Default::default());
+            assert_eq!(false, header.is_verbose());
+            //set the verbose flag
+            header.extended_header.as_mut().unwrap().set_is_verbose(true);
+            assert_eq!(true, header.is_verbose());
+        }
 
-            if let Some(packet_ext_header) = packet.0.extended_header.as_ref() {
-                assert_eq!(slice.message_type(), packet_ext_header.message_type());
-                assert_eq!(slice.header().extended_header.unwrap().message_type(), 
-                           packet.0.extended_header.as_ref().unwrap().message_type());
-            } else {
-                assert_eq!(slice.header().extended_header, None);
-                assert_eq!(slice.message_type(), None);
+        #[test]
+        fn header_len() {
+            struct Test {
+                expected: u16,
+                ecu_id: Option<u32>,
+                session_id: Option<u32>,
+                timestamp: Option<u32>,
+                extended_header: Option<DltExtendedHeader>
             }
 
-            //check that a too small slice produces an error
+            let tests = [
+                Test {
+                    expected: 4,
+                    ecu_id: None,
+                    session_id: None,
+                    timestamp: None,
+                    extended_header: None,
+                },
+                Test {
+                    expected: 4 + 4 + 4 + 4 + 10,
+                    ecu_id: Some(0),
+                    session_id: Some(0),
+                    timestamp: Some(0),
+                    extended_header: Some(Default::default()),
+                },
+                Test {
+                    expected: 4 + 4,
+                    ecu_id: Some(0),
+                    session_id: None,
+                    timestamp: None,
+                    extended_header: None,
+                },
+                Test {
+                    expected: 4 + 4,
+                    ecu_id: None,
+                    session_id: Some(0),
+                    timestamp: None,
+                    extended_header: None,
+                },
+                Test {
+                    expected: 4 + 4,
+                    ecu_id: None,
+                    session_id: None,
+                    timestamp: Some(0),
+                    extended_header: None,
+                },
+                Test {
+                    expected: 4 + 10,
+                    ecu_id: None,
+                    session_id: None,
+                    timestamp: None,
+                    extended_header: Some(Default::default()),
+                },
+            ];
+
+            for test in tests {
+                assert_eq!(
+                    test.expected,
+                    DltHeader{
+                        is_big_endian: false,
+                        version: MAX_VERSION,
+                        message_counter: 123,
+                        length: 123,
+                        ecu_id: test.ecu_id,
+                        session_id: test.session_id,
+                        timestamp: test.timestamp,
+                        extended_header: test.extended_header,
+                    }.header_len()
+                );
+            }
+        }
+
+        #[test]
+        fn debug() {
+            let header: DltHeader = Default::default();
+            println!("{:?}", header);
+        }
+
+        proptest! {
+            #[test]
+            fn clone_eq(ref header in dlt_header_any()) {
+                assert_eq!(*header, header.clone());
+
+            }
+        }
+
+        #[test]
+        fn default() {
+            let header: DltHeader = Default::default();
+            assert_eq!(header.is_big_endian, false);
+            assert_eq!(header.version, 0);
+            assert_eq!(header.message_counter, 0);
+            assert_eq!(header.length, 0);
+            assert_eq!(header.ecu_id, None);
+            assert_eq!(header.session_id, None);
+            assert_eq!(header.timestamp, None);
+            assert_eq!(header.extended_header, None);
+        }
+
+    } // mod dlt_header
+
+    /// Tests for `DltPacketSlice` methods
+    mod dlt_packet_slice {
+
+        use super::*;
+
+        #[test]
+        fn debug() {
+            let mut header: DltHeader = Default::default();
+            header.length = header.header_len() + 4;
+            let mut buffer = Vec::with_capacity(
+                usize::from(header.length)
+            );
+            header.write(&mut buffer).unwrap();
+            buffer.extend_from_slice(&[0,0,0,0]);
+            let slice = DltPacketSlice::from_slice(&buffer).unwrap();
+            println!("{:?}", slice);
+        }
+
+        proptest! {
+            #[test]
+            fn clone_eq_debug(ref packet in dlt_header_with_payload_any()) {
+                let mut buffer = Vec::with_capacity(
+                    usize::from(packet.0.length)
+                );
+                packet.0.write(&mut buffer).unwrap();
+                buffer.extend_from_slice(&packet.1);
+                let slice = DltPacketSlice::from_slice(&buffer).unwrap();
+
+                // clone & eq
+                assert_eq!(slice, slice.clone());
+            }
+        }
+
+        proptest! {
+            #[test]
+            fn from_slice(
+                ref packet in dlt_header_with_payload_any()
+            ) {
+                let mut buffer = Vec::with_capacity(
+                    packet.1.len() + usize::from(packet.0.header_len())
+                );
+                packet.0.write(&mut buffer).unwrap();
+                buffer.write(&packet.1[..]).unwrap();
+                //read the slice
+                let slice = DltPacketSlice::from_slice(&buffer[..]).unwrap();
+                //check the results are matching the input
+                assert_eq!(slice.header(), packet.0);
+                assert_eq!(slice.has_extended_header(), packet.0.extended_header.is_some());
+                assert_eq!(slice.is_big_endian(), packet.0.is_big_endian);
+                assert_eq!(slice.is_verbose(), packet.0.is_verbose());
+                assert_eq!(slice.payload(), &packet.1[..]);
+                assert_eq!(slice.extended_header(), packet.0.extended_header);
+                assert_eq!(slice.non_verbose_payload(), &packet.1[4..]);
+
+                if let Some(packet_ext_header) = packet.0.extended_header.as_ref() {
+                    assert_eq!(slice.message_type(), packet_ext_header.message_type());
+                    assert_eq!(slice.header().extended_header.unwrap().message_type(), 
+                               packet.0.extended_header.as_ref().unwrap().message_type());
+                } else {
+                    assert_eq!(slice.header().extended_header, None);
+                    assert_eq!(slice.message_type(), None);
+                }
+
+                //check that a too small slice produces an error
+                for len in 0..buffer.len() - 1 {
+                    assert_matches!(
+                        DltPacketSlice::from_slice(&buffer[..len]),
+                        Err(
+                            ReadError::UnexpectedEndOfSlice{ 
+                                minimum_size: _, 
+                                actual_size: _
+                            }
+                        )
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn from_slice_header_len_eof_errors() {
+            //too small for header
             {
-                let len = buffer.len();
-                assert_matches!(DltPacketSlice::from_slice(&buffer[..len-1]), Err(ReadError::UnexpectedEndOfSlice{ 
-                    minimum_size: _, 
-                    actual_size: _
+                let buffer = [1,2,3];
+                assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::UnexpectedEndOfSlice{ 
+                    minimum_size: 4, 
+                    actual_size: 3
+                }));
+            }
+            //too small for the length
+            {
+                let mut header: DltHeader = Default::default();
+                header.length = 5;
+                let mut buffer = Vec::new();
+                header.write(&mut buffer).unwrap();
+                assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::UnexpectedEndOfSlice{ 
+                    minimum_size: 5, 
+                    actual_size: 4
                 }));
             }
         }
-    }
 
-    proptest! {
-        #[test]
-        fn iterator(ref packets in prop::collection::vec(dlt_header_with_payload_any(), 1..5)) {
-            //serialize the packets
-            let mut buffer = Vec::with_capacity(
-                (*packets).iter().fold(0, |acc, x| acc + usize::from(x.0.header_len()) + x.1.len())
-            );
-
-            let mut offsets: Vec<(usize, usize)> = Vec::with_capacity(packets.len());
-
-            for packet in packets {
-
-                //save the start for later processing
-                let start = buffer.len();
-
-                //header & payload
-                packet.0.write(&mut buffer).unwrap();
-                buffer.write_all(&packet.1).unwrap();
-
-                //safe the offset for later
-                offsets.push((start, buffer.len()));
-            }
-
-            //determine the expected output
-            let mut expected: Vec<DltPacketSlice<'_>> = Vec::with_capacity(packets.len());
-            for offset in &offsets {
-                //create the expected slice
-                let slice = &buffer[offset.0..offset.1];
-                let e = DltPacketSlice::from_slice(slice).unwrap();
-                assert_eq!(e.slice(), slice);
-                expected.push(e);
-            }
-
-            //iterate over packets
-            assert_eq!(expected, SliceIterator::new(&buffer).map(|x| x.unwrap()).collect::<Vec<DltPacketSlice<'_>>>());
-
-            //check for error return when the slice is too small
-            //first entry
-            {
-                let o = offsets.first().unwrap();
-                let mut it = SliceIterator::new(&buffer[..(o.1 - 1)]);
-
-                assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice{minimum_size: _, actual_size: _})));
-                //check that the iterator does not continue
-                assert_matches!(it.next(), None);
-            }
-            //last entry
-            {
-                let o = offsets.last().unwrap();
-                let it = SliceIterator::new(&buffer[..(o.1 - 1)]);
-                let mut it = it.skip(offsets.len()-1);
-
-                assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice{minimum_size: _, actual_size: _})));
-                //check that the iterator does not continue
-                assert_matches!(it.next(), None);
+        proptest! {
+            #[test]
+            fn from_slice_header_variable_len_eof_errors(ref input in dlt_header_any()) {
+                let mut header = input.clone();
+                header.length = header.header_len() + 3; //minimum payload size is 4
+                let mut buffer = Vec::new();
+                header.write(&mut buffer).unwrap();
+                buffer.write(&[1,2,3]).unwrap();
+                assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::LengthSmallerThenMinimum{required_length: _, length: _}));
             }
         }
-    }
 
-    proptest! {
         #[test]
-        fn ext_header_message_type(
-            verbose in any::<bool>(),
-            message_type0 in message_type_any(),
-            message_type1 in message_type_any())
-        {
+        fn message_id() {
+            //pairs of (header, expected_some)
+            let tests = [
+                //verbose (does not have message id)
+                (
+                    {
+                        let mut header: DltHeader = Default::default();
+                        header.extended_header = Some(
+                            {
+                                let mut ext: DltExtendedHeader = Default::default();
+                                ext.set_is_verbose(true);
+                                ext
+                            }
+                        );
+                        header
+                    },
+                    false
+                ),
+                
+                //with extended header non-verbose
+                (
+                    {
+                        let mut header: DltHeader = Default::default();
+                        header.extended_header = Some(
+                            {
+                                let mut ext: DltExtendedHeader = Default::default();
+                                ext.set_is_verbose(false);
+                                ext
+                            }
+                        );
+                        header
+                    },
+                    true
+                ),
+
+                //without extended header (always non verbose)
+                (
+                    {
+                        let mut header: DltHeader = Default::default();
+                        header.extended_header = None;
+                        header
+                    },
+                    true
+                ),
+
+            ];
+            //verbose (does not have message id)
+            for t in tests.iter() {
+                //big endian
+                {
+                    let header = {
+                        let mut header = t.0.clone();
+                        header.is_big_endian = true;
+                        header.length = header.header_len() + 4;
+                        header
+                    };
+
+                    //serialize
+                    let mut buffer = Vec::<u8>::new();
+                    header.write(&mut buffer).unwrap();
+                    buffer.write_all(&0x1234_5678u32.to_be_bytes()).unwrap();
+
+                    //slice
+                    let slice = DltPacketSlice::from_slice(&buffer).unwrap();
+                    assert_eq!(
+                        slice.message_id(),
+                        if t.1 {
+                            Some(0x1234_5678)
+                        } else {
+                            None
+                        }
+                    );
+                }
+
+                //little endian
+                {
+                    let header = {
+                        let mut header = t.0.clone();
+                        header.is_big_endian = false;
+                        header.length = header.header_len() + 4;
+                        header
+                    };
+
+                    //serialize
+                    let mut buffer = Vec::<u8>::new();
+                    header.write(&mut buffer).unwrap();
+                    buffer.write_all(&0x1234_5678u32.to_le_bytes()).unwrap();
+
+                    //slice
+                    let slice = DltPacketSlice::from_slice(&buffer).unwrap();
+                    assert_eq!(
+                        slice.message_id(),
+                        if t.1 {
+                            Some(0x1234_5678)
+                        } else {
+                            None
+                        }
+                    );
+                }
+            }
+        }
+
+    } // mod dlt_packet_slice
+
+    /// Tests for `SliceIterator`
+    mod slice_interator {
+
+        use super::*;
+
+        #[test]
+        fn clone_eq() {
+            // TODO
+        }
+
+        #[test]
+        fn debug() {
+            // TODO
+        }
+
+        proptest! {
+            #[test]
+            fn iterator(ref packets in prop::collection::vec(dlt_header_with_payload_any(), 1..5)) {
+                //serialize the packets
+                let mut buffer = Vec::with_capacity(
+                    (*packets).iter().fold(0, |acc, x| acc + usize::from(x.0.header_len()) + x.1.len())
+                );
+
+                let mut offsets: Vec<(usize, usize)> = Vec::with_capacity(packets.len());
+
+                for packet in packets {
+
+                    //save the start for later processing
+                    let start = buffer.len();
+
+                    //header & payload
+                    packet.0.write(&mut buffer).unwrap();
+                    buffer.write_all(&packet.1).unwrap();
+
+                    //safe the offset for later
+                    offsets.push((start, buffer.len()));
+                }
+
+                //determine the expected output
+                let mut expected: Vec<DltPacketSlice<'_>> = Vec::with_capacity(packets.len());
+                for offset in &offsets {
+                    //create the expected slice
+                    let slice = &buffer[offset.0..offset.1];
+                    let e = DltPacketSlice::from_slice(slice).unwrap();
+                    assert_eq!(e.slice(), slice);
+                    expected.push(e);
+                }
+
+                //iterate over packets
+                assert_eq!(expected, SliceIterator::new(&buffer).map(|x| x.unwrap()).collect::<Vec<DltPacketSlice<'_>>>());
+
+                //check for error return when the slice is too small
+                //first entry
+                {
+                    let o = offsets.first().unwrap();
+                    let mut it = SliceIterator::new(&buffer[..(o.1 - 1)]);
+
+                    assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice{minimum_size: _, actual_size: _})));
+                    //check that the iterator does not continue
+                    assert_matches!(it.next(), None);
+                }
+                //last entry
+                {
+                    let o = offsets.last().unwrap();
+                    let it = SliceIterator::new(&buffer[..(o.1 - 1)]);
+                    let mut it = it.skip(offsets.len()-1);
+
+                    assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice{minimum_size: _, actual_size: _})));
+                    //check that the iterator does not continue
+                    assert_matches!(it.next(), None);
+                }
+            }
+        }
+    } // mod slice_iterator
+
+    /// Tests for `DltExtendedHeader` methods
+    mod dlt_extended_header {
+
+        use super::*;
+
+        #[test]
+        fn clone_eq() {
+            // TODO
+        }
+
+        #[test]
+        fn debug() {
+            // TODO
+        }
+
+        #[test]
+        fn default() {
+            // TODO
+        }
+
+        proptest! {
+            #[test]
+            fn new_non_verbose_log(
+                log_level in log_level_any(),
+                application_id in any::<u32>(),
+                context_id in any::<u32>())
+            {
+                use DltMessageType::Log;
+                let header = DltExtendedHeader::new_non_verbose_log(log_level.clone(), application_id, context_id);
+                assert_eq!(Log(log_level).encode_to_message_info_byte().unwrap(), header.message_info);
+                assert_eq!(0, header.number_of_arguments);
+                assert_eq!(application_id, header.application_id);
+                assert_eq!(context_id, header.context_id);
+            }
+        }
+
+        proptest! {
+            #[test]
+            fn new_non_verbose(
+                message_type in message_type_any(),
+                application_id in any::<u32>(),
+                context_id in any::<u32>(),
+                invalid_user_defined in 0x10..0xffu8
+            ) {
+                // valid data
+                {
+                    let header = DltExtendedHeader::new_non_verbose(
+                        message_type.clone(),
+                        application_id,
+                        context_id
+                    ).unwrap();
+                    assert_eq!(message_type.encode_to_message_info_byte().unwrap(), header.message_info);
+                    assert_eq!(0, header.number_of_arguments);
+                    assert_eq!(application_id, header.application_id);
+                    assert_eq!(context_id, header.context_id);
+                }
+
+                // invalid data
+                {
+                    use DltMessageType::NetworkTrace;
+                    use DltNetworkType::UserDefined;
+                    use RangeError::NetworkTypekUserDefinedTooLarge;
+
+                    let result = DltExtendedHeader::new_non_verbose(
+                        NetworkTrace(UserDefined(invalid_user_defined)),
+                        application_id,
+                        context_id
+                    ).unwrap_err();
+                    assert_eq!(NetworkTypekUserDefinedTooLarge(invalid_user_defined), result);
+                }
+            }
+        }
+
+        #[test]
+        fn set_is_verbose() {
             let mut header: DltExtendedHeader = Default::default();
-
-            //set verbose (stored in same field, to ensure no side effects)
-            header.set_is_verbose(verbose);
-            assert_eq!(header.is_verbose(), verbose);
-
-            //set to first message type
-            header.set_message_type(message_type0.clone()).unwrap();
-            assert_eq!(header.is_verbose(), verbose);
-            assert_eq!(header.message_type(), Some(message_type0));
-
-            //set to second message type (to make sure the old type is correctly cleaned)
-            header.set_message_type(message_type1.clone()).unwrap();
-            assert_eq!(header.is_verbose(), verbose);
-            assert_eq!(header.message_type(), Some(message_type1));
+            let original = header.clone();
+            header.set_is_verbose(true);
+            assert_eq!(true, header.is_verbose());
+            header.set_is_verbose(false);
+            assert_eq!(false, header.is_verbose());
+            assert_eq!(original, header);
         }
-    }
 
-    #[test]
-    fn packet_from_slice_header_len_eof_errors() {
-        //too small for header
-        {
-            let buffer = [1,2,3];
-            assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::UnexpectedEndOfSlice{ 
-                minimum_size: 4, 
-                actual_size: 3
-            }));
-        }
-        //too small for the length
-        {
-            let mut header: DltHeader = Default::default();
-            header.length = 5;
-            let mut buffer = Vec::new();
-            header.write(&mut buffer).unwrap();
-            assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::UnexpectedEndOfSlice{ 
-                minimum_size: 5, 
-                actual_size: 4
-            }));
-        }
-    }
+        proptest! {
+            #[test]
+            fn set_message_type(
+                verbose in any::<bool>(),
+                message_type0 in message_type_any(),
+                message_type1 in message_type_any())
+            {
+                let mut header: DltExtendedHeader = Default::default();
 
-    proptest! {
+                //set verbose (stored in same field, to ensure no side effects)
+                header.set_is_verbose(verbose);
+                assert_eq!(header.is_verbose(), verbose);
+
+                //set to first message type
+                header.set_message_type(message_type0.clone()).unwrap();
+                assert_eq!(header.is_verbose(), verbose);
+                assert_eq!(header.message_type(), Some(message_type0));
+
+                //set to second message type (to make sure the old type is correctly cleaned)
+                header.set_message_type(message_type1.clone()).unwrap();
+                assert_eq!(header.is_verbose(), verbose);
+                assert_eq!(header.message_type(), Some(message_type1));
+            }
+        }
+
         #[test]
-        fn packet_from_slice_header_variable_len_eof_errors(ref input in dlt_header_any()) {
-            let mut header = input.clone();
-            header.length = header.header_len() + 3; //minimum payload size is 4
-            let mut buffer = Vec::new();
-            header.write(&mut buffer).unwrap();
-            buffer.write(&[1,2,3]).unwrap();
-            assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::LengthSmallerThenMinimum{required_length: _, length: _}));
-        }
-    }
+        fn message_type() {
+            use {DltMessageType::*, DltNetworkType::*, DltLogLevel::*, DltTraceType::*, DltControlMessageType::*};
 
-    #[test]
-    fn test_debug() {
-        {
+            //check that setting & resetting does correctly reset the values
+            {
+                let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
+
+                header.set_message_type(NetworkTrace(SomeIp)).unwrap();
+                assert_eq!(false, header.is_verbose());
+                assert_eq!(Some(NetworkTrace(SomeIp)), header.message_type());
+
+                //set to a different value with non overlapping bits (to make sure the values are reset)
+                header.set_message_type(Trace(FunctionIn)).unwrap();
+                assert_eq!(false, header.is_verbose());
+                assert_eq!(Some(Trace(FunctionIn)), header.message_type());
+            }
+
+            //check None return type when a unknown value is presented
+            //message type
+            for message_type_id in 4 ..=0b111 {
+                let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
+                header.message_info = message_type_id << 1;
+                assert_eq!(None, header.message_type());
+            }
+
+            //msin bad values
+            let bad_values = [
+                //bad log level 0 & everything above 6
+                (Log(Fatal), (0u8..1).chain(7u8..=0xf)),
+                //bad trace source (0 & everything above 5)
+                (Trace(FunctionIn), (0u8..1).chain(6u8..=0xf)),
+                //bad control message type (0 & everything above 2)
+                (Control(Request), (0u8..1).chain(3u8..=0xf))
+            ];
+
+            for t in bad_values.iter() {
+                for value in t.1.clone() {
+                    let mut header = DltExtendedHeader::new_non_verbose(t.0.clone(), 0, 0).unwrap();
+                    header.message_info &= 0b0000_1111;
+                    header.message_info |= value << 4;
+                    assert_eq!(None, header.message_type());
+                }
+            }
+
+            //check set out of range error
+            {
+                use RangeError::*;
+                use DltLogLevel::Fatal;
+                for i in 0x10..=0xff {
+                    let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
+                    assert_eq!(Err(NetworkTypekUserDefinedTooLarge(i)), 
+                               header.set_message_type(NetworkTrace(UserDefined(i))));
+                }
+            }
+        }
+
+    } // mod dlt_extended_header
+
+    /// Tests for `ReadError` methods
+    mod read_error {
+
+        use super::*;
+
+        #[test]
+        fn debug() {
             use crate::ReadError::*;
             for value in [
                 UnexpectedEndOfSlice { minimum_size: 1, actual_size: 2},
@@ -1438,8 +1937,67 @@ mod tests {
                 println!("{:?}", value);
             }
         }
-        {
-            use crate::WriteError::*;
+
+        proptest! {
+            #[test]
+            fn display(
+                usize0 in any::<usize>(),
+                usize1 in any::<usize>(),
+            ) {
+
+                use ReadError::*;
+
+                //UnexpectedEndOfSlice
+                assert_eq!(
+                    &format!("ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", usize1, usize0),
+                    &format!("{}", UnexpectedEndOfSlice{ minimum_size: usize0, actual_size: usize1})
+                );
+
+                //UnexpectedEndOfSlice
+                assert_eq!(
+                    &format!("ReadError: The length of {} in the dlt header is smaller then minimum required size of {} bytes.", usize1, usize0),
+                    &format!("{}", LengthSmallerThenMinimum { required_length: usize0, length: usize1 })
+                );
+
+                //IoError
+                {
+                    let custom_error = std::io::Error::new(std::io::ErrorKind::Other, "some error");
+                    assert_eq!(
+                        &format!("{}", custom_error),
+                        &format!("{}", IoError(custom_error))
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn source() {
+            use crate::ReadError::*;
+            use std::error::Error;
+
+            assert!(
+                UnexpectedEndOfSlice { minimum_size: 1, actual_size: 2}
+                .source().is_none()
+            );
+            assert!(
+                LengthSmallerThenMinimum { required_length: 3, length: 4 }
+                .source().is_none()
+            );
+            assert!(
+                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+                .source().is_some()
+            );
+        }
+    } // mod read_error
+
+    /// Tests for `WriteError` methods
+    mod write_error {
+
+        use super::*;
+
+        #[test]
+        fn debug() {
+            use WriteError::*;
             for value in [
                 VersionTooLarge(123),
                 IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))].iter()
@@ -1447,211 +2005,86 @@ mod tests {
                 println!("{:?}", value);
             }
         }
-        {
-            let header: DltHeader = Default::default();
-            let mut buffer = Vec::new();
-            header.write(&mut buffer).unwrap();
-            let slice = DltPacketSlice::from_slice(&buffer);
-            println!("{:?}", slice);
-        }
-    }
 
-    proptest! {
+        proptest! {
+            #[test]
+            fn display(version in any::<u8>()) {
+                use WriteError::*;
+
+                // VersionTooLarge
+                assert_eq!(
+                    &format!("WriteError: DLT version {} is larger then the maximum supported value of {}", version, MAX_VERSION),
+                    &format!("{}", VersionTooLarge(version))
+                );
+
+                //IoError
+                {
+                    let custom_error = std::io::Error::new(std::io::ErrorKind::Other, "some error");
+                    assert_eq!(
+                        &format!("{}", custom_error),
+                        &format!("{}", IoError(custom_error))
+                    );
+                }
+            }
+        }
+
         #[test]
-        fn new_non_verbose(log_level in log_level_any(),
-                           application_id in any::<u32>(),
-                           context_id in any::<u32>())
-        {
-            use DltMessageType::Log;
-            let header = DltExtendedHeader::new_non_verbose_log(log_level.clone(), application_id, context_id);
-            assert_eq!(Log(log_level).encode_to_message_info_byte().unwrap(), header.message_info);
-            assert_eq!(0, header.number_of_arguments);
-            assert_eq!(application_id, header.application_id);
-            assert_eq!(context_id, header.context_id);
+        fn source() {
+            use WriteError::*;
+            use std::error::Error;
+
+            assert!(
+                VersionTooLarge(123)
+                .source().is_none()
+            );
+            assert!(
+                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+                .source().is_some()
+            );
         }
-    }
+    } // mod write_error
 
-    #[test]
-    fn ext_set_is_verbose() {
-        let mut header: DltExtendedHeader = Default::default();
-        let original = header.clone();
-        header.set_is_verbose(true);
-        assert_eq!(true, header.is_verbose());
-        header.set_is_verbose(false);
-        assert_eq!(false, header.is_verbose());
-        assert_eq!(original, header);
-    }
+    mod range_error {
 
-    #[test]
-    fn is_verbose() {
-        let mut header: DltHeader = Default::default();
-        assert_eq!(false, header.is_verbose());
-        //add an extended header without the verbose flag
-        header.extended_header = Some(Default::default());
-        assert_eq!(false, header.is_verbose());
-        //set the verbose flag
-        header.extended_header.as_mut().unwrap().set_is_verbose(true);
-        assert_eq!(true, header.is_verbose());
-    }
+        use super::*;
 
-    #[test]
-    fn message_type() {
-        use {DltMessageType::*, DltNetworkType::*, DltLogLevel::*, DltTraceType::*, DltControlMessageType::*};
-
-        //check that setting & resetting does correctly reset the values
-        {
-            let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
-
-            header.set_message_type(NetworkTrace(SomeIp)).unwrap();
-            assert_eq!(false, header.is_verbose());
-            assert_eq!(Some(NetworkTrace(SomeIp)), header.message_type());
-
-            //set to a different value with non overlapping bits (to make sure the values are reset)
-            header.set_message_type(Trace(FunctionIn)).unwrap();
-            assert_eq!(false, header.is_verbose());
-            assert_eq!(Some(Trace(FunctionIn)), header.message_type());
-        }
-
-        //check None return type when a unknown value is presented
-        //message type
-        for message_type_id in 4 ..=0b111 {
-            let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
-            header.message_info = message_type_id << 1;
-            assert_eq!(None, header.message_type());
-        }
-
-        //msin bad values
-        let bad_values = [
-            //bad log level 0 & everything above 6
-            (Log(Fatal), (0u8..1).chain(7u8..=0xf)),
-            //bad trace source (0 & everything above 5)
-            (Trace(FunctionIn), (0u8..1).chain(6u8..=0xf)),
-            //bad control message type (0 & everything above 2)
-            (Control(Request), (0u8..1).chain(3u8..=0xf))
-        ];
-
-        for t in bad_values.iter() {
-            for value in t.1.clone() {
-                let mut header = DltExtendedHeader::new_non_verbose(t.0.clone(), 0, 0).unwrap();
-                println!("{:?}", t.0);
-                header.message_info &= 0b0000_1111;
-                header.message_info |= value << 4;
-                assert_eq!(None, header.message_type());
-            }
-        }
-
-        //check set out of range error
-        {
+        #[test]
+        fn clone_eq() {
             use RangeError::*;
-            use DltLogLevel::Fatal;
-            for i in 0x10..=0xff {
-                let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
-                assert_eq!(Err(NetworkTypekUserDefinedTooLarge(i)), 
-                           header.set_message_type(NetworkTrace(UserDefined(i))));
-            }
+            let v = NetworkTypekUserDefinedTooLarge(123);
+            assert_eq!(v, v.clone());
         }
-    }
 
-    #[test]
-    fn message_id() {
-        //pairs of (header, expected_some)
-        let tests = [
-            //verbose (does not have message id)
-            (
-                {
-                    let mut header: DltHeader = Default::default();
-                    header.extended_header = Some(
-                        {
-                            let mut ext: DltExtendedHeader = Default::default();
-                            ext.set_is_verbose(true);
-                            ext
-                        }
-                    );
-                    header
-                },
-                false
-            ),
-            
-            //with extended header non-verbose
-            (
-                {
-                    let mut header: DltHeader = Default::default();
-                    header.extended_header = Some(
-                        {
-                            let mut ext: DltExtendedHeader = Default::default();
-                            ext.set_is_verbose(false);
-                            ext
-                        }
-                    );
-                    header
-                },
-                true
-            ),
+        #[test]
+        fn debug() {
+            use RangeError::*;
+            println!("{:?}", NetworkTypekUserDefinedTooLarge(123));
+        }
 
-            //without extended header (always non verbose)
-            (
-                {
-                    let mut header: DltHeader = Default::default();
-                    header.extended_header = None;
-                    header
-                },
-                true
-            ),
+        proptest! {
+            #[test]
+            fn display(value in any::<u8>()) {
+                use RangeError::*;
 
-        ];
-        //verbose (does not have message id)
-        for t in tests.iter() {
-            //big endian
-            {
-                let header = {
-                    let mut header = t.0.clone();
-                    header.is_big_endian = true;
-                    header.length = header.header_len() + 4;
-                    header
-                };
-
-                //serialize
-                let mut buffer = Vec::<u8>::new();
-                header.write(&mut buffer).unwrap();
-                buffer.write_all(&0x1234_5678u32.to_be_bytes()).unwrap();
-
-                //slice
-                let slice = DltPacketSlice::from_slice(&buffer).unwrap();
+                // NetworkTypekUserDefinedTooLarge
                 assert_eq!(
-                    slice.message_id(),
-                    if t.1 {
-                        Some(0x1234_5678)
-                    } else {
-                        None
-                    }
-                );
-            }
-
-            //little endian
-            {
-                let header = {
-                    let mut header = t.0.clone();
-                    header.is_big_endian = false;
-                    header.length = header.header_len() + 4;
-                    header
-                };
-
-                //serialize
-                let mut buffer = Vec::<u8>::new();
-                header.write(&mut buffer).unwrap();
-                buffer.write_all(&0x1234_5678u32.to_le_bytes()).unwrap();
-
-                //slice
-                let slice = DltPacketSlice::from_slice(&buffer).unwrap();
-                assert_eq!(
-                    slice.message_id(),
-                    if t.1 {
-                        Some(0x1234_5678)
-                    } else {
-                        None
-                    }
+                    &format!("RangeError: Message type info field user defined value of {} is larger then the maximum possible value of {}", value, 0xf),
+                    &format!("{}", NetworkTypekUserDefinedTooLarge(value))
                 );
             }
         }
-    }
-}
+
+        #[test]
+        fn source() {
+            use RangeError::*;
+            use std::error::Error;
+
+            assert!(
+                NetworkTypekUserDefinedTooLarge(123)
+                .source().is_none()
+            );
+        }
+
+    } // mod range_error
+
+} // mod tests
