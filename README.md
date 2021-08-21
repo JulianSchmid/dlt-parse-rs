@@ -56,8 +56,8 @@ let header = {
         timestamp: None,
         extended_header: Some(DltExtendedHeader::new_non_verbose_log(
             DltLogLevel::Debug,
-            123,//application id
-            1,//context id
+            [b'a', b'p', b'p', b'i'],//application id
+            [b'c', b't', b'x', b'i'],//context id
         ))
     };
     header.length = header.header_len() + 4 + 4; //header + message id + payload

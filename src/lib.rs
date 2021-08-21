@@ -50,8 +50,8 @@
 //!         timestamp: None,
 //!         extended_header: Some(DltExtendedHeader::new_non_verbose_log(
 //!             DltLogLevel::Debug,
-//!             123,//application id
-//!             1,//context id
+//!             [b'a', b'p', b'p', b'i'],//application id
+//!             [b'c', b't', b'x', b'i'],//context id
 //!         ))
 //!     };
 //!     header.length = header.header_len() + 4 + 4; //header + message id + payload
@@ -189,8 +189,8 @@ impl fmt::Display for WriteError {
 /// Error that can occur when an out of range value is passed to a function.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum RangeError {
-    ///Error if the user defined network type is greater then 0xf
-    NetworkTypekUserDefinedTooLarge(u8)
+    /// Error if the user defined value is outside the range of 7-15
+    NetworkTypekUserDefinedOutsideOfRange(u8),
 }
 
 impl std::error::Error for RangeError {
@@ -204,8 +204,8 @@ impl fmt::Display for RangeError {
         use RangeError::*;
 
         match self {
-            NetworkTypekUserDefinedTooLarge(value) => {
-                write!(f, "RangeError: Message type info field user defined value of {} is larger then the maximum possible value of {}", value, 0xf)
+            NetworkTypekUserDefinedOutsideOfRange(value) => {
+                write!(f, "RangeError: Message type info field user defined value of {} outside of the allowed range of 7-15.", value)
             },
         }
     }
@@ -303,22 +303,18 @@ impl DltHeader {
                         DltExtendedHeader{
                             message_info: buffer[0],
                             number_of_arguments: buffer[1],
-                            application_id: u32::from_be_bytes(
-                                [
-                                    buffer[2],
-                                    buffer[3],
-                                    buffer[4],
-                                    buffer[5],
-                                ]
-                            ),
-                            context_id: u32::from_be_bytes(
-                                [
-                                    buffer[6],
-                                    buffer[7],
-                                    buffer[8],
-                                    buffer[9],
-                                ]
-                            )
+                            application_id: [
+                                buffer[2],
+                                buffer[3],
+                                buffer[4],
+                                buffer[5],
+                            ],
+                            context_id: [
+                                buffer[6],
+                                buffer[7],
+                                buffer[8],
+                                buffer[9],
+                            ]
                         }
                     }
                 )
@@ -382,19 +378,17 @@ impl DltHeader {
         //write the extended header if it exists
         match &self.extended_header {
             Some(value) => {
-                let app_id_be = value.application_id.to_be_bytes();
-                let context_id_be = value.context_id.to_be_bytes();
                 let bytes : [u8;10] = [
                     value.message_info,
                     value.number_of_arguments,
-                    app_id_be[0],
-                    app_id_be[1],
-                    app_id_be[2],
-                    app_id_be[3],
-                    context_id_be[0],
-                    context_id_be[1],
-                    context_id_be[2],
-                    context_id_be[3],
+                    value.application_id[0],
+                    value.application_id[1],
+                    value.application_id[2],
+                    value.application_id[3],
+                    value.context_id[0],
+                    value.context_id[1],
+                    value.context_id[2],
+                    value.context_id[3],
                 ];
                 writer.write_all(&bytes)?;
             },
@@ -436,16 +430,16 @@ impl DltHeader {
 pub struct DltExtendedHeader {
     pub message_info: u8,
     pub number_of_arguments: u8,
-    pub application_id: u32,
-    pub context_id: u32
+    pub application_id: [u8;4],
+    pub context_id: [u8;4],
 }
 
 impl DltExtendedHeader {
 
     ///Create a extended header for a non verbose log message with given application id & context id.
-    pub fn new_non_verbose_log(log_level: DltLogLevel, application_id: u32, context_id: u32) -> DltExtendedHeader {
+    pub fn new_non_verbose_log(log_level: DltLogLevel, application_id: [u8;4], context_id: [u8;4]) -> DltExtendedHeader {
         DltExtendedHeader {
-            message_info: DltMessageType::Log(log_level).encode_to_message_info_byte().unwrap(),
+            message_info: DltMessageType::Log(log_level).to_byte().unwrap(),
             number_of_arguments: 0,
             application_id,
             context_id
@@ -453,9 +447,9 @@ impl DltExtendedHeader {
     }
 
     ///Create a extended header for a non verbose message with given message type, application id & context id.
-    pub fn new_non_verbose(message_type: DltMessageType, application_id: u32, context_id: u32) -> Result<DltExtendedHeader, RangeError> {
+    pub fn new_non_verbose(message_type: DltMessageType, application_id: [u8;4], context_id: [u8;4]) -> Result<DltExtendedHeader, RangeError> {
         Ok(DltExtendedHeader {
-            message_info: message_type.encode_to_message_info_byte()?,
+            message_info: message_type.to_byte()?,
             number_of_arguments: 0,
             application_id,
             context_id
@@ -481,14 +475,14 @@ impl DltExtendedHeader {
     ///Returns message type info or `Option::None` for reserved values.
     #[inline]
     pub fn message_type(&self) -> Option<DltMessageType> {
-        DltMessageType::from_message_info_encoded(self.message_info)
+        DltMessageType::from_byte(self.message_info)
     }
 
     ///Set message type info and based on that the message type.
     #[inline]
     pub fn set_message_type(&mut self, value: DltMessageType) -> Result<(),RangeError> {
         
-        let encoded = value.encode_to_message_info_byte()?;
+        let encoded = value.to_byte()?;
 
         //unset old message type & set the new one
         self.message_info &= 0b0000_0001;
@@ -500,7 +494,7 @@ impl DltExtendedHeader {
 }
 
 ///Log level for dlt log messages.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DltLogLevel {
     ///Fatal system error.
     Fatal = 0x1,
@@ -518,7 +512,7 @@ pub enum DltLogLevel {
 
 ///Types of application trace messages that can be sent via dlt if the message type 
 ///is specified as "trace".
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DltTraceType {
     ///Value of variable.
     Variable = 0x1,
@@ -551,7 +545,7 @@ pub enum DltNetworkType {
     UserDefined(u8),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DltControlMessageType {
     ///Request control message.
     Request = 0x1,
@@ -574,9 +568,9 @@ pub enum DltMessageType {
 
 impl DltMessageType {
 
-    ///Attempts to read the message type from the first byte of 
-    ///the dlt extended message header.
-    fn from_message_info_encoded(value: u8) -> Option<DltMessageType> {
+    /// Attempts to read the message type from the first byte of 
+    /// the dlt extended message header.
+    fn from_byte(value: u8) -> Option<DltMessageType> {
         use DltMessageType::*;
 
         const MSIN_MASK: u8 = 0b1111_0000;
@@ -634,15 +628,15 @@ impl DltMessageType {
     }
 
     ///Set message type info and based on that the message type.
-    pub fn encode_to_message_info_byte(&self) -> Result<u8,RangeError> {
+    pub fn to_byte(&self) -> Result<u8,RangeError> {
         use DltMessageType::*;
         use DltNetworkType::UserDefined;
-        use RangeError::NetworkTypekUserDefinedTooLarge;
+        use RangeError::NetworkTypekUserDefinedOutsideOfRange;
         
         //check ranges
         if let NetworkTrace(UserDefined(user_defined_value)) = *self {
-            if user_defined_value > 0xf {
-                return Err(NetworkTypekUserDefinedTooLarge(user_defined_value));
+            if user_defined_value > 0xf || user_defined_value < 7 {
+                return Err(NetworkTypekUserDefinedOutsideOfRange(user_defined_value));
             }
         }
 
@@ -826,22 +820,18 @@ impl<'a> DltPacketSlice<'a> {
                     DltExtendedHeader {
                         message_info: *ext_slice.get_unchecked(0),
                         number_of_arguments: *ext_slice.get_unchecked(1),
-                        application_id: u32::from_be_bytes(
-                            [
-                                *ext_slice.get_unchecked(2),
-                                *ext_slice.get_unchecked(3),
-                                *ext_slice.get_unchecked(4),
-                                *ext_slice.get_unchecked(5),
-                            ]
-                        ),
-                        context_id: u32::from_be_bytes(
-                            [
-                                *ext_slice.get_unchecked(6),
-                                *ext_slice.get_unchecked(7),
-                                *ext_slice.get_unchecked(8),
-                                *ext_slice.get_unchecked(9),
-                            ]
-                        )
+                        application_id: [
+                            *ext_slice.get_unchecked(2),
+                            *ext_slice.get_unchecked(3),
+                            *ext_slice.get_unchecked(4),
+                            *ext_slice.get_unchecked(5),
+                        ],
+                        context_id: [
+                            *ext_slice.get_unchecked(6),
+                            *ext_slice.get_unchecked(7),
+                            *ext_slice.get_unchecked(8),
+                            *ext_slice.get_unchecked(9),
+                        ]
                     }
                 )
             }
@@ -854,7 +844,7 @@ impl<'a> DltPacketSlice<'a> {
     #[inline]
     pub fn message_type(&self) -> Option<DltMessageType> {
         if self.has_extended_header() {
-            DltMessageType::from_message_info_encoded(
+            DltMessageType::from_byte(
                 // SAFETY:
                 // Safe as if the extended header is present the
                 // header_len is set in from_slice to be at least
@@ -1079,26 +1069,22 @@ impl<'a> DltPacketSlice<'a> {
                 number_of_arguments: unsafe {
                     *slice.get_unchecked(1)
                 },
-                application_id: u32::from_be_bytes(
-                    unsafe {
-                        [
-                            *slice.get_unchecked(2),
-                            *slice.get_unchecked(3),
-                            *slice.get_unchecked(4),
-                            *slice.get_unchecked(5),
-                        ]
-                    }
-                ),
-                context_id: u32::from_be_bytes(
-                    unsafe {
-                        [
-                            *slice.get_unchecked(6),
-                            *slice.get_unchecked(7),
-                            *slice.get_unchecked(8),
-                            *slice.get_unchecked(9),
-                        ]
-                    }
-                )
+                application_id: unsafe {
+                    [
+                        *slice.get_unchecked(2),
+                        *slice.get_unchecked(3),
+                        *slice.get_unchecked(4),
+                        *slice.get_unchecked(5)
+                    ]
+                },
+                context_id: unsafe {
+                    [
+                        *slice.get_unchecked(6),
+                        *slice.get_unchecked(7),
+                        *slice.get_unchecked(8),
+                        *slice.get_unchecked(9),
+                    ]
+                }
             })
         } else {
             None
@@ -1173,8 +1159,8 @@ mod tests {
     prop_compose! {
         fn extended_dlt_header_any()(message_info in any::<u8>(),
                                      number_of_arguments in any::<u8>(),
-                                     application_id in any::<u32>(),
-                                     context_id in any::<u32>()) -> DltExtendedHeader
+                                     application_id in any::<[u8;4]>(),
+                                     context_id in any::<[u8;4]>()) -> DltExtendedHeader
         {
             DltExtendedHeader {
                 message_info: message_info,
@@ -1441,7 +1427,6 @@ mod tests {
             #[test]
             fn clone_eq(ref header in dlt_header_any()) {
                 assert_eq!(*header, header.clone());
-
             }
         }
 
@@ -1685,12 +1670,18 @@ mod tests {
 
         #[test]
         fn clone_eq() {
-            // TODO
+            let it = SliceIterator{
+                slice: &[]
+            };
+            assert_eq!(it, it.clone());
         }
 
         #[test]
         fn debug() {
-            // TODO
+            let it = SliceIterator{
+                slice: &[]
+            };
+            println!("{:?}", it);
         }
 
         proptest! {
@@ -1760,29 +1751,35 @@ mod tests {
 
         #[test]
         fn clone_eq() {
-            // TODO
+            let header: DltExtendedHeader = Default::default();
+            assert_eq!(header, header.clone());
         }
 
         #[test]
         fn debug() {
-            // TODO
+            let header: DltExtendedHeader = Default::default();
+            println!("{:?}", header);
         }
 
         #[test]
         fn default() {
-            // TODO
+            let header: DltExtendedHeader = Default::default();
+            assert_eq!(header.message_info, 0);
+            assert_eq!(header.number_of_arguments, 0);
+            assert_eq!(header.application_id, [0, 0, 0, 0]);
+            assert_eq!(header.context_id, [0, 0, 0, 0]);
         }
 
         proptest! {
             #[test]
             fn new_non_verbose_log(
                 log_level in log_level_any(),
-                application_id in any::<u32>(),
-                context_id in any::<u32>())
+                application_id in any::<[u8;4]>(),
+                context_id in any::<[u8;4]>())
             {
                 use DltMessageType::Log;
                 let header = DltExtendedHeader::new_non_verbose_log(log_level.clone(), application_id, context_id);
-                assert_eq!(Log(log_level).encode_to_message_info_byte().unwrap(), header.message_info);
+                assert_eq!(Log(log_level).to_byte().unwrap(), header.message_info);
                 assert_eq!(0, header.number_of_arguments);
                 assert_eq!(application_id, header.application_id);
                 assert_eq!(context_id, header.context_id);
@@ -1793,8 +1790,8 @@ mod tests {
             #[test]
             fn new_non_verbose(
                 message_type in message_type_any(),
-                application_id in any::<u32>(),
-                context_id in any::<u32>(),
+                application_id in any::<[u8;4]>(),
+                context_id in any::<[u8;4]>(),
                 invalid_user_defined in 0x10..0xffu8
             ) {
                 // valid data
@@ -1804,7 +1801,7 @@ mod tests {
                         application_id,
                         context_id
                     ).unwrap();
-                    assert_eq!(message_type.encode_to_message_info_byte().unwrap(), header.message_info);
+                    assert_eq!(message_type.to_byte().unwrap(), header.message_info);
                     assert_eq!(0, header.number_of_arguments);
                     assert_eq!(application_id, header.application_id);
                     assert_eq!(context_id, header.context_id);
@@ -1814,14 +1811,14 @@ mod tests {
                 {
                     use DltMessageType::NetworkTrace;
                     use DltNetworkType::UserDefined;
-                    use RangeError::NetworkTypekUserDefinedTooLarge;
+                    use RangeError::NetworkTypekUserDefinedOutsideOfRange;
 
                     let result = DltExtendedHeader::new_non_verbose(
                         NetworkTrace(UserDefined(invalid_user_defined)),
                         application_id,
                         context_id
                     ).unwrap_err();
-                    assert_eq!(NetworkTypekUserDefinedTooLarge(invalid_user_defined), result);
+                    assert_eq!(NetworkTypekUserDefinedOutsideOfRange(invalid_user_defined), result);
                 }
             }
         }
@@ -1868,7 +1865,11 @@ mod tests {
 
             //check that setting & resetting does correctly reset the values
             {
-                let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
+                let mut header = DltExtendedHeader::new_non_verbose_log(
+                    Fatal,
+                    Default::default(),
+                    Default::default()
+                );
 
                 header.set_message_type(NetworkTrace(SomeIp)).unwrap();
                 assert_eq!(false, header.is_verbose());
@@ -1883,7 +1884,11 @@ mod tests {
             //check None return type when a unknown value is presented
             //message type
             for message_type_id in 4 ..=0b111 {
-                let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
+                let mut header = DltExtendedHeader::new_non_verbose_log(
+                    Fatal,
+                    Default::default(),
+                    Default::default()
+                );
                 header.message_info = message_type_id << 1;
                 assert_eq!(None, header.message_type());
             }
@@ -1900,7 +1905,11 @@ mod tests {
 
             for t in bad_values.iter() {
                 for value in t.1.clone() {
-                    let mut header = DltExtendedHeader::new_non_verbose(t.0.clone(), 0, 0).unwrap();
+                    let mut header = DltExtendedHeader::new_non_verbose(
+                        t.0.clone(),
+                        Default::default(),
+                        Default::default()
+                    ).unwrap();
                     header.message_info &= 0b0000_1111;
                     header.message_info |= value << 4;
                     assert_eq!(None, header.message_type());
@@ -1912,8 +1921,12 @@ mod tests {
                 use RangeError::*;
                 use DltLogLevel::Fatal;
                 for i in 0x10..=0xff {
-                    let mut header = DltExtendedHeader::new_non_verbose_log(Fatal, 0, 0);
-                    assert_eq!(Err(NetworkTypekUserDefinedTooLarge(i)), 
+                    let mut header = DltExtendedHeader::new_non_verbose_log(
+                        Fatal,
+                        Default::default(),
+                        Default::default()
+                    );
+                    assert_eq!(Err(NetworkTypekUserDefinedOutsideOfRange(i)), 
                                header.set_message_type(NetworkTrace(UserDefined(i))));
                 }
             }
@@ -2051,14 +2064,14 @@ mod tests {
         #[test]
         fn clone_eq() {
             use RangeError::*;
-            let v = NetworkTypekUserDefinedTooLarge(123);
+            let v = NetworkTypekUserDefinedOutsideOfRange(123);
             assert_eq!(v, v.clone());
         }
 
         #[test]
         fn debug() {
             use RangeError::*;
-            println!("{:?}", NetworkTypekUserDefinedTooLarge(123));
+            println!("{:?}", NetworkTypekUserDefinedOutsideOfRange(123));
         }
 
         proptest! {
@@ -2066,10 +2079,10 @@ mod tests {
             fn display(value in any::<u8>()) {
                 use RangeError::*;
 
-                // NetworkTypekUserDefinedTooLarge
+                // NetworkTypekUserDefinedOutsideOfRange
                 assert_eq!(
-                    &format!("RangeError: Message type info field user defined value of {} is larger then the maximum possible value of {}", value, 0xf),
-                    &format!("{}", NetworkTypekUserDefinedTooLarge(value))
+                    &format!("RangeError: Message type info field user defined value of {} outside of the allowed range of 7-15.", value),
+                    &format!("{}", NetworkTypekUserDefinedOutsideOfRange(value))
                 );
             }
         }
@@ -2080,11 +2093,336 @@ mod tests {
             use std::error::Error;
 
             assert!(
-                NetworkTypekUserDefinedTooLarge(123)
+                NetworkTypekUserDefinedOutsideOfRange(123)
                 .source().is_none()
             );
         }
 
     } // mod range_error
+
+    mod dlt_log_level {
+        use super::*;
+        use DltLogLevel::*;
+
+        #[test]
+        fn clone_eq() {
+            const VALUES: [(DltLogLevel, u8); 6] = [
+                (Fatal, 1),
+                (Error, 2),
+                (Warn, 3),
+                (Info, 4),
+                (Debug, 5),
+                (Verbose, 6),
+            ];
+
+            for v0 in &VALUES {
+                // identity property
+                assert_eq!(v0.0, v0.0.clone());
+                assert_eq!(v0.0 as u8, v0.1);
+
+                for v1 in &VALUES {
+                    assert_eq!(
+                        v0.0 != v1.0,
+                        v0.1 != v1.1,
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn debug() {
+            const VALUES: [(DltLogLevel, &str); 6] = [
+                (Fatal, "Fatal"),
+                (Error, "Error"),
+                (Warn, "Warn"),
+                (Info, "Info"),
+                (Debug, "Debug"),
+                (Verbose, "Verbose"),
+            ];
+            for v in &VALUES {
+                assert_eq!(
+                    v.1,
+                    format!("{:?}", v.0)
+                );
+            }
+        }
+    }
+
+    mod dlt_trace_type {
+        use super::*;
+        use DltTraceType::*;
+
+        #[test]
+        fn clone_eq() {
+            const VALUES: [(DltTraceType, u8); 5] = [
+                (Variable, 1),
+                (FunctionIn, 2),
+                (FunctionOut, 3),
+                (State, 4),
+                (Vfb, 5),
+            ];
+
+            for v0 in &VALUES {
+                // identity property
+                assert_eq!(v0.0, v0.0.clone());
+                assert_eq!(v0.0 as u8, v0.1);
+
+                for v1 in &VALUES {
+                    assert_eq!(
+                        v0.0 != v1.0,
+                        v0.1 != v1.1,
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn debug() {
+            const VALUES: [(DltTraceType, &str); 5] = [
+                (Variable, "Variable"),
+                (FunctionIn, "FunctionIn"),
+                (FunctionOut, "FunctionOut"),
+                (State, "State"),
+                (Vfb, "Vfb"),
+            ];
+            for v in &VALUES {
+                assert_eq!(
+                    v.1,
+                    format!("{:?}", v.0)
+                );
+            }
+        }
+    }
+
+    mod dlt_network_type {
+        use super::*;
+        use DltNetworkType::*;
+
+        #[test]
+        fn clone_eq() {
+            const VALUES: [(DltNetworkType, u8); 8] = [
+                (Ipc, 1),
+                (Can, 2),
+                (Flexray, 3),
+                (Most, 4),
+                (Ethernet, 5),
+                (SomeIp, 6),
+                (UserDefined(0x7), 0x7),
+                (UserDefined(0xf), 0xf)
+            ];
+
+            for v0 in &VALUES {
+                assert_eq!(v0.0, v0.0.clone());
+
+                for v1 in &VALUES {
+                    assert_eq!(
+                        v0.0 != v1.0,
+                        v0.1 != v1.1,
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn debug() {
+            const VALUES: [(DltNetworkType, &str); 8] = [
+                (Ipc, "Ipc"),
+                (Can, "Can"),
+                (Flexray, "Flexray"),
+                (Most, "Most"),
+                (Ethernet, "Ethernet"),
+                (SomeIp, "SomeIp"),
+                (UserDefined(0x7), "UserDefined(7)"),
+                (UserDefined(0xf), "UserDefined(15)")
+            ];
+            for v in &VALUES {
+                assert_eq!(
+                    v.1,
+                    format!("{:?}", v.0)
+                );
+            }
+        }
+    }
+
+    mod dlt_control_message_type {
+        use super::*;
+        use DltControlMessageType::*;
+
+        #[test]
+        fn clone_eq() {
+            const VALUES: [(DltControlMessageType, u8); 2] = [
+                (Request, 1),
+                (Response, 2),
+            ];
+
+            for v0 in &VALUES {
+                // identity property
+                assert_eq!(v0.0, v0.0.clone());
+                assert_eq!(v0.0.clone() as u8, v0.1);
+
+                for v1 in &VALUES {
+                    assert_eq!(
+                        v0.0 != v1.0,
+                        v0.1 != v1.1,
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn debug() {
+            const VALUES: [(DltControlMessageType, &str); 2] = [
+                (Request, "Request"),
+                (Response, "Response"),
+            ];
+            for v in &VALUES {
+                assert_eq!(
+                    v.1,
+                    format!("{:?}", v.0)
+                );
+            }
+        }
+    }
+
+    mod dlt_message_type {
+        use super::*;
+
+        use DltMessageType::*;
+        use DltLogLevel::*;
+        use DltTraceType::*;
+        use DltNetworkType::*;
+        use DltControlMessageType::*;
+
+        const VALUES : [(DltMessageType, u8);28] = [
+            (Log(Fatal),   0b0001_0000),
+            (Log(Error),   0b0010_0000),
+            (Log(Warn),    0b0011_0000),
+            (Log(Info),    0b0100_0000),
+            (Log(Debug),   0b0101_0000),
+            (Log(Verbose), 0b0110_0000),
+
+            (Trace(Variable),    0b0001_0010),
+            (Trace(FunctionIn),  0b0010_0010),
+            (Trace(FunctionOut), 0b0011_0010),
+            (Trace(State),       0b0100_0010),
+            (Trace(Vfb),         0b0101_0010),
+
+            (NetworkTrace(Ipc),      0b0001_0100),
+            (NetworkTrace(Can),      0b0010_0100),
+            (NetworkTrace(Flexray),  0b0011_0100),
+            (NetworkTrace(Most),     0b0100_0100),
+            (NetworkTrace(Ethernet), 0b0101_0100),
+            (NetworkTrace(SomeIp),   0b0110_0100),
+            (NetworkTrace(UserDefined(0x7)), 0b0111_0100),
+            (NetworkTrace(UserDefined(0x8)), 0b1000_0100),
+            (NetworkTrace(UserDefined(0x9)), 0b1001_0100),
+            (NetworkTrace(UserDefined(0xA)), 0b1010_0100),
+            (NetworkTrace(UserDefined(0xB)), 0b1011_0100),
+            (NetworkTrace(UserDefined(0xC)), 0b1100_0100),
+            (NetworkTrace(UserDefined(0xD)), 0b1101_0100),
+            (NetworkTrace(UserDefined(0xE)), 0b1110_0100),
+            (NetworkTrace(UserDefined(0xF)), 0b1111_0100),
+
+            (Control(Request),  0b0001_0110),
+            (Control(Response), 0b0010_0110),
+        ];
+
+        #[test]
+        fn clone_eq() {
+            for v0 in &VALUES {
+                // identity property
+                assert_eq!(v0.0, v0.0.clone());
+
+                for v1 in &VALUES {
+                    assert_eq!(
+                        v0.0 != v1.0,
+                        v0.1 != v1.1,
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn debug() {
+            const DBG_VALUES : [(DltMessageType, &str);5] = [
+                (Log(Fatal), "Log(Fatal)"),
+                (Trace(Variable), "Trace(Variable)"),
+                (NetworkTrace(Ipc), "NetworkTrace(Ipc)"),
+                (NetworkTrace(UserDefined(0x7)), "NetworkTrace(UserDefined(7))"),
+                (Control(Request),  "Control(Request)"),
+            ];
+            for v in &DBG_VALUES {
+                assert_eq!(
+                    v.1,
+                    format!("{:?}", v.0)
+                );
+            }
+        }
+
+        #[test]
+        fn from_byte() {
+            // valid values
+            for value in &VALUES {
+                assert_eq!(value.0, DltMessageType::from_byte(value.1).unwrap());
+                // with verbose flag set
+                assert_eq!(value.0, DltMessageType::from_byte(value.1 | 1).unwrap());
+            }
+
+            // invalid log
+            assert!(DltMessageType::from_byte(0).is_none());
+            assert!(DltMessageType::from_byte(1).is_none()); // with verbose
+            for i in 7..=0b1111 {
+                assert!(DltMessageType::from_byte(i << 4).is_none());
+                // with verbose
+                assert!(DltMessageType::from_byte((i << 4) | 1).is_none());
+            }
+
+            // invalid trace
+            assert!(DltMessageType::from_byte(0b0000_0010).is_none());
+            assert!(DltMessageType::from_byte(0b0000_0011).is_none());
+            for i in 6..=0b1111 {
+                assert!(DltMessageType::from_byte((i << 4) | 0b0010).is_none());
+                // with verbose
+                assert!(DltMessageType::from_byte((i << 4) | 0b0011).is_none());
+            }
+
+            // invalid control
+            assert!(DltMessageType::from_byte(0b0000_0110).is_none());
+            assert!(DltMessageType::from_byte(0b0000_0111).is_none());
+            for i in 3..=0b1111 {
+                assert!(DltMessageType::from_byte((i << 4) | 0b0110).is_none());
+                // with verbose
+                assert!(DltMessageType::from_byte((i << 4) | 0b0111).is_none());
+            }
+        }
+
+        #[test]
+        fn to_byte() {
+            // valid values
+            for value in &VALUES {
+                assert_eq!(value.0.to_byte().unwrap(), value.1);
+            }
+
+            // invalid user defined errors
+            // first run two explicitly to check the error contains the
+            // actual value
+            use RangeError::NetworkTypekUserDefinedOutsideOfRange;
+            assert_matches!(NetworkTrace(UserDefined(0)).to_byte().unwrap_err(), NetworkTypekUserDefinedOutsideOfRange(0));
+            assert_matches!(NetworkTrace(UserDefined(1)).to_byte().unwrap_err(), NetworkTypekUserDefinedOutsideOfRange(1));
+            // check the rest of the range of invalid values
+            for value in 0..7 {
+                assert_matches!(
+                    NetworkTrace(UserDefined(value)).to_byte().unwrap_err(),
+                    NetworkTypekUserDefinedOutsideOfRange(_)
+                );
+            }
+            for value in 16..=0xff {
+                assert_matches!(
+                    NetworkTrace(UserDefined(value)).to_byte().unwrap_err(),
+                    NetworkTypekUserDefinedOutsideOfRange(_)
+                );
+            }
+        }
+    }
 
 } // mod tests

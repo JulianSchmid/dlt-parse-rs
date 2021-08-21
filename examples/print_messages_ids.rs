@@ -72,12 +72,23 @@ fn read(arguments: CommandLineArguments) -> Result<(),Error> {
                                 //check if the message is verbose or non verbose (non verbose messages have message ids)
                                 if let Some(message_id) = dlt_slice.message_id() {
                                     if let Some(extended_header) = dlt_slice.extended_header() {
+                                        use core::str::from_utf8;
+
                                         if let Some(message_type) = extended_header.message_type() {
-                                            println!("non verbose message 0x{:x} (type: {:?}, application_id: 0x{:x}, context_id: {})", 
-                                                     message_id, message_type, extended_header.application_id, extended_header.context_id);
+                                            println!(
+                                                "non verbose message 0x{:x} (type: {:?}, application_id: {:?}, context_id: {:?})", 
+                                                message_id,
+                                                message_type,
+                                                from_utf8(&extended_header.application_id),
+                                                from_utf8(&extended_header.context_id)
+                                            );
                                         } else {
-                                            println!("non verbose message 0x{:x} (application_id: 0x{:x}, context_id: {})",
-                                                     message_id, extended_header.application_id, extended_header.context_id);
+                                            println!(
+                                                "non verbose message 0x{:x} (application_id: {:?}, context_id: {:?})",
+                                                message_id,
+                                                from_utf8(&extended_header.application_id),
+                                                from_utf8(&extended_header.context_id)
+                                            );
                                         }
                                     } else {
                                         println!("non verbose message 0x{:x}", message_id);
