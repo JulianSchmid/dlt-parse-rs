@@ -3,15 +3,14 @@ use structopt;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-use etherparse;
 use self::etherparse::*;
+use etherparse;
 
-use rpcap;
 use self::rpcap::read::PcapReader;
+use rpcap;
 
-use std::io::BufReader;
 use std::fs::File;
-
+use std::io::BufReader;
 
 use dlt_parse::*;
 
@@ -19,7 +18,6 @@ use dlt_parse::*;
 #[derive(StructOpt, Debug)]
 #[structopt(name = "print_messages_ids")]
 struct CommandLineArguments {
-
     /// Udp port on which dlt packets are send.
     udp_port: u16,
 
@@ -49,7 +47,7 @@ impl From<rpcap::PcapError> for Error {
     }
 }
 
-fn read(arguments: CommandLineArguments) -> Result<(),Error> {
+fn read(arguments: CommandLineArguments) -> Result<(), Error> {
     let mut reader = PcapReader::new(BufReader::new(File::open(arguments.pcap_file)?))?;
 
     while let Some(packet) = reader.next()? {
@@ -61,10 +59,8 @@ fn read(arguments: CommandLineArguments) -> Result<(),Error> {
 
             //check that it is an udp packet
             if let Some(Udp(udp_slice)) = sliced_packet.transport {
-
                 //check the port
                 if udp_slice.destination_port() == arguments.udp_port {
-
                     //trying parsing dlt messages located in a udp payload
                     for dlt_message in SliceIterator::new(sliced_packet.payload) {
                         match dlt_message {
@@ -93,11 +89,14 @@ fn read(arguments: CommandLineArguments) -> Result<(),Error> {
                                     } else {
                                         println!("non verbose message 0x{:x}", message_id);
                                     }
-                                    println!("  with payload {:?}", dlt_slice.non_verbose_payload());
+                                    println!(
+                                        "  with payload {:?}",
+                                        dlt_slice.non_verbose_payload()
+                                    );
                                 } else {
                                     println!("verbose message (parsing not yet supported)");
                                 }
-                            },
+                            }
                             Err(err) => {
                                 //error parsing the dlt packet
                                 println!("ERROR: {:?}", err);

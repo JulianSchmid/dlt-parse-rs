@@ -3,23 +3,23 @@
 //! verbose packet definitions).
 //!
 //! # Usage:
-//! 
+//!
 //! First, add the following to your `Cargo.toml`:
-//! 
+//!
 //! ```toml
 //! [dependencies]
 //! dlt_parse = "0.3.0"
 //! ```
-//! 
+//!
 //! Next, add this to your crate:
-//! 
+//!
 //! ```
 //! use dlt_parse;
 //! ```
 //!
 //! # What is dlt_parse?
 //! dlt_parse is a library that aims to provide serialisation & deserialisation funtions for DLT (Diagnostic Log and Trace) packets.
-//! It should make it possible to anlyse recordings of DLT packets as fast as possible, as well as writing servers 
+//! It should make it possible to anlyse recordings of DLT packets as fast as possible, as well as writing servers
 //! that send DLT packets to the network.
 //!
 //! Some key points are:
@@ -31,8 +31,8 @@
 //!
 //! # Example: Serializing & Slicing/Deserializing DLT Packets
 //!
-//! In this example a non verbose DLT packet is serialized and deserialized again. Specificly the serialized packet is 
-//! converted into a DltPacketSlice. This has the advantage, that not all fields have to be deserialied to 
+//! In this example a non verbose DLT packet is serialized and deserialized again. Specificly the serialized packet is
+//! converted into a DltPacketSlice. This has the advantage, that not all fields have to be deserialied to
 //! access the payload or specific fields in the header. Note that it is also possible to completely deserialize
 //! DLT headers with the DltHeader::read function. This can make sense, if most fields of the header are used anyways.
 //!
@@ -92,15 +92,15 @@
 //!     }
 //! }
 //! ```
-//! 
+//!
 //! An complete example which includes the parsing of the ethernet & udp headers can be found in [examples/print_messages_ids.rs](https://github.com/JulianSchmid/dlt-parse-rs/blob/0.1.0/examples/print_messages_ids.rs)
 //!
 //! # References
 //! * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/user_upload/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
 
+use std::fmt;
 use std::io;
 use std::slice::from_raw_parts;
-use std::fmt;
 
 #[cfg(test)]
 extern crate proptest;
@@ -113,11 +113,17 @@ extern crate assert_matches;
 #[derive(Debug)]
 pub enum ReadError {
     ///Error if the slice is smaller then dlt length field or minimal size.
-    UnexpectedEndOfSlice { minimum_size: usize, actual_size: usize},
+    UnexpectedEndOfSlice {
+        minimum_size: usize,
+        actual_size: usize,
+    },
     ///Error if the dlt length is smaller then the header the calculated header size based on the flags (+ minimum payload size of 4 bytes/octetets)
-    LengthSmallerThenMinimum { required_length: usize, length: usize },
+    LengthSmallerThenMinimum {
+        required_length: usize,
+        length: usize,
+    },
     ///Standard io error.
-    IoError(io::Error)
+    IoError(io::Error),
 }
 
 impl From<io::Error> for ReadError {
@@ -130,7 +136,7 @@ impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ReadError::IoError(ref err) => Some(err),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -140,12 +146,18 @@ impl fmt::Display for ReadError {
         use ReadError::*;
 
         match self {
-            UnexpectedEndOfSlice{minimum_size, actual_size} => {
+            UnexpectedEndOfSlice {
+                minimum_size,
+                actual_size,
+            } => {
                 write!(f, "ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", actual_size, minimum_size)
-            },
-            LengthSmallerThenMinimum{required_length, length} => {
+            }
+            LengthSmallerThenMinimum {
+                required_length,
+                length,
+            } => {
                 write!(f, "ReadError: The length of {} in the dlt header is smaller then minimum required size of {} bytes.", length, required_length)
-            },
+            }
             IoError(err) => err.fmt(f),
         }
     }
@@ -155,7 +167,7 @@ impl fmt::Display for ReadError {
 #[derive(Debug)]
 pub enum WriteError {
     VersionTooLarge(u8),
-    IoError(io::Error)
+    IoError(io::Error),
 }
 
 impl From<io::Error> for WriteError {
@@ -168,7 +180,7 @@ impl std::error::Error for WriteError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             WriteError::IoError(ref err) => Some(err),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -179,8 +191,12 @@ impl fmt::Display for WriteError {
 
         match self {
             VersionTooLarge(version) => {
-                write!(f, "WriteError: DLT version {} is larger then the maximum supported value of {}", version, MAX_VERSION)
-            },
+                write!(
+                    f,
+                    "WriteError: DLT version {} is larger then the maximum supported value of {}",
+                    version, MAX_VERSION
+                )
+            }
             IoError(err) => err.fmt(f),
         }
     }
@@ -206,7 +222,7 @@ impl fmt::Display for RangeError {
         match self {
             NetworkTypekUserDefinedOutsideOfRange(value) => {
                 write!(f, "RangeError: Message type info field user defined value of {} outside of the allowed range of 7-15.", value)
-            },
+            }
         }
     }
 }
@@ -215,9 +231,9 @@ const MAX_VERSION: u8 = 0b111;
 
 const EXTDENDED_HEADER_FLAG: u8 = 0b1;
 const BIG_ENDIAN_FLAG: u8 = 0b10;
-const ECU_ID_FLAG: u8     = 0b100;
+const ECU_ID_FLAG: u8 = 0b100;
 const SESSION_ID_FLAG: u8 = 0b1000;
-const TIMESTAMP_FLAG: u8  = 0b10000;
+const TIMESTAMP_FLAG: u8 = 0b10000;
 
 ///Shifted value in the msin extended header field for dlt "log" messages.
 const EXT_MSIN_MSTP_TYPE_LOG: u8 = 0x0 << 1;
@@ -239,17 +255,15 @@ pub struct DltHeader {
     pub ecu_id: Option<u32>,
     pub session_id: Option<u32>,
     pub timestamp: Option<u32>,
-    pub extended_header: Option<DltExtendedHeader>
+    pub extended_header: Option<DltExtendedHeader>,
 }
 
 impl DltHeader {
-
     ///Deserialize a DltHeader & TpHeader from the given reader.
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<DltHeader, ReadError> {
-
         // read the standard header that is always present
         let standard_header_start = {
-            let mut standard_header_start : [u8;4] = [0;4];
+            let mut standard_header_start: [u8; 4] = [0; 4];
             reader.read_exact(&mut standard_header_start)?;
             standard_header_start
         };
@@ -257,19 +271,14 @@ impl DltHeader {
         //first lets read the header type
         let header_type = standard_header_start[0];
         //let extended_header = 0 != header_type & EXTDENDED_HEADER_FLAG;
-        Ok(DltHeader{
+        Ok(DltHeader {
             is_big_endian: 0 != header_type & BIG_ENDIAN_FLAG,
             version: (header_type >> 5) & MAX_VERSION,
             message_counter: standard_header_start[1],
-            length: u16::from_be_bytes(
-                [
-                    standard_header_start[2],
-                    standard_header_start[3],
-                ]
-            ),
+            length: u16::from_be_bytes([standard_header_start[2], standard_header_start[3]]),
             ecu_id: if 0 != header_type & ECU_ID_FLAG {
                 Some({
-                    let mut buffer : [u8;4] = [0;4];
+                    let mut buffer: [u8; 4] = [0; 4];
                     reader.read_exact(&mut buffer)?;
                     u32::from_be_bytes(buffer)
                 })
@@ -278,7 +287,7 @@ impl DltHeader {
             },
             session_id: if 0 != header_type & SESSION_ID_FLAG {
                 Some({
-                    let mut buffer : [u8;4] = [0;4];
+                    let mut buffer: [u8; 4] = [0; 4];
                     reader.read_exact(&mut buffer)?;
                     u32::from_be_bytes(buffer)
                 })
@@ -287,7 +296,7 @@ impl DltHeader {
             },
             timestamp: if 0 != header_type & TIMESTAMP_FLAG {
                 Some({
-                    let mut buffer : [u8;4] = [0;4];
+                    let mut buffer: [u8; 4] = [0; 4];
                     reader.read_exact(&mut buffer)?;
                     u32::from_be_bytes(buffer)
                 })
@@ -295,32 +304,20 @@ impl DltHeader {
                 None
             },
             extended_header: if 0 != header_type & EXTDENDED_HEADER_FLAG {
-                Some(
-                    {
-                        let mut buffer : [u8;10] = [0;10];
-                        reader.read_exact(&mut buffer)?;
+                Some({
+                    let mut buffer: [u8; 10] = [0; 10];
+                    reader.read_exact(&mut buffer)?;
 
-                        DltExtendedHeader{
-                            message_info: buffer[0],
-                            number_of_arguments: buffer[1],
-                            application_id: [
-                                buffer[2],
-                                buffer[3],
-                                buffer[4],
-                                buffer[5],
-                            ],
-                            context_id: [
-                                buffer[6],
-                                buffer[7],
-                                buffer[8],
-                                buffer[9],
-                            ]
-                        }
+                    DltExtendedHeader {
+                        message_info: buffer[0],
+                        number_of_arguments: buffer[1],
+                        application_id: [buffer[2], buffer[3], buffer[4], buffer[5]],
+                        context_id: [buffer[6], buffer[7], buffer[8], buffer[9]],
                     }
-                )
+                })
             } else {
                 None
-            }
+            },
         })
     }
 
@@ -328,12 +325,12 @@ impl DltHeader {
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         //pre check if the ranges of all fields are valid
         if self.version > MAX_VERSION {
-            return Err(WriteError::VersionTooLarge(self.version))
+            return Err(WriteError::VersionTooLarge(self.version));
         }
 
         {
             let length_be = self.length.to_be_bytes();
-            let standard_header_start : [u8;4] = [
+            let standard_header_start: [u8; 4] = [
                 //header type bitfield
                 {
                     let mut result = 0;
@@ -357,13 +354,13 @@ impl DltHeader {
                 },
                 self.message_counter,
                 length_be[0],
-                length_be[1]
+                length_be[1],
             ];
 
             writer.write_all(&standard_header_start)?;
         }
 
-        if let Some(value) = self.ecu_id { 
+        if let Some(value) = self.ecu_id {
             writer.write_all(&value.to_be_bytes())?;
         }
 
@@ -378,7 +375,7 @@ impl DltHeader {
         //write the extended header if it exists
         match &self.extended_header {
             Some(value) => {
-                let bytes : [u8;10] = [
+                let bytes: [u8; 10] = [
                     value.message_info,
                     value.number_of_arguments,
                     value.application_id[0],
@@ -391,7 +388,7 @@ impl DltHeader {
                     value.context_id[3],
                 ];
                 writer.write_all(&bytes)?;
-            },
+            }
             None => {}
         }
         Ok(())
@@ -402,7 +399,7 @@ impl DltHeader {
     pub fn is_verbose(&self) -> bool {
         match &self.extended_header {
             None => false, //only packages with extended headers can be verbose
-            Some(ext) => ext.is_verbose() 
+            Some(ext) => ext.is_verbose(),
         }
     }
 
@@ -411,16 +408,16 @@ impl DltHeader {
     pub fn header_len(&self) -> u16 {
         4 + match self.ecu_id {
             Some(_) => 4,
-            None => 0
+            None => 0,
         } + match self.session_id {
             Some(_) => 4,
-            None => 0
+            None => 0,
         } + match self.timestamp {
             Some(_) => 4,
-            None => 0
+            None => 0,
         } + match self.extended_header {
             Some(_) => 10,
-            None => 0
+            None => 0,
         }
     }
 }
@@ -430,36 +427,43 @@ impl DltHeader {
 pub struct DltExtendedHeader {
     pub message_info: u8,
     pub number_of_arguments: u8,
-    pub application_id: [u8;4],
-    pub context_id: [u8;4],
+    pub application_id: [u8; 4],
+    pub context_id: [u8; 4],
 }
 
 impl DltExtendedHeader {
-
     ///Create a extended header for a non verbose log message with given application id & context id.
-    pub fn new_non_verbose_log(log_level: DltLogLevel, application_id: [u8;4], context_id: [u8;4]) -> DltExtendedHeader {
+    pub fn new_non_verbose_log(
+        log_level: DltLogLevel,
+        application_id: [u8; 4],
+        context_id: [u8; 4],
+    ) -> DltExtendedHeader {
         DltExtendedHeader {
             message_info: DltMessageType::Log(log_level).to_byte().unwrap(),
             number_of_arguments: 0,
             application_id,
-            context_id
+            context_id,
         }
     }
 
     ///Create a extended header for a non verbose message with given message type, application id & context id.
-    pub fn new_non_verbose(message_type: DltMessageType, application_id: [u8;4], context_id: [u8;4]) -> Result<DltExtendedHeader, RangeError> {
+    pub fn new_non_verbose(
+        message_type: DltMessageType,
+        application_id: [u8; 4],
+        context_id: [u8; 4],
+    ) -> Result<DltExtendedHeader, RangeError> {
         Ok(DltExtendedHeader {
             message_info: message_type.to_byte()?,
             number_of_arguments: 0,
             application_id,
-            context_id
+            context_id,
         })
     }
 
     ///Returns true if the extended header flags the message as a verbose message.
     #[inline]
     pub fn is_verbose(&self) -> bool {
-        0 != self.message_info & 0b1 
+        0 != self.message_info & 0b1
     }
 
     ///Sets or unsets the is_verbose bit in the DltExtendedHeader.
@@ -480,8 +484,7 @@ impl DltExtendedHeader {
 
     ///Set message type info and based on that the message type.
     #[inline]
-    pub fn set_message_type(&mut self, value: DltMessageType) -> Result<(),RangeError> {
-        
+    pub fn set_message_type(&mut self, value: DltMessageType) -> Result<(), RangeError> {
         let encoded = value.to_byte()?;
 
         //unset old message type & set the new one
@@ -510,7 +513,7 @@ pub enum DltLogLevel {
     Verbose = 0x6,
 }
 
-///Types of application trace messages that can be sent via dlt if the message type 
+///Types of application trace messages that can be sent via dlt if the message type
 ///is specified as "trace".
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DltTraceType {
@@ -550,7 +553,7 @@ pub enum DltControlMessageType {
     ///Request control message.
     Request = 0x1,
     ///Respond control message.
-    Response = 0x2
+    Response = 0x2,
 }
 
 ///Message type info field (contains the the information of the message type & message type info field)
@@ -567,8 +570,7 @@ pub enum DltMessageType {
 }
 
 impl DltMessageType {
-
-    /// Attempts to read the message type from the first byte of 
+    /// Attempts to read the message type from the first byte of
     /// the dlt extended message header.
     fn from_byte(value: u8) -> Option<DltMessageType> {
         use DltMessageType::*;
@@ -588,7 +590,7 @@ impl DltMessageType {
                     //undefined values
                     _ => None,
                 }
-            },
+            }
             EXT_MSIN_MSTP_TYPE_TRACE => {
                 use DltTraceType::*;
                 match (value & MSIN_MASK) >> 4 {
@@ -600,7 +602,7 @@ impl DltMessageType {
                     //undefined values
                     _ => None,
                 }
-            },
+            }
             EXT_MSIN_MSTP_TYPE_NW_TRACE => {
                 use DltNetworkType::*;
                 match (value & MSIN_MASK) >> 4 {
@@ -611,7 +613,7 @@ impl DltMessageType {
                     0x5 => Some(NetworkTrace(Ethernet)),
                     0x6 => Some(NetworkTrace(SomeIp)),
                     //user defined
-                    other => Some(NetworkTrace(UserDefined(other)))
+                    other => Some(NetworkTrace(UserDefined(other))),
                 }
             }
             EXT_MSIN_MSTP_TYPE_CONTROL => {
@@ -622,17 +624,17 @@ impl DltMessageType {
                     //undefined values
                     _ => None,
                 }
-            },
-            _ => None
+            }
+            _ => None,
         }
     }
 
     ///Set message type info and based on that the message type.
-    pub fn to_byte(&self) -> Result<u8,RangeError> {
+    pub fn to_byte(&self) -> Result<u8, RangeError> {
         use DltMessageType::*;
         use DltNetworkType::UserDefined;
         use RangeError::NetworkTypekUserDefinedOutsideOfRange;
-        
+
         //check ranges
         if let NetworkTrace(UserDefined(user_defined_value)) = *self {
             if !(7..=0xf).contains(&user_defined_value) {
@@ -642,32 +644,25 @@ impl DltMessageType {
 
         //determine message type & message type info
         let (message_type, message_type_info) = match self {
-            Log(ref level) => (
-                EXT_MSIN_MSTP_TYPE_LOG,
-                *level as u8
-            ),
-            Trace(ref trace_type) => (
-                EXT_MSIN_MSTP_TYPE_TRACE,
-                *trace_type as u8
-            ),
+            Log(ref level) => (EXT_MSIN_MSTP_TYPE_LOG, *level as u8),
+            Trace(ref trace_type) => (EXT_MSIN_MSTP_TYPE_TRACE, *trace_type as u8),
             NetworkTrace(ref nw_trace_type) => {
                 use DltNetworkType::*;
 
-                (EXT_MSIN_MSTP_TYPE_NW_TRACE,
-                 match *nw_trace_type {
-                    Ipc => 0x1,
-                    Can => 0x2,
-                    Flexray => 0x3,
-                    Most => 0x4,
-                    Ethernet => 0x5,
-                    SomeIp => 0x6,
-                    UserDefined(value) => value,
-                })
-            },
-            Control(ref control_msg_type) => (
-                EXT_MSIN_MSTP_TYPE_CONTROL,
-                *control_msg_type as u8
-            ),
+                (
+                    EXT_MSIN_MSTP_TYPE_NW_TRACE,
+                    match *nw_trace_type {
+                        Ipc => 0x1,
+                        Can => 0x2,
+                        Flexray => 0x3,
+                        Most => 0x4,
+                        Ethernet => 0x5,
+                        SomeIp => 0x6,
+                        UserDefined(value) => value,
+                    },
+                )
+            }
+            Control(ref control_msg_type) => (EXT_MSIN_MSTP_TYPE_CONTROL, *control_msg_type as u8),
         };
 
         Ok(message_type | ((message_type_info << 4) & 0b1111_0000))
@@ -678,32 +673,31 @@ impl DltMessageType {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DltPacketSlice<'a> {
     slice: &'a [u8],
-    header_len: usize
+    header_len: usize,
 }
 
 impl<'a> DltPacketSlice<'a> {
-
     ///Read the dlt header and create a slice containing the dlt header & payload.
     pub fn from_slice(slice: &'a [u8]) -> Result<DltPacketSlice<'_>, ReadError> {
-
         if slice.len() < 4 {
-            return Err(ReadError::UnexpectedEndOfSlice{ minimum_size: 4, actual_size: slice.len()})
+            return Err(ReadError::UnexpectedEndOfSlice {
+                minimum_size: 4,
+                actual_size: slice.len(),
+            });
         }
-        
+
         let length = u16::from_be_bytes(
             // SAFETY:
             // Safe as it is checked beforehand that the slice
             // has at least 4 bytes.
-            unsafe {
-                [
-                    *slice.get_unchecked(2),
-                    *slice.get_unchecked(3),
-                ]
-            }
+            unsafe { [*slice.get_unchecked(2), *slice.get_unchecked(3)] },
         ) as usize;
 
         if slice.len() < length {
-            return Err(ReadError::UnexpectedEndOfSlice { minimum_size: length, actual_size: slice.len() });
+            return Err(ReadError::UnexpectedEndOfSlice {
+                minimum_size: length,
+                actual_size: slice.len(),
+            });
         }
 
         // calculate the minimum size based on the header flags
@@ -711,9 +705,7 @@ impl<'a> DltPacketSlice<'a> {
         // SAFETY:
         // Safe as it is checked beforehand that the slice
         // has at least 4 bytes.
-        let header_type = unsafe {
-            slice.get_unchecked(0)
-        };
+        let header_type = unsafe { slice.get_unchecked(0) };
 
         //the header size has at least 4 bytes
         let header_len = if 0 != header_type & ECU_ID_FLAG {
@@ -744,9 +736,9 @@ impl<'a> DltPacketSlice<'a> {
         // + the minimum size for the payload (4 for message id in non verbose
         // or 4 for the typeinfo in verbose)
         if length < header_len + 4 {
-            return Err(ReadError::LengthSmallerThenMinimum { 
-                required_length: header_len + 4, 
-                length 
+            return Err(ReadError::LengthSmallerThenMinimum {
+                required_length: header_len + 4,
+                length,
             });
         }
 
@@ -755,13 +747,8 @@ impl<'a> DltPacketSlice<'a> {
             // SAFETY:
             // Safe as it is checked beforehand that the slice
             // has at least length bytes.
-            slice: unsafe {
-                from_raw_parts(
-                    slice.as_ptr(),
-                    length
-                )
-            },
-            header_len
+            slice: unsafe { from_raw_parts(slice.as_ptr(), length) },
+            header_len,
         })
     }
 
@@ -771,9 +758,7 @@ impl<'a> DltPacketSlice<'a> {
         // SAFETY:
         // Safe as it is checked in from_slice that the slice
         // has at least a length of 4 bytes.
-        0 != unsafe {
-            self.slice.get_unchecked(0)
-        } & 0b1
+        0 != unsafe { self.slice.get_unchecked(0) } & 0b1
     }
 
     ///Returns if the numbers in the payload are encoded in big endian.
@@ -782,9 +767,7 @@ impl<'a> DltPacketSlice<'a> {
         // SAFETY:
         // Safe as it is checked in from_slice that the slice
         // has at least a length of 4 bytes.
-        0 != unsafe {
-            self.slice.get_unchecked(0)
-        } & 0b10
+        0 != unsafe { self.slice.get_unchecked(0) } & 0b10
     }
 
     ///Returns if the dlt package is verbose or non verbose.
@@ -795,9 +778,7 @@ impl<'a> DltPacketSlice<'a> {
             // Safe as if the extended header is present the
             // header_len is checked in from_slice to be at least
             // 10 bytes.
-            0 != unsafe {
-                self.slice.get_unchecked(self.header_len - 10)
-            } & 0b1
+            0 != unsafe { self.slice.get_unchecked(self.header_len - 10) } & 0b1
         } else {
             false
         }
@@ -812,28 +793,23 @@ impl<'a> DltPacketSlice<'a> {
             // header_len is set in from_slice to be at least
             // 10 bytes and also checked against the slice length.
             unsafe {
-                let ext_slice = from_raw_parts(
-                    self.slice.as_ptr().add(self.header_len - 10),
-                    10
-                );
-                Some(
-                    DltExtendedHeader {
-                        message_info: *ext_slice.get_unchecked(0),
-                        number_of_arguments: *ext_slice.get_unchecked(1),
-                        application_id: [
-                            *ext_slice.get_unchecked(2),
-                            *ext_slice.get_unchecked(3),
-                            *ext_slice.get_unchecked(4),
-                            *ext_slice.get_unchecked(5),
-                        ],
-                        context_id: [
-                            *ext_slice.get_unchecked(6),
-                            *ext_slice.get_unchecked(7),
-                            *ext_slice.get_unchecked(8),
-                            *ext_slice.get_unchecked(9),
-                        ]
-                    }
-                )
+                let ext_slice = from_raw_parts(self.slice.as_ptr().add(self.header_len - 10), 10);
+                Some(DltExtendedHeader {
+                    message_info: *ext_slice.get_unchecked(0),
+                    number_of_arguments: *ext_slice.get_unchecked(1),
+                    application_id: [
+                        *ext_slice.get_unchecked(2),
+                        *ext_slice.get_unchecked(3),
+                        *ext_slice.get_unchecked(4),
+                        *ext_slice.get_unchecked(5),
+                    ],
+                    context_id: [
+                        *ext_slice.get_unchecked(6),
+                        *ext_slice.get_unchecked(7),
+                        *ext_slice.get_unchecked(8),
+                        *ext_slice.get_unchecked(9),
+                    ],
+                })
             }
         } else {
             None
@@ -849,9 +825,7 @@ impl<'a> DltPacketSlice<'a> {
                 // Safe as if the extended header is present the
                 // header_len is set in from_slice to be at least
                 // 10 bytes and also checked against the slice length.
-                unsafe {
-                    *self.slice.get_unchecked(self.header_len - 10)
-                }
+                unsafe { *self.slice.get_unchecked(self.header_len - 10) },
             )
         } else {
             None
@@ -898,7 +872,7 @@ impl<'a> DltPacketSlice<'a> {
         unsafe {
             from_raw_parts(
                 self.slice.as_ptr().add(self.header_len),
-                self.slice.len() - self.header_len
+                self.slice.len() - self.header_len,
             )
         }
     }
@@ -911,7 +885,7 @@ impl<'a> DltPacketSlice<'a> {
         unsafe {
             from_raw_parts(
                 self.slice.as_ptr().add(self.header_len + 4),
-                self.slice.len() - self.header_len - 4
+                self.slice.len() - self.header_len - 4,
             )
         }
     }
@@ -921,59 +895,45 @@ impl<'a> DltPacketSlice<'a> {
         // SAFETY:
         // Safe as it is checked in from_slice that the slice
         // has at least a length of 4 bytes.
-        let header_type = unsafe {
-            *self.slice.get_unchecked(0)
-        };
+        let header_type = unsafe { *self.slice.get_unchecked(0) };
         let (is_big_endian, version) = {
-            (0 != header_type & BIG_ENDIAN_FLAG, 
-             (header_type >> 5) & MAX_VERSION)
+            (
+                0 != header_type & BIG_ENDIAN_FLAG,
+                (header_type >> 5) & MAX_VERSION,
+            )
         };
         // SAFETY:
         // Safe as it is checked in from_slice that the slice
         // has at least a length of 4 bytes.
-        let message_counter = unsafe {
-            *self.slice.get_unchecked(1)
-        };
+        let message_counter = unsafe { *self.slice.get_unchecked(1) };
         let length = u16::from_be_bytes(
             // SAFETY:
             // Safe as it is checked in from_slice that the slice
             // has at least the length of 4 bytes.
-            unsafe {
-                [
-                    *self.slice.get_unchecked(2),
-                    *self.slice.get_unchecked(3),
-                ]
-            }
+            unsafe { [*self.slice.get_unchecked(2), *self.slice.get_unchecked(3)] },
         );
 
         let (ecu_id, slice) = if 0 != header_type & ECU_ID_FLAG {
             (
-                Some(
-                    u32::from_be_bytes(
-                        // SAFETY:
-                        // Safe as it is checked in from_slice that the slice
-                        // has the length to contain the standard & extended header
-                        // based on the flags contained in the standard header.
-                        unsafe {
-                            [
-                                *self.slice.get_unchecked(4),
-                                *self.slice.get_unchecked(5),
-                                *self.slice.get_unchecked(6),
-                                *self.slice.get_unchecked(7),
-                            ]
-                        }
-                    )
-                ),
+                Some(u32::from_be_bytes(
+                    // SAFETY:
+                    // Safe as it is checked in from_slice that the slice
+                    // has the length to contain the standard & extended header
+                    // based on the flags contained in the standard header.
+                    unsafe {
+                        [
+                            *self.slice.get_unchecked(4),
+                            *self.slice.get_unchecked(5),
+                            *self.slice.get_unchecked(6),
+                            *self.slice.get_unchecked(7),
+                        ]
+                    },
+                )),
                 // SAFETY:
                 // Safe as it is checked in from_slice that the slice
                 // has the length to contain the standard & extended header
                 // based on the flags contained in the standard header.
-                unsafe {
-                    from_raw_parts(
-                        self.slice.as_ptr().add(8),
-                        self.slice.len() - 8
-                    )
-                }
+                unsafe { from_raw_parts(self.slice.as_ptr().add(8), self.slice.len() - 8) },
             )
         } else {
             (
@@ -983,42 +943,32 @@ impl<'a> DltPacketSlice<'a> {
                 // has at least the length of 4 bytes.
                 unsafe {
                     // go after the standard header base
-                    from_raw_parts(
-                        self.slice.as_ptr().add(4),
-                        self.slice.len() - 4
-                    )
-                }
+                    from_raw_parts(self.slice.as_ptr().add(4), self.slice.len() - 4)
+                },
             )
         };
 
         let (session_id, slice) = if 0 != header_type & SESSION_ID_FLAG {
             (
-                Some(
-                    u32::from_be_bytes(
-                        // SAFETY:
-                        // Safe as it is checked in from_slice that the slice
-                        // has the length to contain the standard & extended header
-                        // based on the flags contained in the standard header.
-                        unsafe {
-                            [
-                                *slice.get_unchecked(0),
-                                *slice.get_unchecked(1),
-                                *slice.get_unchecked(2),
-                                *slice.get_unchecked(3),
-                            ]
-                        }
-                    )
-                ),
+                Some(u32::from_be_bytes(
+                    // SAFETY:
+                    // Safe as it is checked in from_slice that the slice
+                    // has the length to contain the standard & extended header
+                    // based on the flags contained in the standard header.
+                    unsafe {
+                        [
+                            *slice.get_unchecked(0),
+                            *slice.get_unchecked(1),
+                            *slice.get_unchecked(2),
+                            *slice.get_unchecked(3),
+                        ]
+                    },
+                )),
                 // SAFETY:
                 // Safe as it is checked in from_slice that the slice
                 // has the length to contain the standard & extended header
                 // based on the flags contained in the standard header.
-                unsafe {
-                    from_raw_parts(
-                        slice.as_ptr().add(4),
-                        slice.len() - 4
-                    )
-                }
+                unsafe { from_raw_parts(slice.as_ptr().add(4), slice.len() - 4) },
             )
         } else {
             (None, slice)
@@ -1026,32 +976,25 @@ impl<'a> DltPacketSlice<'a> {
 
         let (timestamp, slice) = if 0 != header_type & TIMESTAMP_FLAG {
             (
-                Some(
-                    u32::from_be_bytes(
-                        // SAFETY:
-                        // Safe as it is checked in from_slice that the slice
-                        // has the length to contain the standard & extended header
-                        // based on the flags contained in the standard header.
-                        unsafe {
-                            [
-                                *slice.get_unchecked(0),
-                                *slice.get_unchecked(1),
-                                *slice.get_unchecked(2),
-                                *slice.get_unchecked(3),
-                            ]
-                        }
-                    )
-                ),
+                Some(u32::from_be_bytes(
+                    // SAFETY:
+                    // Safe as it is checked in from_slice that the slice
+                    // has the length to contain the standard & extended header
+                    // based on the flags contained in the standard header.
+                    unsafe {
+                        [
+                            *slice.get_unchecked(0),
+                            *slice.get_unchecked(1),
+                            *slice.get_unchecked(2),
+                            *slice.get_unchecked(3),
+                        ]
+                    },
+                )),
                 // SAFETY:
                 // Safe as it is checked in from_slice that the slice
                 // has the length to contain the standard & extended header
                 // based on the flags contained in the standard header.
-                unsafe {
-                    from_raw_parts(
-                        slice.as_ptr().add(4),
-                        slice.len() - 4
-                    )
-                }
+                unsafe { from_raw_parts(slice.as_ptr().add(4), slice.len() - 4) },
             )
         } else {
             (None, slice)
@@ -1063,18 +1006,14 @@ impl<'a> DltPacketSlice<'a> {
                 // Safe as it is checked in from_slice that the slice
                 // has the length to contain the standard & extended header
                 // based on the flags contained in the standard header.
-                message_info: unsafe {
-                    *slice.get_unchecked(0)
-                },
-                number_of_arguments: unsafe {
-                    *slice.get_unchecked(1)
-                },
+                message_info: unsafe { *slice.get_unchecked(0) },
+                number_of_arguments: unsafe { *slice.get_unchecked(1) },
                 application_id: unsafe {
                     [
                         *slice.get_unchecked(2),
                         *slice.get_unchecked(3),
                         *slice.get_unchecked(4),
-                        *slice.get_unchecked(5)
+                        *slice.get_unchecked(5),
                     ]
                 },
                 context_id: unsafe {
@@ -1084,7 +1023,7 @@ impl<'a> DltPacketSlice<'a> {
                         *slice.get_unchecked(8),
                         *slice.get_unchecked(9),
                     ]
-                }
+                },
             })
         } else {
             None
@@ -1098,7 +1037,7 @@ impl<'a> DltPacketSlice<'a> {
             ecu_id,
             session_id,
             timestamp,
-            extended_header
+            extended_header,
         }
     }
 }
@@ -1106,15 +1045,13 @@ impl<'a> DltPacketSlice<'a> {
 ///Allows iterating over the someip message in a udp or tcp payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SliceIterator<'a> {
-    slice: &'a [u8]
+    slice: &'a [u8],
 }
 
 impl<'a> SliceIterator<'a> {
     #[inline]
     pub fn new(slice: &'a [u8]) -> SliceIterator<'a> {
-        SliceIterator {
-            slice
-        }
+        SliceIterator { slice }
     }
 }
 
@@ -1152,8 +1089,8 @@ impl<'a> Iterator for SliceIterator<'a> {
 mod tests {
 
     use super::*;
-    use proptest::*;
     use proptest::prelude::*;
+    use proptest::*;
     use std::io::Cursor;
     use std::io::Write;
 
@@ -1243,11 +1180,11 @@ mod tests {
     }
 
     fn message_type_any() -> impl Strategy<Value = DltMessageType> {
-        use DltMessageType::*;
+        use DltControlMessageType::*;
         use DltLogLevel::*;
+        use DltMessageType::*;
         use DltNetworkType::*;
         use DltTraceType::*;
-        use DltControlMessageType::*;
         prop_oneof![
             Just(Log(Fatal)),
             Just(Log(Error)),
@@ -1255,13 +1192,11 @@ mod tests {
             Just(Log(Info)),
             Just(Log(Debug)),
             Just(Log(Verbose)),
-
             Just(Trace(Variable)),
             Just(Trace(FunctionIn)),
             Just(Trace(FunctionOut)),
             Just(Trace(State)),
             Just(Trace(Vfb)),
-
             Just(NetworkTrace(Ipc)),
             Just(NetworkTrace(Can)),
             Just(NetworkTrace(Flexray)),
@@ -1277,7 +1212,6 @@ mod tests {
             Just(NetworkTrace(UserDefined(0xD))),
             Just(NetworkTrace(UserDefined(0xE))),
             Just(NetworkTrace(UserDefined(0xF))),
-
             Just(Control(Request)),
             Just(Control(Response)),
         ]
@@ -1342,7 +1276,11 @@ mod tests {
             header.extended_header = Some(Default::default());
             assert_eq!(false, header.is_verbose());
             //set the verbose flag
-            header.extended_header.as_mut().unwrap().set_is_verbose(true);
+            header
+                .extended_header
+                .as_mut()
+                .unwrap()
+                .set_is_verbose(true);
             assert_eq!(true, header.is_verbose());
         }
 
@@ -1353,7 +1291,7 @@ mod tests {
                 ecu_id: Option<u32>,
                 session_id: Option<u32>,
                 timestamp: Option<u32>,
-                extended_header: Option<DltExtendedHeader>
+                extended_header: Option<DltExtendedHeader>,
             }
 
             let tests = [
@@ -1404,7 +1342,7 @@ mod tests {
             for test in tests {
                 assert_eq!(
                     test.expected,
-                    DltHeader{
+                    DltHeader {
                         is_big_endian: false,
                         version: MAX_VERSION,
                         message_counter: 123,
@@ -1413,7 +1351,8 @@ mod tests {
                         session_id: test.session_id,
                         timestamp: test.timestamp,
                         extended_header: test.extended_header,
-                    }.header_len()
+                    }
+                    .header_len()
                 );
             }
         }
@@ -1443,7 +1382,6 @@ mod tests {
             assert_eq!(header.timestamp, None);
             assert_eq!(header.extended_header, None);
         }
-
     } // mod dlt_header
 
     /// Tests for `DltPacketSlice` methods
@@ -1455,11 +1393,9 @@ mod tests {
         fn debug() {
             let mut header: DltHeader = Default::default();
             header.length = header.header_len() + 4;
-            let mut buffer = Vec::with_capacity(
-                usize::from(header.length)
-            );
+            let mut buffer = Vec::with_capacity(usize::from(header.length));
             header.write(&mut buffer).unwrap();
-            buffer.extend_from_slice(&[0,0,0,0]);
+            buffer.extend_from_slice(&[0, 0, 0, 0]);
             let slice = DltPacketSlice::from_slice(&buffer).unwrap();
             println!("{:?}", slice);
         }
@@ -1502,7 +1438,7 @@ mod tests {
 
                 if let Some(packet_ext_header) = packet.0.extended_header.as_ref() {
                     assert_eq!(slice.message_type(), packet_ext_header.message_type());
-                    assert_eq!(slice.header().extended_header.unwrap().message_type(), 
+                    assert_eq!(slice.header().extended_header.unwrap().message_type(),
                                packet.0.extended_header.as_ref().unwrap().message_type());
                 } else {
                     assert_eq!(slice.header().extended_header, None);
@@ -1514,8 +1450,8 @@ mod tests {
                     assert_matches!(
                         DltPacketSlice::from_slice(&buffer[..len]),
                         Err(
-                            ReadError::UnexpectedEndOfSlice{ 
-                                minimum_size: _, 
+                            ReadError::UnexpectedEndOfSlice{
+                                minimum_size: _,
                                 actual_size: _
                             }
                         )
@@ -1528,11 +1464,14 @@ mod tests {
         fn from_slice_header_len_eof_errors() {
             //too small for header
             {
-                let buffer = [1,2,3];
-                assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::UnexpectedEndOfSlice{ 
-                    minimum_size: 4, 
-                    actual_size: 3
-                }));
+                let buffer = [1, 2, 3];
+                assert_matches!(
+                    DltPacketSlice::from_slice(&buffer[..]),
+                    Err(ReadError::UnexpectedEndOfSlice {
+                        minimum_size: 4,
+                        actual_size: 3
+                    })
+                );
             }
             //too small for the length
             {
@@ -1540,10 +1479,13 @@ mod tests {
                 header.length = 5;
                 let mut buffer = Vec::new();
                 header.write(&mut buffer).unwrap();
-                assert_matches!(DltPacketSlice::from_slice(&buffer[..]), Err(ReadError::UnexpectedEndOfSlice{ 
-                    minimum_size: 5, 
-                    actual_size: 4
-                }));
+                assert_matches!(
+                    DltPacketSlice::from_slice(&buffer[..]),
+                    Err(ReadError::UnexpectedEndOfSlice {
+                        minimum_size: 5,
+                        actual_size: 4
+                    })
+                );
             }
         }
 
@@ -1567,34 +1509,28 @@ mod tests {
                 (
                     {
                         let mut header: DltHeader = Default::default();
-                        header.extended_header = Some(
-                            {
-                                let mut ext: DltExtendedHeader = Default::default();
-                                ext.set_is_verbose(true);
-                                ext
-                            }
-                        );
+                        header.extended_header = Some({
+                            let mut ext: DltExtendedHeader = Default::default();
+                            ext.set_is_verbose(true);
+                            ext
+                        });
                         header
                     },
-                    false
+                    false,
                 ),
-                
                 //with extended header non-verbose
                 (
                     {
                         let mut header: DltHeader = Default::default();
-                        header.extended_header = Some(
-                            {
-                                let mut ext: DltExtendedHeader = Default::default();
-                                ext.set_is_verbose(false);
-                                ext
-                            }
-                        );
+                        header.extended_header = Some({
+                            let mut ext: DltExtendedHeader = Default::default();
+                            ext.set_is_verbose(false);
+                            ext
+                        });
                         header
                     },
-                    true
+                    true,
                 ),
-
                 //without extended header (always non verbose)
                 (
                     {
@@ -1602,9 +1538,8 @@ mod tests {
                         header.extended_header = None;
                         header
                     },
-                    true
+                    true,
                 ),
-
             ];
             //verbose (does not have message id)
             for t in tests.iter() {
@@ -1626,11 +1561,7 @@ mod tests {
                     let slice = DltPacketSlice::from_slice(&buffer).unwrap();
                     assert_eq!(
                         slice.message_id(),
-                        if t.1 {
-                            Some(0x1234_5678)
-                        } else {
-                            None
-                        }
+                        if t.1 { Some(0x1234_5678) } else { None }
                     );
                 }
 
@@ -1652,16 +1583,11 @@ mod tests {
                     let slice = DltPacketSlice::from_slice(&buffer).unwrap();
                     assert_eq!(
                         slice.message_id(),
-                        if t.1 {
-                            Some(0x1234_5678)
-                        } else {
-                            None
-                        }
+                        if t.1 { Some(0x1234_5678) } else { None }
                     );
                 }
             }
         }
-
     } // mod dlt_packet_slice
 
     /// Tests for `SliceIterator`
@@ -1671,17 +1597,13 @@ mod tests {
 
         #[test]
         fn clone_eq() {
-            let it = SliceIterator{
-                slice: &[]
-            };
+            let it = SliceIterator { slice: &[] };
             assert_eq!(it, it.clone());
         }
 
         #[test]
         fn debug() {
-            let it = SliceIterator{
-                slice: &[]
-            };
+            let it = SliceIterator { slice: &[] };
             println!("{:?}", it);
         }
 
@@ -1862,14 +1784,17 @@ mod tests {
 
         #[test]
         fn message_type() {
-            use {DltMessageType::*, DltNetworkType::*, DltLogLevel::*, DltTraceType::*, DltControlMessageType::*};
+            use {
+                DltControlMessageType::*, DltLogLevel::*, DltMessageType::*, DltNetworkType::*,
+                DltTraceType::*,
+            };
 
             //check that setting & resetting does correctly reset the values
             {
                 let mut header = DltExtendedHeader::new_non_verbose_log(
                     Fatal,
                     Default::default(),
-                    Default::default()
+                    Default::default(),
                 );
 
                 header.set_message_type(NetworkTrace(SomeIp)).unwrap();
@@ -1884,11 +1809,11 @@ mod tests {
 
             //check None return type when a unknown value is presented
             //message type
-            for message_type_id in 4 ..=0b111 {
+            for message_type_id in 4..=0b111 {
                 let mut header = DltExtendedHeader::new_non_verbose_log(
                     Fatal,
                     Default::default(),
-                    Default::default()
+                    Default::default(),
                 );
                 header.message_info = message_type_id << 1;
                 assert_eq!(None, header.message_type());
@@ -1901,7 +1826,7 @@ mod tests {
                 //bad trace source (0 & everything above 5)
                 (Trace(FunctionIn), (0u8..1).chain(6u8..=0xf)),
                 //bad control message type (0 & everything above 2)
-                (Control(Request), (0u8..1).chain(3u8..=0xf))
+                (Control(Request), (0u8..1).chain(3u8..=0xf)),
             ];
 
             for t in bad_values.iter() {
@@ -1909,8 +1834,9 @@ mod tests {
                     let mut header = DltExtendedHeader::new_non_verbose(
                         t.0.clone(),
                         Default::default(),
-                        Default::default()
-                    ).unwrap();
+                        Default::default(),
+                    )
+                    .unwrap();
                     header.message_info &= 0b0000_1111;
                     header.message_info |= value << 4;
                     assert_eq!(None, header.message_type());
@@ -1919,20 +1845,21 @@ mod tests {
 
             //check set out of range error
             {
-                use RangeError::*;
                 use DltLogLevel::Fatal;
+                use RangeError::*;
                 for i in 0x10..=0xff {
                     let mut header = DltExtendedHeader::new_non_verbose_log(
                         Fatal,
                         Default::default(),
-                        Default::default()
+                        Default::default(),
                     );
-                    assert_eq!(Err(NetworkTypekUserDefinedOutsideOfRange(i)), 
-                               header.set_message_type(NetworkTrace(UserDefined(i))));
+                    assert_eq!(
+                        Err(NetworkTypekUserDefinedOutsideOfRange(i)),
+                        header.set_message_type(NetworkTrace(UserDefined(i)))
+                    );
                 }
             }
         }
-
     } // mod dlt_extended_header
 
     /// Tests for `ReadError` methods
@@ -1944,10 +1871,18 @@ mod tests {
         fn debug() {
             use crate::ReadError::*;
             for value in [
-                UnexpectedEndOfSlice { minimum_size: 1, actual_size: 2},
-                LengthSmallerThenMinimum { required_length: 3, length: 4 },
-                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-            ].iter() {
+                UnexpectedEndOfSlice {
+                    minimum_size: 1,
+                    actual_size: 2,
+                },
+                LengthSmallerThenMinimum {
+                    required_length: 3,
+                    length: 4,
+                },
+                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
+            ]
+            .iter()
+            {
                 println!("{:?}", value);
             }
         }
@@ -1989,17 +1924,22 @@ mod tests {
             use crate::ReadError::*;
             use std::error::Error;
 
-            assert!(
-                UnexpectedEndOfSlice { minimum_size: 1, actual_size: 2}
-                .source().is_none()
-            );
-            assert!(
-                LengthSmallerThenMinimum { required_length: 3, length: 4 }
-                .source().is_none()
-            );
+            assert!(UnexpectedEndOfSlice {
+                minimum_size: 1,
+                actual_size: 2
+            }
+            .source()
+            .is_none());
+            assert!(LengthSmallerThenMinimum {
+                required_length: 3,
+                length: 4
+            }
+            .source()
+            .is_none());
             assert!(
                 IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                .source().is_some()
+                    .source()
+                    .is_some()
             );
         }
     } // mod read_error
@@ -2014,7 +1954,9 @@ mod tests {
             use WriteError::*;
             for value in [
                 VersionTooLarge(123),
-                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))].iter()
+                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
+            ]
+            .iter()
             {
                 println!("{:?}", value);
             }
@@ -2044,16 +1986,14 @@ mod tests {
 
         #[test]
         fn source() {
-            use WriteError::*;
             use std::error::Error;
+            use WriteError::*;
 
-            assert!(
-                VersionTooLarge(123)
-                .source().is_none()
-            );
+            assert!(VersionTooLarge(123).source().is_none());
             assert!(
                 IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                .source().is_some()
+                    .source()
+                    .is_some()
             );
         }
     } // mod write_error
@@ -2090,15 +2030,13 @@ mod tests {
 
         #[test]
         fn source() {
-            use RangeError::*;
             use std::error::Error;
+            use RangeError::*;
 
-            assert!(
-                NetworkTypekUserDefinedOutsideOfRange(123)
-                .source().is_none()
-            );
+            assert!(NetworkTypekUserDefinedOutsideOfRange(123)
+                .source()
+                .is_none());
         }
-
     } // mod range_error
 
     mod dlt_log_level {
@@ -2122,10 +2060,7 @@ mod tests {
                 assert_eq!(v0.0 as u8, v0.1);
 
                 for v1 in &VALUES {
-                    assert_eq!(
-                        v0.0 != v1.0,
-                        v0.1 != v1.1,
-                    );
+                    assert_eq!(v0.0 != v1.0, v0.1 != v1.1,);
                 }
             }
         }
@@ -2141,10 +2076,7 @@ mod tests {
                 (Verbose, "Verbose"),
             ];
             for v in &VALUES {
-                assert_eq!(
-                    v.1,
-                    format!("{:?}", v.0)
-                );
+                assert_eq!(v.1, format!("{:?}", v.0));
             }
         }
     }
@@ -2169,10 +2101,7 @@ mod tests {
                 assert_eq!(v0.0 as u8, v0.1);
 
                 for v1 in &VALUES {
-                    assert_eq!(
-                        v0.0 != v1.0,
-                        v0.1 != v1.1,
-                    );
+                    assert_eq!(v0.0 != v1.0, v0.1 != v1.1,);
                 }
             }
         }
@@ -2187,10 +2116,7 @@ mod tests {
                 (Vfb, "Vfb"),
             ];
             for v in &VALUES {
-                assert_eq!(
-                    v.1,
-                    format!("{:?}", v.0)
-                );
+                assert_eq!(v.1, format!("{:?}", v.0));
             }
         }
     }
@@ -2209,17 +2135,14 @@ mod tests {
                 (Ethernet, 5),
                 (SomeIp, 6),
                 (UserDefined(0x7), 0x7),
-                (UserDefined(0xf), 0xf)
+                (UserDefined(0xf), 0xf),
             ];
 
             for v0 in &VALUES {
                 assert_eq!(v0.0, v0.0.clone());
 
                 for v1 in &VALUES {
-                    assert_eq!(
-                        v0.0 != v1.0,
-                        v0.1 != v1.1,
-                    );
+                    assert_eq!(v0.0 != v1.0, v0.1 != v1.1,);
                 }
             }
         }
@@ -2234,13 +2157,10 @@ mod tests {
                 (Ethernet, "Ethernet"),
                 (SomeIp, "SomeIp"),
                 (UserDefined(0x7), "UserDefined(7)"),
-                (UserDefined(0xf), "UserDefined(15)")
+                (UserDefined(0xf), "UserDefined(15)"),
             ];
             for v in &VALUES {
-                assert_eq!(
-                    v.1,
-                    format!("{:?}", v.0)
-                );
+                assert_eq!(v.1, format!("{:?}", v.0));
             }
         }
     }
@@ -2251,10 +2171,7 @@ mod tests {
 
         #[test]
         fn clone_eq() {
-            const VALUES: [(DltControlMessageType, u8); 2] = [
-                (Request, 1),
-                (Response, 2),
-            ];
+            const VALUES: [(DltControlMessageType, u8); 2] = [(Request, 1), (Response, 2)];
 
             for v0 in &VALUES {
                 // identity property
@@ -2262,25 +2179,17 @@ mod tests {
                 assert_eq!(v0.0.clone() as u8, v0.1);
 
                 for v1 in &VALUES {
-                    assert_eq!(
-                        v0.0 != v1.0,
-                        v0.1 != v1.1,
-                    );
+                    assert_eq!(v0.0 != v1.0, v0.1 != v1.1,);
                 }
             }
         }
 
         #[test]
         fn debug() {
-            const VALUES: [(DltControlMessageType, &str); 2] = [
-                (Request, "Request"),
-                (Response, "Response"),
-            ];
+            const VALUES: [(DltControlMessageType, &str); 2] =
+                [(Request, "Request"), (Response, "Response")];
             for v in &VALUES {
-                assert_eq!(
-                    v.1,
-                    format!("{:?}", v.0)
-                );
+                assert_eq!(v.1, format!("{:?}", v.0));
             }
         }
     }
@@ -2288,32 +2197,30 @@ mod tests {
     mod dlt_message_type {
         use super::*;
 
-        use DltMessageType::*;
-        use DltLogLevel::*;
-        use DltTraceType::*;
-        use DltNetworkType::*;
         use DltControlMessageType::*;
+        use DltLogLevel::*;
+        use DltMessageType::*;
+        use DltNetworkType::*;
+        use DltTraceType::*;
 
-        const VALUES : [(DltMessageType, u8);28] = [
-            (Log(Fatal),   0b0001_0000),
-            (Log(Error),   0b0010_0000),
-            (Log(Warn),    0b0011_0000),
-            (Log(Info),    0b0100_0000),
-            (Log(Debug),   0b0101_0000),
+        const VALUES: [(DltMessageType, u8); 28] = [
+            (Log(Fatal), 0b0001_0000),
+            (Log(Error), 0b0010_0000),
+            (Log(Warn), 0b0011_0000),
+            (Log(Info), 0b0100_0000),
+            (Log(Debug), 0b0101_0000),
             (Log(Verbose), 0b0110_0000),
-
-            (Trace(Variable),    0b0001_0010),
-            (Trace(FunctionIn),  0b0010_0010),
+            (Trace(Variable), 0b0001_0010),
+            (Trace(FunctionIn), 0b0010_0010),
             (Trace(FunctionOut), 0b0011_0010),
-            (Trace(State),       0b0100_0010),
-            (Trace(Vfb),         0b0101_0010),
-
-            (NetworkTrace(Ipc),      0b0001_0100),
-            (NetworkTrace(Can),      0b0010_0100),
-            (NetworkTrace(Flexray),  0b0011_0100),
-            (NetworkTrace(Most),     0b0100_0100),
+            (Trace(State), 0b0100_0010),
+            (Trace(Vfb), 0b0101_0010),
+            (NetworkTrace(Ipc), 0b0001_0100),
+            (NetworkTrace(Can), 0b0010_0100),
+            (NetworkTrace(Flexray), 0b0011_0100),
+            (NetworkTrace(Most), 0b0100_0100),
             (NetworkTrace(Ethernet), 0b0101_0100),
-            (NetworkTrace(SomeIp),   0b0110_0100),
+            (NetworkTrace(SomeIp), 0b0110_0100),
             (NetworkTrace(UserDefined(0x7)), 0b0111_0100),
             (NetworkTrace(UserDefined(0x8)), 0b1000_0100),
             (NetworkTrace(UserDefined(0x9)), 0b1001_0100),
@@ -2323,8 +2230,7 @@ mod tests {
             (NetworkTrace(UserDefined(0xD)), 0b1101_0100),
             (NetworkTrace(UserDefined(0xE)), 0b1110_0100),
             (NetworkTrace(UserDefined(0xF)), 0b1111_0100),
-
-            (Control(Request),  0b0001_0110),
+            (Control(Request), 0b0001_0110),
             (Control(Response), 0b0010_0110),
         ];
 
@@ -2335,28 +2241,25 @@ mod tests {
                 assert_eq!(v0.0, v0.0.clone());
 
                 for v1 in &VALUES {
-                    assert_eq!(
-                        v0.0 != v1.0,
-                        v0.1 != v1.1,
-                    );
+                    assert_eq!(v0.0 != v1.0, v0.1 != v1.1,);
                 }
             }
         }
 
         #[test]
         fn debug() {
-            const DBG_VALUES : [(DltMessageType, &str);5] = [
+            const DBG_VALUES: [(DltMessageType, &str); 5] = [
                 (Log(Fatal), "Log(Fatal)"),
                 (Trace(Variable), "Trace(Variable)"),
                 (NetworkTrace(Ipc), "NetworkTrace(Ipc)"),
-                (NetworkTrace(UserDefined(0x7)), "NetworkTrace(UserDefined(7))"),
-                (Control(Request),  "Control(Request)"),
+                (
+                    NetworkTrace(UserDefined(0x7)),
+                    "NetworkTrace(UserDefined(7))",
+                ),
+                (Control(Request), "Control(Request)"),
             ];
             for v in &DBG_VALUES {
-                assert_eq!(
-                    v.1,
-                    format!("{:?}", v.0)
-                );
+                assert_eq!(v.1, format!("{:?}", v.0));
             }
         }
 
@@ -2408,8 +2311,14 @@ mod tests {
             // first run two explicitly to check the error contains the
             // actual value
             use RangeError::NetworkTypekUserDefinedOutsideOfRange;
-            assert_matches!(NetworkTrace(UserDefined(0)).to_byte().unwrap_err(), NetworkTypekUserDefinedOutsideOfRange(0));
-            assert_matches!(NetworkTrace(UserDefined(1)).to_byte().unwrap_err(), NetworkTypekUserDefinedOutsideOfRange(1));
+            assert_matches!(
+                NetworkTrace(UserDefined(0)).to_byte().unwrap_err(),
+                NetworkTypekUserDefinedOutsideOfRange(0)
+            );
+            assert_matches!(
+                NetworkTrace(UserDefined(1)).to_byte().unwrap_err(),
+                NetworkTypekUserDefinedOutsideOfRange(1)
+            );
             // check the rest of the range of invalid values
             for value in 0..7 {
                 assert_matches!(
@@ -2425,5 +2334,4 @@ mod tests {
             }
         }
     }
-
 } // mod tests
