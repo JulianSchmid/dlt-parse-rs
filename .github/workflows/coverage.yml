@@ -14,10 +14,10 @@ jobs:
         override: true
         components: llvm-tools-preview
     - uses: actions-rs/cargo@v1
-        with:
-          toolchain: nightly
-          command: install
-          args: cargo-binutils rustfilt
+      with:
+        toolchain: nightly
+        command: install
+        args: cargo-binutils rustfilt
     - name: Install jq
       run: sudo apt install jq
     - name: Determine coverage
