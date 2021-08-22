@@ -25,3 +25,5 @@ jobs:
       shell: bash
     - name: Codecov
       uses: codecov/codecov-action@v2
+      with:
+        files: target/coverage/export.lcov.txt
