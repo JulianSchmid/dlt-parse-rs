@@ -12,8 +12,10 @@ readme = "README.md"
 exclude = [
     ".gitignore",
     ".travis.yml",
+    ".github/*",
     ".gitlab-ci.yml",
-    ".travis/*"
+    ".travis/*",
+    "appveyor.yml"
 ]
 
 [dependencies]
@@ -26,7 +28,3 @@ proptest = "1.0.0"
 etherparse = "0.9.0"
 structopt = "0.3.22"
 rpcap = "0.3.0"
-
-[badges]
-travis-ci = { repository = "JulianSchmid/dlt-parse-rs", branch = "master" }
-codecov = { repository = "JulianSchmid/dlt-parse-rs", branch = "master", service = "github" }
