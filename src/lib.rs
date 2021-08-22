@@ -635,7 +635,7 @@ impl DltMessageType {
         
         //check ranges
         if let NetworkTrace(UserDefined(user_defined_value)) = *self {
-            if user_defined_value > 0xf || user_defined_value < 7 {
+            if !(7..=0xf).contains(&user_defined_value) {
                 return Err(NetworkTypekUserDefinedOutsideOfRange(user_defined_value));
             }
         }
@@ -644,11 +644,11 @@ impl DltMessageType {
         let (message_type, message_type_info) = match self {
             Log(ref level) => (
                 EXT_MSIN_MSTP_TYPE_LOG,
-                level.clone() as u8
+                *level as u8
             ),
             Trace(ref trace_type) => (
                 EXT_MSIN_MSTP_TYPE_TRACE,
-                trace_type.clone() as u8
+                *trace_type as u8
             ),
             NetworkTrace(ref nw_trace_type) => {
                 use DltNetworkType::*;
@@ -666,7 +666,7 @@ impl DltMessageType {
             },
             Control(ref control_msg_type) => (
                 EXT_MSIN_MSTP_TYPE_CONTROL,
-                control_msg_type.clone() as u8
+                *control_msg_type as u8
             ),
         };
 
@@ -1121,6 +1121,7 @@ impl<'a> SliceIterator<'a> {
 impl<'a> Iterator for SliceIterator<'a> {
     type Item = Result<DltPacketSlice<'a>, ReadError>;
 
+    #[inline]
     fn next(&mut self) -> Option<Result<DltPacketSlice<'a>, ReadError>> {
         if !self.slice.is_empty() {
             //parse
