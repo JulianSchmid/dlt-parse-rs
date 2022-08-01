@@ -1,0 +1,126 @@
+use super::*;
+use proptest::prelude::*;
+use proptest::*;
+
+prop_compose! {
+    pub fn extended_dlt_header_any()(message_info in any::<u8>(),
+                                 number_of_arguments in any::<u8>(),
+                                 application_id in any::<[u8;4]>(),
+                                 context_id in any::<[u8;4]>()) -> DltExtendedHeader
+    {
+        DltExtendedHeader {
+            message_info: message_info,
+            number_of_arguments: number_of_arguments,
+            application_id: application_id,
+            context_id: context_id
+        }
+    }
+}
+
+prop_compose! {
+    pub fn dlt_header_with_payload_any()(
+        payload_length in 4u32..1234 //limit it a bit so that not too much memory is allocated during testing
+    )(
+        is_big_endian in any::<bool>(),
+        version in prop::bits::u8::between(0,3),
+        message_counter in any::<u8>(),
+        ecu_id in any::<Option<u32>>(),
+        session_id in any::<Option<u32>>(),
+        timestamp in any::<Option<u32>>(),
+        extended_header in option::of(extended_dlt_header_any()),
+        payload in proptest::collection::vec(any::<u8>(), payload_length as usize)
+    ) -> (DltHeader, Vec<u8>)
+    {
+        (
+            {
+                let mut header = DltHeader {
+                    is_big_endian,
+                    version,
+                    message_counter,
+                    length: payload.len() as u16,
+                    ecu_id,
+                    session_id,
+                    timestamp,
+                    extended_header
+                };
+                let header_size = header.header_len();
+                header.length = header_size + (payload.len() as u16);
+                header
+            },
+            payload
+        )
+    }
+}
+
+prop_compose! {
+    pub fn dlt_header_any()(is_big_endian in any::<bool>(),
+                        version in prop::bits::u8::between(0,3),
+                        message_counter in any::<u8>(),
+                        length in any::<u16>(),
+                        ecu_id in any::<Option<u32>>(),
+                        session_id in any::<Option<u32>>(),
+                        timestamp in any::<Option<u32>>(),
+                        extended_header in option::of(extended_dlt_header_any())) -> DltHeader
+    {
+        DltHeader {
+            is_big_endian,
+            version,
+            message_counter,
+            length,
+            ecu_id,
+            session_id,
+            timestamp,
+            extended_header
+        }
+    }
+}
+
+pub fn log_level_any() -> impl Strategy<Value = DltLogLevel> {
+    use DltLogLevel::*;
+    prop_oneof![
+        Just(Fatal),
+        Just(Error),
+        Just(Warn),
+        Just(Info),
+        Just(Debug),
+        Just(Verbose),
+    ]
+}
+
+pub fn message_type_any() -> impl Strategy<Value = DltMessageType> {
+    use DltControlMessageType::*;
+    use DltLogLevel::*;
+    use DltMessageType::*;
+    use DltNetworkType::*;
+    use DltTraceType::*;
+    prop_oneof![
+        Just(Log(Fatal)),
+        Just(Log(Error)),
+        Just(Log(Warn)),
+        Just(Log(Info)),
+        Just(Log(Debug)),
+        Just(Log(Verbose)),
+        Just(Trace(Variable)),
+        Just(Trace(FunctionIn)),
+        Just(Trace(FunctionOut)),
+        Just(Trace(State)),
+        Just(Trace(Vfb)),
+        Just(NetworkTrace(Ipc)),
+        Just(NetworkTrace(Can)),
+        Just(NetworkTrace(Flexray)),
+        Just(NetworkTrace(Most)),
+        Just(NetworkTrace(Ethernet)),
+        Just(NetworkTrace(SomeIp)),
+        Just(NetworkTrace(UserDefined(0x7))),
+        Just(NetworkTrace(UserDefined(0x8))),
+        Just(NetworkTrace(UserDefined(0x9))),
+        Just(NetworkTrace(UserDefined(0xA))),
+        Just(NetworkTrace(UserDefined(0xB))),
+        Just(NetworkTrace(UserDefined(0xC))),
+        Just(NetworkTrace(UserDefined(0xD))),
+        Just(NetworkTrace(UserDefined(0xE))),
+        Just(NetworkTrace(UserDefined(0xF))),
+        Just(Control(Request)),
+        Just(Control(Response)),
+    ]
+}
