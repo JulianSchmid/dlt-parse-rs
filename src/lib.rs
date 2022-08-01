@@ -111,14 +111,13 @@ mod proptest_generators;
 #[macro_use]
 extern crate assert_matches;
 
+mod error;
+
 ///Errors that can occure on reading a dlt header.
 #[derive(Debug)]
 pub enum ReadError {
     ///Error if the slice is smaller then dlt length field or minimal size.
-    UnexpectedEndOfSlice {
-        minimum_size: usize,
-        actual_size: usize,
-    },
+    UnexpectedEndOfSlice(error::UnexpectedEndOfSliceError),
     ///Error if the dlt length is smaller then the header the calculated header size based on the flags (+ minimum payload size of 4 bytes/octetets)
     LengthSmallerThenMinimum {
         required_length: usize,
@@ -148,11 +147,8 @@ impl fmt::Display for ReadError {
         use ReadError::*;
 
         match self {
-            UnexpectedEndOfSlice {
-                minimum_size,
-                actual_size,
-            } => {
-                write!(f, "ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", actual_size, minimum_size)
+            UnexpectedEndOfSlice(err) => {
+                write!(f, "ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", err.actual_size, err.minimum_size)
             }
             LengthSmallerThenMinimum {
                 required_length,
@@ -682,10 +678,13 @@ impl<'a> DltPacketSlice<'a> {
     ///Read the dlt header and create a slice containing the dlt header & payload.
     pub fn from_slice(slice: &'a [u8]) -> Result<DltPacketSlice<'_>, ReadError> {
         if slice.len() < 4 {
-            return Err(ReadError::UnexpectedEndOfSlice {
-                minimum_size: 4,
-                actual_size: slice.len(),
-            });
+            return Err(ReadError::UnexpectedEndOfSlice(
+                error::UnexpectedEndOfSliceError{
+                    layer: error::Layer::DltHeader, 
+                    minimum_size: 4,
+                    actual_size: slice.len(),
+                }
+            ));
         }
 
         let length = u16::from_be_bytes(
@@ -696,10 +695,13 @@ impl<'a> DltPacketSlice<'a> {
         ) as usize;
 
         if slice.len() < length {
-            return Err(ReadError::UnexpectedEndOfSlice {
-                minimum_size: length,
-                actual_size: slice.len(),
-            });
+            return Err(ReadError::UnexpectedEndOfSlice(
+                error::UnexpectedEndOfSliceError{
+                    layer: error::Layer::DltHeader,
+                    minimum_size: length,
+                    actual_size: slice.len(),
+                }
+            ));
         }
 
         // calculate the minimum size based on the header flags
@@ -1329,10 +1331,13 @@ mod tests {
                     assert_matches!(
                         DltPacketSlice::from_slice(&buffer[..len]),
                         Err(
-                            ReadError::UnexpectedEndOfSlice{
-                                minimum_size: _,
-                                actual_size: _
-                            }
+                            ReadError::UnexpectedEndOfSlice(
+                                error::UnexpectedEndOfSliceError {
+                                    layer: error::Layer::DltHeader,
+                                    minimum_size: _,
+                                    actual_size: _,
+                                }
+                            )
                         )
                     );
                 }
@@ -1346,10 +1351,13 @@ mod tests {
                 let buffer = [1, 2, 3];
                 assert_matches!(
                     DltPacketSlice::from_slice(&buffer[..]),
-                    Err(ReadError::UnexpectedEndOfSlice {
-                        minimum_size: 4,
-                        actual_size: 3
-                    })
+                    Err(ReadError::UnexpectedEndOfSlice(
+                        error::UnexpectedEndOfSliceError {
+                            layer: error::Layer::DltHeader,
+                            minimum_size: 4,
+                            actual_size: 3,
+                        }
+                    ))
                 );
             }
             //too small for the length
@@ -1360,10 +1368,13 @@ mod tests {
                 header.write(&mut buffer).unwrap();
                 assert_matches!(
                     DltPacketSlice::from_slice(&buffer[..]),
-                    Err(ReadError::UnexpectedEndOfSlice {
-                        minimum_size: 5,
-                        actual_size: 4
-                    })
+                    Err(ReadError::UnexpectedEndOfSlice(
+                        error::UnexpectedEndOfSliceError {
+                            layer: error::Layer::DltHeader,
+                            minimum_size: 5,
+                            actual_size: 4,
+                        }
+                    ))
                 );
             }
         }
@@ -1528,7 +1539,7 @@ mod tests {
                     let o = offsets.first().unwrap();
                     let mut it = SliceIterator::new(&buffer[..(o.1 - 1)]);
 
-                    assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice{minimum_size: _, actual_size: _})));
+                    assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice(_))));
                     //check that the iterator does not continue
                     assert_matches!(it.next(), None);
                 }
@@ -1538,7 +1549,7 @@ mod tests {
                     let it = SliceIterator::new(&buffer[..(o.1 - 1)]);
                     let mut it = it.skip(offsets.len()-1);
 
-                    assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice{minimum_size: _, actual_size: _})));
+                    assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice(_))));
                     //check that the iterator does not continue
                     assert_matches!(it.next(), None);
                 }
@@ -1750,10 +1761,13 @@ mod tests {
         fn debug() {
             use crate::ReadError::*;
             for value in [
-                UnexpectedEndOfSlice {
-                    minimum_size: 1,
-                    actual_size: 2,
-                },
+                UnexpectedEndOfSlice(
+                    error::UnexpectedEndOfSliceError {
+                        minimum_size: 1,
+                        actual_size: 2,
+                        layer: error::Layer::DltHeader,
+                    }
+                ),
                 LengthSmallerThenMinimum {
                     required_length: 3,
                     length: 4,
@@ -1778,7 +1792,16 @@ mod tests {
                 //UnexpectedEndOfSlice
                 assert_eq!(
                     &format!("ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", usize1, usize0),
-                    &format!("{}", UnexpectedEndOfSlice{ minimum_size: usize0, actual_size: usize1})
+                    &format!(
+                        "{}",
+                        UnexpectedEndOfSlice(
+                            error::UnexpectedEndOfSliceError {
+                                layer: error::Layer::DltHeader,
+                                minimum_size: usize0,
+                                actual_size: usize1,
+                            }
+                        )
+                    )
                 );
 
                 //UnexpectedEndOfSlice
@@ -1803,10 +1826,13 @@ mod tests {
             use crate::ReadError::*;
             use std::error::Error;
 
-            assert!(UnexpectedEndOfSlice {
-                minimum_size: 1,
-                actual_size: 2
-            }
+            assert!(UnexpectedEndOfSlice(
+                error::UnexpectedEndOfSliceError {
+                    layer: error::Layer::DltHeader,
+                    minimum_size: 1,
+                    actual_size: 2
+                }
+            )
             .source()
             .is_none());
             assert!(LengthSmallerThenMinimum {
