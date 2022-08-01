@@ -111,7 +111,8 @@ mod proptest_generators;
 #[macro_use]
 extern crate assert_matches;
 
-mod error;
+pub mod error;
+pub mod verbose;
 
 ///Errors that can occure on reading a dlt header.
 #[derive(Debug)]
