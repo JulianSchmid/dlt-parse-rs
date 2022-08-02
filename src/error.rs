@@ -40,7 +40,7 @@ pub enum VerboseDecodeError {
     /// a verbose value.
     UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
 
-    /// Error when decoding an string (can also be variable names or units).
+    /// Error when decoding an string (can also occur for variable names or unit names).
     Utf8(std::str::Utf8Error),
 
     /// Error in case value decoding is not yet supported.
@@ -52,5 +52,30 @@ pub enum VerboseDecodeError {
 impl From<std::str::Utf8Error> for VerboseDecodeError {
     fn from(err: std::str::Utf8Error) -> VerboseDecodeError {
         VerboseDecodeError::Utf8(err)
+    }
+}
+
+/// Error that occurs when another pattern then
+/// [`StorageHeader::PATTERN_AT_START`] is encountered at the start
+/// when parsing a StorageHeader.
+#[derive(Debug, PartialEq, Eq)]
+pub struct StorageHeaderStartPatternError {
+    /// Encountered pattern at the start.
+    pub actual_pattern: [u8;4],
+}
+
+impl std::fmt::Display for StorageHeaderStartPatternError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f, "Error when parsing DLT storage header. Expected pattern {:?} at start but got {:?}",
+            super::StorageHeader::PATTERN_AT_START,
+            self.actual_pattern
+        )
+    }
+}
+
+impl std::error::Error for StorageHeaderStartPatternError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
     }
 }
