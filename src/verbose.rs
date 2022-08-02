@@ -25,7 +25,7 @@ pub enum VerboseValue<'a> {
 }
 
 impl<'a> VerboseValue<'a> {
-    pub fn from_slice(slice: &'a [u8], is_big_endian: bool) -> Result<VerboseValue<'a>, error::VerboseDecodeError> {
+    pub fn from_slice(slice: &'a [u8], is_big_endian: bool) -> Result<(VerboseValue<'a>, &'a [u8]), error::VerboseDecodeError> {
 
         use error::{UnexpectedEndOfSliceError, VerboseDecodeError::*};
         use VerboseValue::*;
@@ -108,10 +108,13 @@ impl<'a> VerboseValue<'a> {
                     InvalidBoolValue(value)
                 ),
             };
-            Ok(Bool(BoolValue{
-                name,
-                value,
-            }))
+            Ok((
+                Bool(BoolValue{
+                    name,
+                    value,
+                }),
+                slicer.rest
+            ))
         } else if 0 != type_info[0] & SIGNED_FLAG_0 {
             // verify no conflicting information is present
             // TODO implement
@@ -157,10 +160,13 @@ impl<'a> VerboseValue<'a> {
                 None
             };
 
-            Ok(Raw(RawValue{
-                name,
-                data: slicer.read_raw(len)?,
-            }))
+            Ok((
+                Raw(RawValue{
+                    name,
+                    data: slicer.read_raw(len)?,
+                }),
+                slicer.rest
+            ))
         } else if 0 != type_info[1] & TRACE_INFO_FLAG_1 {
             // verify no conflicting information is present
             // TODO implement
