@@ -1150,10 +1150,10 @@ impl StorageHeader {
             )
         } else {
             Ok(StorageHeader{
-                timestamp_seconds: u32::from_be_bytes([
+                timestamp_seconds: u32::from_le_bytes([
                     bytes[4], bytes[5], bytes[6], bytes[7]
                 ]),
-                timestamp_microseconds: u32::from_be_bytes([
+                timestamp_microseconds: u32::from_le_bytes([
                     bytes[8], bytes[9], bytes[10], bytes[11]
                 ]),
                 ecu_id: [
