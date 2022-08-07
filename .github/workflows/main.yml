@@ -9,14 +9,55 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        build:
+        - linux-stable
+        - linux-stable-32
+        - stable-mips
+        - beta
+        - nightly
+        - macos
+        - win-msvc
+        - win-gnu
+        include:
+        - build: linux-stable
+          os: ubuntu-latest
+          rust: stable
+        - build: linux-32bit-stable
+          os: ubuntu-latest
+          rust: stable
+          target: i686-unknown-linux-gnu
+        - build: linux-beta
+          os: ubuntu-latest
+          rust: beta
+        - build: linux-nightly
+          os: ubuntu-latest
+          rust: nightly
+        - build: macos
+          os: macos-stable
+          rust: stable
+        - build: win-msvc-stable
+          os: windows-latest
+          rust: stable
+        - build: win-gnu-stable
+          os: windows-latest
+          rust: stable-x86_64-gnu
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+
+    - uses: actions/checkout@v2
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.rust }}
+        override: true
+
+    - name: Use Cross
+      if: matrix.target != ''
+      run: |
+        cargo install --bins --git https://github.com/cross-rs/cross --tag v0.2.1
+        echo "CARGO=cross" >> $GITHUB_ENV
+        echo "TARGET=--target ${{ matrix.target }}" >> $GITHUB_ENV
+
+    - uses: actions-rs/cargo@v1
+      with:
+        command: test
