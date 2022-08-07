@@ -2,6 +2,9 @@ use super::*;
 use proptest::prelude::*;
 use proptest::*;
 
+/// Maximum size of payload when testing
+const TEST_MAX_PAYLOAD_SIZE: usize = 1234;
+
 prop_compose! {
     pub fn extended_dlt_header_any()(message_info in any::<u8>(),
                                  number_of_arguments in any::<u8>(),
@@ -19,16 +22,16 @@ prop_compose! {
 
 prop_compose! {
     pub fn dlt_header_with_payload_any()(
-        payload_length in 4u32..1234 //limit it a bit so that not too much memory is allocated during testing
+        payload_length in 4usize..TEST_MAX_PAYLOAD_SIZE
     )(
         is_big_endian in any::<bool>(),
         version in prop::bits::u8::between(0,3),
         message_counter in any::<u8>(),
-        ecu_id in any::<Option<u32>>(),
+        ecu_id in any::<Option<[u8;4]>>(),
         session_id in any::<Option<u32>>(),
         timestamp in any::<Option<u32>>(),
         extended_header in option::of(extended_dlt_header_any()),
-        payload in proptest::collection::vec(any::<u8>(), payload_length as usize)
+        payload in proptest::collection::vec(any::<u8>(), payload_length)
     ) -> (DltHeader, Vec<u8>)
     {
         (
@@ -57,7 +60,7 @@ prop_compose! {
                         version in prop::bits::u8::between(0,3),
                         message_counter in any::<u8>(),
                         length in any::<u16>(),
-                        ecu_id in any::<Option<u32>>(),
+                        ecu_id in any::<Option<[u8;4]>>(),
                         session_id in any::<Option<u32>>(),
                         timestamp in any::<Option<u32>>(),
                         extended_header in option::of(extended_dlt_header_any())) -> DltHeader

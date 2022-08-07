@@ -1,5 +1,8 @@
 use super::*;
 
+use core::slice;
+use core::str;
+
 #[derive(Debug, PartialEq)]
 pub enum VerboseValue<'a> {
     Bool(BoolValue<'a>),
@@ -69,7 +72,7 @@ impl<'a> VerboseValue<'a> {
         let mut slicer = FieldSlicer{
             // SAFETY: Length of at least 4 verified in the if at the beginning.
             rest: unsafe {
-                std::slice::from_raw_parts(slice.as_ptr().add(4), slice.len() - 4)
+                slice::from_raw_parts(slice.as_ptr().add(4), slice.len() - 4)
             },
             offset: 4,
         };
@@ -200,14 +203,14 @@ pub struct BoolValue<'a> {
 pub struct StringValue<'a> {
     // TODO
     // temp until actually implemented
-    pub dummy: std::marker::PhantomData<&'a u8>,
+    pub dummy: core::marker::PhantomData<&'a u8>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct TraceInfoValue<'a> {
     // TODO
     // temp until actually implemented
-    pub dummy: std::marker::PhantomData<&'a u8>,
+    pub dummy: core::marker::PhantomData<&'a u8>,
 }
 
 /// Verbose 8 bit signed integer.
@@ -336,14 +339,14 @@ pub struct F128Value<'a> {
 pub struct ArrayValue<'a> {
     // TODO
     // temp until actually implemented
-    pub dummy: std::marker::PhantomData<&'a u8>,
+    pub dummy: core::marker::PhantomData<&'a u8>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct StructValue<'a> {
     // TODO
     // temp until actually implemented
-    pub dummy: std::marker::PhantomData<&'a u8>,
+    pub dummy: core::marker::PhantomData<&'a u8>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -382,7 +385,7 @@ impl<'a> FieldSlicer<'a> {
         // move slice
         // SAFETY: Length of at least 1 verified in the previous if.
         self.rest = unsafe {
-            std::slice::from_raw_parts(
+            slice::from_raw_parts(
                 self.rest.as_ptr().add(1),
                 self.rest.len() - 1
             )
@@ -416,7 +419,7 @@ impl<'a> FieldSlicer<'a> {
         // move slice
         // SAFETY: Length of at least 2 verified in the previous if.
         self.rest = unsafe {
-            std::slice::from_raw_parts(
+            slice::from_raw_parts(
                 self.rest.as_ptr().add(2),
                 self.rest.len() - 2
             )
@@ -441,7 +444,7 @@ impl<'a> FieldSlicer<'a> {
         let len = usize::from(self.read_u16(is_big_endian)?);
 
         // try decoding the variable name
-        Ok(std::str::from_utf8(self.read_raw(len)?)?)
+        Ok(str::from_utf8(self.read_raw(len)?)?)
     }
 
     fn read_raw(&mut self, len: usize) -> Result<&'a [u8], error::VerboseDecodeError> {
@@ -460,7 +463,7 @@ impl<'a> FieldSlicer<'a> {
 
         // SAFETY: Slice length checked above to be at least len
         let result = unsafe {
-            std::slice::from_raw_parts(
+            slice::from_raw_parts(
                 self.rest.as_ptr(),
                 len
             )
@@ -468,7 +471,7 @@ impl<'a> FieldSlicer<'a> {
 
         // move rest & offset
         self.rest = unsafe {
-            std::slice::from_raw_parts(
+            slice::from_raw_parts(
                 self.rest.as_ptr().add(len),
                 self.rest.len() - len
             )
