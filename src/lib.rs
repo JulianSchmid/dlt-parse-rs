@@ -100,26 +100,12 @@
 
 #![no_std]
 
-use core::fmt;
-use core::slice::from_raw_parts;
-use arrayvec::ArrayVec;
-
 #[cfg(any(feature = "std", test))]
 extern crate std;
-
-#[cfg(feature = "std")]
-use std::io;
-
 #[cfg(test)]
 extern crate alloc;
 #[cfg(test)]
-use alloc::{format, vec, vec::Vec};
-
-#[cfg(test)]
 extern crate proptest;
-#[cfg(test)]
-mod proptest_generators;
-
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
@@ -128,134 +114,18 @@ pub mod error;
 pub mod verbose;
 pub mod storage;
 
-///Errors that can occure on reading a dlt header.
+use core::slice::from_raw_parts;
+use arrayvec::ArrayVec;
 #[cfg(feature = "std")]
-#[derive(Debug)]
-pub enum ReadError {
-    /// Error if the slice is smaller then dlt length field or minimal size.
-    UnexpectedEndOfSlice(error::UnexpectedEndOfSliceError),
+use std::io;
+#[cfg(test)]
+use alloc::{format, vec, vec::Vec};
+#[cfg(test)]
+mod proptest_generators;
 
-    /// Error if the dlt length is smaller then the header the calculated header size based on the flags (+ minimum payload size of 4 bytes/octetets)
-    DltMessageLengthTooSmall(error::DltMessageLengthTooSmallError),
 
-    StorageHeaderStartPattern(error::StorageHeaderStartPatternError),
-    
-    /// Standard io error.
-    IoError(io::Error),
-}
 
-#[cfg(feature = "std")]
-impl From<error::StorageHeaderStartPatternError> for ReadError {
-    fn from(err: error::StorageHeaderStartPatternError) -> ReadError {
-        ReadError::StorageHeaderStartPattern(err)
-    }
-}
-
-#[cfg(feature = "std")]
-impl From<io::Error> for ReadError {
-    fn from(err: io::Error) -> ReadError {
-        ReadError::IoError(err)
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for ReadError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use ReadError::*;
-        match self {
-            UnexpectedEndOfSlice(ref err) => Some(err),
-            DltMessageLengthTooSmall(ref err) => Some(err),
-            StorageHeaderStartPattern(ref err) => Some(err),
-            IoError(ref err) => Some(err),
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl fmt::Display for ReadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use ReadError::*;
-
-        match self {
-            UnexpectedEndOfSlice(err) => {
-                write!(f, "ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", err.actual_size, err.minimum_size)
-            }
-            DltMessageLengthTooSmall(err) => err.fmt(f),
-            StorageHeaderStartPattern(err) => err.fmt(f),
-            IoError(err) => err.fmt(f),
-        }
-    }
-}
-
-///Errors that can occur when serializing a dlt header.
-#[cfg(feature = "std")]
-#[derive(Debug)]
-pub enum WriteError {
-    VersionTooLarge(u8),
-    IoError(io::Error),
-}
-
-#[cfg(feature = "std")]
-impl From<io::Error> for WriteError {
-    fn from(err: io::Error) -> WriteError {
-        WriteError::IoError(err)
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for WriteError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            WriteError::IoError(ref err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl fmt::Display for WriteError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use WriteError::*;
-
-        match self {
-            VersionTooLarge(version) => {
-                write!(
-                    f,
-                    "WriteError: DLT version {} is larger then the maximum supported value of {}",
-                    version, MAX_VERSION
-                )
-            }
-            IoError(err) => err.fmt(f),
-        }
-    }
-}
-
-/// Error that can occur when an out of range value is passed to a function.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum RangeError {
-    /// Error if the user defined value is outside the range of 7-15
-    NetworkTypekUserDefinedOutsideOfRange(u8),
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for RangeError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
-impl fmt::Display for RangeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use RangeError::*;
-
-        match self {
-            NetworkTypekUserDefinedOutsideOfRange(value) => {
-                write!(f, "RangeError: Message type info field user defined value of {} outside of the allowed range of 7-15.", value)
-            }
-        }
-    }
-}
-
+/// Maximum value that can be encoded in the DLT header version field (has only 3 bits).
 const MAX_VERSION: u8 = 0b111;
 
 const EXTDENDED_HEADER_FLAG: u8 = 0b1;
@@ -289,6 +159,10 @@ pub struct DltHeader {
 
 impl DltHeader {
 
+    /// Versions of the DLT header that can be decoded by the decoding
+    /// functions in this library.
+    const SUPPORTED_DECODABLE_VERSIONS: [u8;1] = [1];
+
     /// The maximum size in bytes/octets a V1 DLT header can be when encoded.
     ///
     /// The number is calculated by adding
@@ -300,6 +174,190 @@ impl DltHeader {
     /// * 10 bytes for the extended header
     pub const MAX_SERIALIZED_SIZE: usize = 4 + 4 + 4 + 4 + 10;
 
+    pub fn from_slice(slice: &[u8]) -> Result<DltHeader, error::PacketSliceError> {
+        use error::{PacketSliceError::*, *};
+
+        if slice.len() < 4 {
+            return Err(UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError{
+                    layer: error::Layer::DltHeader, 
+                    minimum_size: 4,
+                    actual_size: slice.len(),
+                }
+            ));
+        }
+
+        // SAFETY:
+        // Safe as it is checked beforehand that the slice
+        // has at least 4 bytes.
+        let header_type = unsafe { *slice.get_unchecked(0) };
+
+        // check version
+        let version = (header_type >> 5) & MAX_VERSION;
+        if 1 != version {
+            return Err(
+                UnsupportedDltVersion(
+                    UnsupportedDltVersionError{
+                        unsupported_version: version,
+                    }
+                )
+            );
+        }
+
+        // calculate the minimum size based on the header flags
+        // the header size has at least 4 bytes
+        let header_len = if 0 != header_type & ECU_ID_FLAG {
+            4 + 4
+        } else {
+            4
+        };
+
+        let header_len = if 0 != header_type & SESSION_ID_FLAG {
+            header_len + 4
+        } else {
+            header_len
+        };
+
+        let header_len = if 0 != header_type & TIMESTAMP_FLAG {
+            header_len + 4
+        } else {
+            header_len
+        };
+
+        let header_len = if 0 != header_type & EXTDENDED_HEADER_FLAG {
+            header_len + 10
+        } else {
+            header_len
+        };
+
+        // check that enough data based on the header size is available
+        if slice.len() < header_len {
+            return Err(UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError {
+                    layer: error::Layer::DltHeader, 
+                    minimum_size: header_len,
+                    actual_size: slice.len(),
+                }
+            ));
+        }
+
+        // SAFETY: Safe as the slice lenght has been verfied to be long
+        // enough for the optional header parts.
+        let mut next_option_ptr = unsafe {
+            slice.as_ptr().add(4)
+        };
+
+        let ecu_id = if 0 != header_type & ECU_ID_FLAG {
+            // SAFETY: Safe as header_len was extended by 4 if the ECU_ID_FLAG
+            // is set & the slice len is verfied to be at least as long as
+            // the header_len.
+            unsafe {
+                let ecu_id_ptr = next_option_ptr;
+                next_option_ptr = next_option_ptr.add(4);
+                Some([
+                    *ecu_id_ptr,
+                    *ecu_id_ptr.add(1),
+                    *ecu_id_ptr.add(2),
+                    *ecu_id_ptr.add(3),
+                ])
+            }
+        } else {
+            None
+        };
+
+        let session_id = if 0 != header_type & SESSION_ID_FLAG {
+            // SAFETY: Safe as header_len was extended by 4 if the SESSION_ID_FLAG
+            // is set & the slice len is verfied to be at least as long as
+            // the header_len.
+            unsafe {
+                let session_id_ptr = next_option_ptr;
+                next_option_ptr = next_option_ptr.add(4);
+                Some(u32::from_be_bytes([
+                    *session_id_ptr,
+                    *session_id_ptr.add(1),
+                    *session_id_ptr.add(2),
+                    *session_id_ptr.add(3)
+                ]))
+            }
+        } else {
+            None
+        };
+
+        let timestamp = if 0 != header_type & TIMESTAMP_FLAG {
+            // SAFETY: Safe as header_len was extended by 4 if the TIMESTAMP_FLAG
+            // is set & the slice len is verfied to be at least as long as
+            // the header_len.
+            unsafe {
+                let timestamp_id_ptr = next_option_ptr;
+                next_option_ptr = next_option_ptr.add(4);
+                Some(u32::from_be_bytes([
+                    *timestamp_id_ptr,
+                    *timestamp_id_ptr.add(1),
+                    *timestamp_id_ptr.add(2),
+                    *timestamp_id_ptr.add(3)
+                ]))
+            }
+        } else {
+            None
+        };
+
+        let extended_header = if 0 != header_type & EXTDENDED_HEADER_FLAG {
+            Some(DltExtendedHeader {
+                // SAFETY: Safe as header_len was extended by 4 if the EXTDENDED_HEADER_FLAG
+                // is set & the slice len is verfied to be at least as long as
+                // the header_len.
+                message_info: unsafe { *next_option_ptr },
+                number_of_arguments: unsafe { *next_option_ptr.add(1) },
+                application_id: unsafe {
+                    [
+                        *next_option_ptr.add(2),
+                        *next_option_ptr.add(3),
+                        *next_option_ptr.add(4),
+                        *next_option_ptr.add(5),
+                    ]
+                },
+                context_id: unsafe {
+                    [
+                        *next_option_ptr.add(6),
+                        *next_option_ptr.add(7),
+                        *next_option_ptr.add(8),
+                        *next_option_ptr.add(9),
+                    ]
+                },
+            })
+        } else {
+            None
+        };
+
+        Ok(DltHeader {
+            ///If true the payload is encoded in big endian. This does not influence the fields of the dlt header, which is always encoded in big endian.
+            is_big_endian: 0 != header_type & BIG_ENDIAN_FLAG,
+            version,
+            // SAFETY:
+            // Safe, as the slice length was checked at the start of the function
+            // to be at least 4.
+            message_counter: unsafe {
+                *slice.get_unchecked(1)
+            },
+            length: u16::from_be_bytes(
+                // SAFETY:
+                // Safe, as the slice length was checked at the start of the function
+                // to be at least 4.
+                unsafe {
+                    [*slice.get_unchecked(2), *slice.get_unchecked(3)]
+                }
+            ),
+            ecu_id,
+            session_id,
+            timestamp,
+            extended_header,
+        })
+    }
+
+    /// Encodes the header to the on the wire format.
+    ///
+    /// An error is returned if the version present in the header
+    /// is bigger then can be encoded in a 3 bit value ([`MAX_VERSION`]).
     pub fn to_bytes(&self) -> Result<ArrayVec<u8, { DltHeader::MAX_SERIALIZED_SIZE }>, error::DltHeaderEncodeError> {
         use error::DltHeaderEncodeError::*;
 
@@ -399,7 +457,7 @@ impl DltHeader {
 
     ///Deserialize a DltHeader & TpHeader from the given reader.
     #[cfg(feature = "std")]
-    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<DltHeader, ReadError> {
+    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<DltHeader, error::ReadError> {
         // read the standard header that is always present
         let standard_header_start = {
             let mut standard_header_start: [u8; 4] = [0; 4];
@@ -462,10 +520,12 @@ impl DltHeader {
 
     ///Serializes the header to the given writer.
     #[cfg(feature = "std")]
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), error::WriteError> {
+        use error::WriteError::*;
+
         //pre check if the ranges of all fields are valid
         if self.version > MAX_VERSION {
-            return Err(WriteError::VersionTooLarge(self.version));
+            return Err(VersionTooLarge(self.version));
         }
 
         {
@@ -591,7 +651,7 @@ impl DltExtendedHeader {
         message_type: DltMessageType,
         application_id: [u8; 4],
         context_id: [u8; 4],
-    ) -> Result<DltExtendedHeader, RangeError> {
+    ) -> Result<DltExtendedHeader, error::RangeError> {
         Ok(DltExtendedHeader {
             message_info: message_type.to_byte()?,
             number_of_arguments: 0,
@@ -624,7 +684,7 @@ impl DltExtendedHeader {
 
     ///Set message type info and based on that the message type.
     #[inline]
-    pub fn set_message_type(&mut self, value: DltMessageType) -> Result<(), RangeError> {
+    pub fn set_message_type(&mut self, value: DltMessageType) -> Result<(), error::RangeError> {
         let encoded = value.to_byte()?;
 
         //unset old message type & set the new one
@@ -770,10 +830,10 @@ impl DltMessageType {
     }
 
     ///Set message type info and based on that the message type.
-    pub fn to_byte(&self) -> Result<u8, RangeError> {
+    pub fn to_byte(&self) -> Result<u8, error::RangeError> {
         use DltMessageType::*;
         use DltNetworkType::UserDefined;
-        use RangeError::NetworkTypekUserDefinedOutsideOfRange;
+        use error::RangeError::NetworkTypekUserDefinedOutsideOfRange;
 
         //check ranges
         if let NetworkTrace(UserDefined(user_defined_value)) = *self {
@@ -1244,11 +1304,85 @@ mod tests {
     use super::*;
 
     #[cfg(feature = "std")]
-    use std::{vec::Vec, io::Cursor, io::Write};
+    use std::{vec::Vec, io::Cursor};
 
     mod dlt_header {
 
         use super::*;
+
+        proptest!{
+            #[test]
+            fn to_bytes_from_slice(
+                ref dlt_header in dlt_header_any(),
+                too_big_dlt_version in 0b1000..u8::MAX,
+                unsupported_version in (0u8..0b111u8).prop_filter(
+                    "version must be unknown",
+                    |v| !DltHeader::SUPPORTED_DECODABLE_VERSIONS.iter().any(|&x| v == &x)
+                )
+            ) {
+                use error::PacketSliceError::*;
+                use error::DltHeaderEncodeError::*;
+                // ok case
+                {
+                    let mut d = dlt_header.clone();
+                    d.version = 1;
+                    let bytes = d.to_bytes().unwrap();
+                    assert_eq!(
+                        d,
+                        DltHeader::from_slice(&bytes[..]).unwrap()
+                    );
+                }
+                // to_bytes version error
+                {
+                    let mut d = dlt_header.clone();
+                    d.version = too_big_dlt_version;
+                    assert_eq!(
+                        VersionTooLarge(too_big_dlt_version),
+                        d.to_bytes().unwrap_err()
+                    );
+                }
+                // from_slice unexpected end of slice error
+                {
+                    for l in 0..dlt_header.header_len() as usize {
+                        let mut d = dlt_header.clone();
+                        d.version = 1;
+                        let bytes = d.to_bytes().unwrap();
+                        
+                        assert_eq!(
+                            UnexpectedEndOfSlice(
+                                error::UnexpectedEndOfSliceError{
+                                    minimum_size: if l < 4 {
+                                        4
+                                    } else {
+                                        d.header_len() as usize
+                                    },
+                                    actual_size: l,
+                                    layer: error::Layer::DltHeader,
+                                }
+                            ),
+                            DltHeader::from_slice(&bytes[..l]).unwrap_err()
+                        );
+                    }
+                }
+                // from_slice unsupported version
+                {
+                    let mut d = dlt_header.clone();
+                    d.version = 1;
+                    let mut bytes = d.to_bytes().unwrap();
+                    // modify the version in the encoded version
+                    // directly
+                    bytes[0] = (bytes[0] & 0b0001_1111) | ((unsupported_version << 5) & 0b1110_0000);
+                    assert_eq!(
+                        UnsupportedDltVersion(
+                            error::UnsupportedDltVersionError{
+                                unsupported_version,
+                            }
+                        ),
+                        DltHeader::from_slice(&bytes[..]).unwrap_err()
+                    );
+                }
+            }
+        }
 
         proptest! {
             #[test]
@@ -1270,7 +1404,7 @@ mod tests {
                 dlt_header.write(&mut buffer).unwrap();
                 let reduced_len = buffer.len() - 1;
                 let mut reader = Cursor::new(&buffer[..reduced_len]);
-                assert_matches!(DltHeader::read(&mut reader), Err(ReadError::IoError(_)));
+                assert_matches!(DltHeader::read(&mut reader), Err(error::ReadError::IoError(_)));
             }
         }
 
@@ -1282,7 +1416,7 @@ mod tests {
                 let mut input = dlt_header.clone();
                 input.version = version;
                 let mut buffer = Vec::new();
-                assert_matches!(input.write(&mut buffer), Err(WriteError::VersionTooLarge(_)));
+                assert_matches!(input.write(&mut buffer), Err(error::WriteError::VersionTooLarge(_)));
             }
         }
 
@@ -1296,7 +1430,7 @@ mod tests {
                 for len in 0..header.header_len() {
                     buffer.resize(len.into(), 0);
                     let mut writer = Cursor::new(&mut buffer[..]);
-                    assert_matches!(header.write(&mut writer), Err(WriteError::IoError(_)));
+                    assert_matches!(header.write(&mut writer), Err(error::WriteError::IoError(_)));
                 }
             }
         }
@@ -1816,7 +1950,7 @@ mod tests {
                 {
                     use DltMessageType::NetworkTrace;
                     use DltNetworkType::UserDefined;
-                    use RangeError::NetworkTypekUserDefinedOutsideOfRange;
+                    use error::RangeError::NetworkTypekUserDefinedOutsideOfRange;
 
                     let result = DltExtendedHeader::new_non_verbose(
                         NetworkTrace(UserDefined(invalid_user_defined)),
@@ -1928,7 +2062,7 @@ mod tests {
             //check set out of range error
             {
                 use DltLogLevel::Fatal;
-                use RangeError::*;
+                use error::RangeError::*;
                 for i in 0x10..=0xff {
                     let mut header = DltExtendedHeader::new_non_verbose_log(
                         Fatal,
@@ -1943,222 +2077,6 @@ mod tests {
             }
         }
     } // mod dlt_extended_header
-
-    /// Tests for `ReadError` methods
-    #[cfg(feature = "std")]
-    mod read_error {
-
-        use super::*;
-        #[test]
-        fn debug() {
-            use crate::ReadError::*;
-
-            {
-                let c = error::UnexpectedEndOfSliceError {
-                    minimum_size: 1,
-                    actual_size: 2,
-                    layer: error::Layer::DltHeader,
-                };
-                assert_eq!(
-                    format!("UnexpectedEndOfSlice({:?})", c),
-                    format!("{:?}", UnexpectedEndOfSlice(c))
-                );
-            }
-            {
-                let c = error::DltMessageLengthTooSmallError{
-                    required_length: 3,
-                    actual_length: 4,
-                };
-                assert_eq!(
-                    format!("DltMessageLengthTooSmall({:?})", c),
-                    format!("{:?}", DltMessageLengthTooSmall(c))
-                );
-            }
-            {
-                let c = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
-                assert_eq!(
-                    format!("IoError({:?})", c),
-                    format!("{:?}", IoError(c))
-                );
-            }
-        }
-
-        proptest! {
-            #[test]
-            fn display(
-                usize0 in any::<usize>(),
-                usize1 in any::<usize>(),
-            ) {
-
-                use ReadError::*;
-
-                //UnexpectedEndOfSlice
-                assert_eq!(
-                    &format!("ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", usize1, usize0),
-                    &format!(
-                        "{}",
-                        UnexpectedEndOfSlice(
-                            error::UnexpectedEndOfSliceError {
-                                layer: error::Layer::DltHeader,
-                                minimum_size: usize0,
-                                actual_size: usize1,
-                            }
-                        )
-                    )
-                );
-
-                // DltMessageLengthTooSmall
-                {
-                    let c = error::DltMessageLengthTooSmallError{
-                        required_length: usize0,
-                        actual_length: usize1
-                    };
-                    assert_eq!(
-                        &format!("{}", c),
-                        &format!("{}", DltMessageLengthTooSmall(c))
-                    );
-                }
-
-                //IoError
-                {
-                    let custom_error = std::io::Error::new(std::io::ErrorKind::Other, "some error");
-                    assert_eq!(
-                        &format!("{}", custom_error),
-                        &format!("{}", IoError(custom_error))
-                    );
-                }
-            }
-        }
-
-        #[test]
-        fn source() {
-            use crate::ReadError::*;
-            use std::error::Error;
-
-            assert!(
-                UnexpectedEndOfSlice(
-                    error::UnexpectedEndOfSliceError {
-                        layer: error::Layer::DltHeader,
-                        minimum_size: 1,
-                        actual_size: 2
-                    }
-                )
-                .source()
-                .is_some());
-            assert!(
-                DltMessageLengthTooSmall(
-                    error::DltMessageLengthTooSmallError {
-                        required_length: 3,
-                        actual_length: 4
-                    }
-                )
-                .source()
-                .is_some()
-            );
-            assert!(
-                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                .source()
-                .is_some()
-            );
-        }
-    } // mod read_error
-
-    /// Tests for `WriteError` methods
-    #[cfg(feature = "std")]
-    mod write_error {
-
-        use super::*;
-
-        #[test]
-        fn debug() {
-            use WriteError::*;
-            assert_eq!(
-                "VersionTooLarge(123)",
-                format!("{:?}", VersionTooLarge(123))
-            );
-        }
-
-        proptest! {
-            #[test]
-            fn display(version in any::<u8>()) {
-                use WriteError::*;
-
-                // VersionTooLarge
-                assert_eq!(
-                    &format!("WriteError: DLT version {} is larger then the maximum supported value of {}", version, MAX_VERSION),
-                    &format!("{}", VersionTooLarge(version))
-                );
-
-                //IoError
-                {
-                    let custom_error = std::io::Error::new(std::io::ErrorKind::Other, "some error");
-                    assert_eq!(
-                        &format!("{}", custom_error),
-                        &format!("{}", IoError(custom_error))
-                    );
-                }
-            }
-        }
-
-        #[test]
-        fn source() {
-            use std::error::Error;
-            use WriteError::*;
-
-            assert!(VersionTooLarge(123).source().is_none());
-            assert!(
-                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                    .source()
-                    .is_some()
-            );
-        }
-    } // mod write_error
-
-    mod range_error {
-
-        use super::*;
-
-        #[test]
-        fn clone_eq() {
-            use RangeError::*;
-            let v = NetworkTypekUserDefinedOutsideOfRange(123);
-            assert_eq!(v, v.clone());
-        }
-
-        #[test]
-        fn debug() {
-            use RangeError::*;
-            let v = NetworkTypekUserDefinedOutsideOfRange(123);
-            assert_eq!(
-                "NetworkTypekUserDefinedOutsideOfRange(123)",
-                format!("{:?}", v)
-            );
-        }
-
-        proptest! {
-            #[test]
-            fn display(value in any::<u8>()) {
-                use RangeError::*;
-
-                // NetworkTypekUserDefinedOutsideOfRange
-                assert_eq!(
-                    &format!("RangeError: Message type info field user defined value of {} outside of the allowed range of 7-15.", value),
-                    &format!("{}", NetworkTypekUserDefinedOutsideOfRange(value))
-                );
-            }
-        }
-
-        #[test]
-        #[cfg(feature = "std")]
-        fn source() {
-            use std::error::Error;
-            use RangeError::*;
-
-            assert!(NetworkTypekUserDefinedOutsideOfRange(123)
-                .source()
-                .is_none());
-        }
-    } // mod range_error
 
     mod dlt_log_level {
         use super::*;
@@ -2431,7 +2349,7 @@ mod tests {
             // invalid user defined errors
             // first run two explicitly to check the error contains the
             // actual value
-            use RangeError::NetworkTypekUserDefinedOutsideOfRange;
+            use error::RangeError::NetworkTypekUserDefinedOutsideOfRange;
             assert_matches!(
                 NetworkTrace(UserDefined(0)).to_byte().unwrap_err(),
                 NetworkTypekUserDefinedOutsideOfRange(0)
