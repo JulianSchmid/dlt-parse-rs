@@ -1,4 +1,4 @@
-name: cargo build & test
+name: Main
 
 on:
   pull_request:
@@ -73,25 +73,25 @@ jobs:
     - name: cargo build
       uses: actions-rs/cargo@v1
       with:
-        use_cross: ${{ matrix.use_cross }}
+        use-cross: ${{ matrix.use_cross }}
         command: build
 
     - name: cargo test
       uses: actions-rs/cargo@v1
       with:
-        use_cross: ${{ matrix.use_cross }}
+        use-cross: ${{ matrix.use_cross }}
         command: test
 
     - name: cargo build --no-default-features
       uses: actions-rs/cargo@v1
       with:
-        use_cross: ${{ matrix.use_cross }}
+        use-cross: ${{ matrix.use_cross }}
         command: build
         args: --no-default-features
 
     - name: cargo test --no-default-features
       uses: actions-rs/cargo@v1
       with:
-        use_cross: ${{ matrix.use_cross }}
+        use-cross: ${{ matrix.use_cross }}
         command: test
         args: --no-default-features
