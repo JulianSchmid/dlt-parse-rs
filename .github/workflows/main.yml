@@ -1,23 +1,28 @@
 name: Main 
 
-on: [ push, pull_request ]
+on:
+  pull_request:
+  push:
+    branches:
+    - master
 
 jobs:
-
   test:
     name: cargo test
+    env:
+      CARGO: cargo
+      TARGET:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         build:
         - linux-stable
-        - linux-stable-32
-        - stable-mips
-        - beta
-        - nightly
-        - macos
-        - win-msvc
-        - win-gnu
+        - linux-32bit-stable
+        - linux-beta
+        - linux-nightly
+        - macos-stable
+        - win-msvc-stable
+        - win-gnu-stable
         include:
         - build: linux-stable
           os: ubuntu-latest
@@ -32,8 +37,8 @@ jobs:
         - build: linux-nightly
           os: ubuntu-latest
           rust: nightly
-        - build: macos
-          os: macos-stable
+        - build: macos-stable
+          os: macos-latest
           rust: stable
         - build: win-msvc-stable
           os: windows-latest
