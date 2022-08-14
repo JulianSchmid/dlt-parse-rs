@@ -63,35 +63,30 @@ jobs:
         toolchain: ${{ matrix.rust }}
         override: true
 
-    - name: Use Cross
-      if: matrix.use_cross
-      run: |
-        cargo install --bins --git https://github.com/cross-rs/cross --tag v0.2.1
-        echo "CARGO=cross" >> $GITHUB_ENV
-        echo "TARGET=--target ${{ matrix.target }}" >> $GITHUB_ENV
-
     - name: cargo build
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.use_cross }}
         command: build
+        args: --target ${{ matrix.target }}
 
     - name: cargo test
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.use_cross }}
         command: test
+        args: --target ${{ matrix.target }}
 
     - name: cargo build --no-default-features
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.use_cross }}
         command: build
-        args: --no-default-features
+        args: --target ${{ matrix.target }} --no-default-features
 
     - name: cargo test --no-default-features
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.use_cross }}
         command: test
-        args: --no-default-features
+        args: --target ${{ matrix.target }} --no-default-features
