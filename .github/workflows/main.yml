@@ -71,9 +71,7 @@ jobs:
       if: matrix.target == ''
       uses: actions-rs/cargo@v1
       with:
-        use-cross: ${{ matrix.use_cross }}
         command: test
-        args: $TARGET
 
     - name: cross test
       if: matrix.target != ''
