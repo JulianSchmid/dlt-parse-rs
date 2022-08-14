@@ -1,4 +1,4 @@
-name: Main 
+name: cargo build & test
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: cargo test
+    name: cargo build and test
     env:
       CARGO: cargo
       TARGET:
@@ -27,25 +27,32 @@ jobs:
         - build: linux-stable
           os: ubuntu-latest
           rust: stable
+          use_cross: False
         - build: linux-32bit-stable
           os: ubuntu-latest
           rust: stable
           target: i686-unknown-linux-gnu
+          use_cross: True
         - build: linux-beta
           os: ubuntu-latest
           rust: beta
+          use_cross: False
         - build: linux-nightly
           os: ubuntu-latest
           rust: nightly
+          use_cross: False
         - build: macos-stable
           os: macos-latest
           rust: stable
+          use_cross: False
         - build: win-msvc-stable
           os: windows-latest
           rust: stable
+          use_cross: False
         - build: win-gnu-stable
           os: windows-latest
           rust: stable-x86_64-gnu
+          use_cross: False
     steps:
 
     - uses: actions/checkout@v2
@@ -57,12 +64,34 @@ jobs:
         override: true
 
     - name: Use Cross
-      if: matrix.target != ''
+      if: matrix.use_cross
       run: |
         cargo install --bins --git https://github.com/cross-rs/cross --tag v0.2.1
         echo "CARGO=cross" >> $GITHUB_ENV
         echo "TARGET=--target ${{ matrix.target }}" >> $GITHUB_ENV
 
-    - uses: actions-rs/cargo@v1
+    - name: cargo build
+      uses: actions-rs/cargo@v1
       with:
+        use_cross: ${{ matrix.use_cross }}
+        command: build
+
+    - name: cargo test
+      uses: actions-rs/cargo@v1
+      with:
+        use_cross: ${{ matrix.use_cross }}
         command: test
+
+    - name: cargo build --no-default-features
+      uses: actions-rs/cargo@v1
+      with:
+        use_cross: ${{ matrix.use_cross }}
+        command: build
+        args: --no-default-features
+
+    - name: cargo test --no-default-features
+      uses: actions-rs/cargo@v1
+      with:
+        use_cross: ${{ matrix.use_cross }}
+        command: test
+        args: --no-default-features
