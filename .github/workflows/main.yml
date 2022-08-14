@@ -9,9 +9,6 @@ on:
 jobs:
   test:
     name: cargo build and test
-    env:
-      CARGO: cargo
-      TARGET:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -27,32 +24,25 @@ jobs:
         - build: linux-stable
           os: ubuntu-latest
           rust: stable
-          use_cross: False
         - build: linux-32bit-stable
           os: ubuntu-latest
           rust: stable
           target: i686-unknown-linux-gnu
-          use_cross: True
         - build: linux-beta
           os: ubuntu-latest
           rust: beta
-          use_cross: False
         - build: linux-nightly
           os: ubuntu-latest
           rust: nightly
-          use_cross: False
         - build: macos-stable
           os: macos-latest
           rust: stable
-          use_cross: False
         - build: win-msvc-stable
           os: windows-latest
           rust: stable
-          use_cross: False
         - build: win-gnu-stable
           os: windows-latest
           rust: stable-x86_64-gnu
-          use_cross: False
     steps:
 
     - uses: actions/checkout@v2
@@ -63,35 +53,62 @@ jobs:
         toolchain: ${{ matrix.rust }}
         override: true
 
-    - name: Use Cross
-      if: matrix.target != ''
-      run: |
-        echo "TARGET=--target ${{ matrix.target }}" >> $GITHUB_ENV
-
     - name: cargo build
+      if: matrix.target == ''
       uses: actions-rs/cargo@v1
       with:
-        use-cross: ${{ matrix.use_cross }}
         command: build
-        args: $TARGET
+
+    - name: cross build
+      if: matrix.target != ''
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: build
+        args: --target ${{ matrix.target }}
 
     - name: cargo test
+      if: matrix.target == ''
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.use_cross }}
         command: test
         args: $TARGET
 
-    - name: cargo build --no-default-features
+    - name: cross test
+      if: matrix.target != ''
       uses: actions-rs/cargo@v1
       with:
-        use-cross: ${{ matrix.use_cross }}
+        use-cross: true
+        command: test
+        args: --target ${{ matrix.target }}
+
+    - name: cargo build --no-default-features
+      if: matrix.target == ''
+      uses: actions-rs/cargo@v1
+      with:
         command: build
-        args: $TARGET --no-default-features
+        args: --no-default-features
+
+    - name: cross build --no-default-features
+      if: matrix.target != ''
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: build
+        args: --target ${{ matrix.target }} --no-default-features
 
     - name: cargo test --no-default-features
+      if: matrix.target == ''
       uses: actions-rs/cargo@v1
       with:
-        use-cross: ${{ matrix.use_cross }}
         command: test
-        args: $TARGET --no-default-features
+        args: --no-default-features
+
+    - name: cross test --no-default-features
+      if: matrix.target != ''
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: test
+        args: --target ${{ matrix.target }} --no-default-features
