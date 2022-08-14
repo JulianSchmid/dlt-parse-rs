@@ -61,7 +61,7 @@
 //!
 //! //buffer to store serialized header & payload
 //! let mut buffer = Vec::<u8>::with_capacity(usize::from(header.length));
-//! header.write(&mut buffer).unwrap();
+//! buffer.extend_from_slice(&header.to_bytes().unwrap());
 //!
 //! //write payload (message id 1234 & non verbose payload)
 //! {
@@ -104,7 +104,7 @@ use core::fmt;
 use core::slice::from_raw_parts;
 use arrayvec::ArrayVec;
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", test))]
 extern crate std;
 
 #[cfg(feature = "std")]
@@ -136,10 +136,7 @@ pub enum ReadError {
     UnexpectedEndOfSlice(error::UnexpectedEndOfSliceError),
 
     /// Error if the dlt length is smaller then the header the calculated header size based on the flags (+ minimum payload size of 4 bytes/octetets)
-    LengthSmallerThenMinimum {
-        required_length: usize,
-        length: usize,
-    },
+    DltMessageLengthTooSmall(error::DltMessageLengthTooSmallError),
 
     StorageHeaderStartPattern(error::StorageHeaderStartPatternError),
     
@@ -166,9 +163,10 @@ impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use ReadError::*;
         match self {
+            UnexpectedEndOfSlice(ref err) => Some(err),
+            DltMessageLengthTooSmall(ref err) => Some(err),
             StorageHeaderStartPattern(ref err) => Some(err),
             IoError(ref err) => Some(err),
-            _ => None,
         }
     }
 }
@@ -182,12 +180,7 @@ impl fmt::Display for ReadError {
             UnexpectedEndOfSlice(err) => {
                 write!(f, "ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", err.actual_size, err.minimum_size)
             }
-            LengthSmallerThenMinimum {
-                required_length,
-                length,
-            } => {
-                write!(f, "ReadError: The length of {} in the dlt header is smaller then minimum required size of {} bytes.", length, required_length)
-            }
+            DltMessageLengthTooSmall(err) => err.fmt(f),
             StorageHeaderStartPattern(err) => err.fmt(f),
             IoError(err) => err.fmt(f),
         }
@@ -1251,7 +1244,7 @@ mod tests {
     use super::*;
 
     #[cfg(feature = "std")]
-    use std::{vec::Vec, io::{Cursor, Write}};
+    use std::{vec::Vec, io::Cursor, io::Write};
 
     mod dlt_header {
 
@@ -1271,7 +1264,6 @@ mod tests {
 
         proptest! {
             #[test]
-            #[cfg(feature = "std")]
             #[cfg(feature = "std")]
             fn read_length_error(ref dlt_header in dlt_header_any()) {
                 let mut buffer = Vec::new();
@@ -1401,8 +1393,20 @@ mod tests {
         #[test]
         fn debug() {
             let header: DltHeader = Default::default();
-            todo!();
-            //println!("{:?}", header);
+            assert_eq!(
+                format!(
+                    "DltHeader {{ is_big_endian: {}, version: {}, message_counter: {}, length: {}, ecu_id: {:?}, session_id: {:?}, timestamp: {:?}, extended_header: {:?} }}",
+                    header.is_big_endian,
+                    header.version,
+                    header.message_counter,
+                    header.length,
+                    header.ecu_id,
+                    header.session_id,
+                    header.timestamp,
+                    header.extended_header,
+                ),
+                format!("{:?}", header)
+            );
         }
 
         proptest! {
@@ -1436,21 +1440,26 @@ mod tests {
             let mut header: DltHeader = Default::default();
             header.length = header.header_len() + 4;
             let mut buffer = Vec::with_capacity(usize::from(header.length));
-            header.write(&mut buffer).unwrap();
+            buffer.extend_from_slice(&header.to_bytes().unwrap());
             buffer.extend_from_slice(&[0, 0, 0, 0]);
             let slice = DltPacketSlice::from_slice(&buffer).unwrap();
-            todo!();
-            //println!("{:?}", slice);
+            assert_eq!(
+                format!(
+                    "DltPacketSlice {{ slice: {:?}, header_len: {} }}",
+                    &buffer[..],
+                    header.header_len(),
+                ),
+                format!("{:?}", slice)
+            );
         }
 
-/*
         proptest! {
             #[test]
             fn clone_eq_debug(ref packet in dlt_header_with_payload_any()) {
                 let mut buffer = Vec::with_capacity(
                     usize::from(packet.0.length)
                 );
-                packet.0.write(&mut buffer).unwrap();
+                buffer.extend_from_slice(&packet.0.to_bytes().unwrap());
                 buffer.extend_from_slice(&packet.1);
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();
 
@@ -1458,18 +1467,19 @@ mod tests {
                 assert_eq!(slice, slice.clone());
             }
         }
-*/
-/*
+
         proptest! {
             #[test]
             fn from_slice(
                 ref packet in dlt_header_with_payload_any()
             ) {
+                use error::PacketSliceError::*;
+
                 let mut buffer = Vec::with_capacity(
                     packet.1.len() + usize::from(packet.0.header_len())
                 );
-                packet.0.write(&mut buffer).unwrap();
-                buffer.write(&packet.1[..]).unwrap();
+                buffer.extend_from_slice(&packet.0.to_bytes().unwrap());
+                buffer.extend_from_slice(&packet.1[..]);
                 //read the slice
                 let slice = DltPacketSlice::from_slice(&buffer[..]).unwrap();
                 //check the results are matching the input
@@ -1495,7 +1505,7 @@ mod tests {
                     assert_matches!(
                         DltPacketSlice::from_slice(&buffer[..len]),
                         Err(
-                            ReadError::UnexpectedEndOfSlice(
+                            UnexpectedEndOfSlice(
                                 error::UnexpectedEndOfSliceError {
                                     layer: error::Layer::DltHeader,
                                     minimum_size: _,
@@ -1507,7 +1517,7 @@ mod tests {
                 }
             }
         }
-*/
+
         #[test]
         fn from_slice_header_len_eof_errors() {
             use error::{PacketSliceError::*, *};
@@ -1662,13 +1672,17 @@ mod tests {
         #[test]
         fn debug() {
             let it = SliceIterator { slice: &[] };
-            todo!();
-            //println!("{:?}", it);
+            assert_eq!(
+                format!("SliceIterator {{ slice: {:?} }}", it.slice),
+                format!("{:?}", it)
+            );
         }
-/*
+
         proptest! {
             #[test]
             fn iterator(ref packets in prop::collection::vec(dlt_header_with_payload_any(), 1..5)) {
+                use error::PacketSliceError::*;
+
                 //serialize the packets
                 let mut buffer = Vec::with_capacity(
                     (*packets).iter().fold(0, |acc, x| acc + usize::from(x.0.header_len()) + x.1.len())
@@ -1682,8 +1696,8 @@ mod tests {
                     let start = buffer.len();
 
                     //header & payload
-                    packet.0.write(&mut buffer).unwrap();
-                    buffer.write_all(&packet.1).unwrap();
+                    buffer.extend_from_slice(&packet.0.to_bytes().unwrap());
+                    buffer.extend_from_slice(&packet.1);
 
                     //safe the offset for later
                     offsets.push((start, buffer.len()));
@@ -1708,7 +1722,7 @@ mod tests {
                     let o = offsets.first().unwrap();
                     let mut it = SliceIterator::new(&buffer[..(o.1 - 1)]);
 
-                    assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice(_))));
+                    assert_matches!(it.next(), Some(Err(UnexpectedEndOfSlice(_))));
                     //check that the iterator does not continue
                     assert_matches!(it.next(), None);
                 }
@@ -1718,13 +1732,12 @@ mod tests {
                     let it = SliceIterator::new(&buffer[..(o.1 - 1)]);
                     let mut it = it.skip(offsets.len()-1);
 
-                    assert_matches!(it.next(), Some(Err(ReadError::UnexpectedEndOfSlice(_))));
+                    assert_matches!(it.next(), Some(Err(UnexpectedEndOfSlice(_))));
                     //check that the iterator does not continue
                     assert_matches!(it.next(), None);
                 }
             }
         }
-*/
     } // mod slice_iterator
 
     /// Tests for `DltExtendedHeader` methods
@@ -1741,8 +1754,16 @@ mod tests {
         #[test]
         fn debug() {
             let header: DltExtendedHeader = Default::default();
-            todo!();
-            //println!("{:?}", header);
+            assert_eq!(
+                format!(
+                    "DltExtendedHeader {{ message_info: {:?}, number_of_arguments: {:?}, application_id: {:?}, context_id: {:?} }}",
+                    header.message_info,
+                    header.number_of_arguments,
+                    header.application_id,
+                    header.context_id
+                ),
+                format!("{:?}", header)
+            );
         }
 
         #[test]
@@ -1931,24 +1952,34 @@ mod tests {
         #[test]
         fn debug() {
             use crate::ReadError::*;
-            for value in [
-                UnexpectedEndOfSlice(
-                    error::UnexpectedEndOfSliceError {
-                        minimum_size: 1,
-                        actual_size: 2,
-                        layer: error::Layer::DltHeader,
-                    }
-                ),
-                LengthSmallerThenMinimum {
-                    required_length: 3,
-                    length: 4,
-                },
-                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            ]
-            .iter()
+
             {
-                todo!();
-                //println!("{:?}", value);
+                let c = error::UnexpectedEndOfSliceError {
+                    minimum_size: 1,
+                    actual_size: 2,
+                    layer: error::Layer::DltHeader,
+                };
+                assert_eq!(
+                    format!("UnexpectedEndOfSlice({:?})", c),
+                    format!("{:?}", UnexpectedEndOfSlice(c))
+                );
+            }
+            {
+                let c = error::DltMessageLengthTooSmallError{
+                    required_length: 3,
+                    actual_length: 4,
+                };
+                assert_eq!(
+                    format!("DltMessageLengthTooSmall({:?})", c),
+                    format!("{:?}", DltMessageLengthTooSmall(c))
+                );
+            }
+            {
+                let c = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+                assert_eq!(
+                    format!("IoError({:?})", c),
+                    format!("{:?}", IoError(c))
+                );
             }
         }
 
@@ -1976,11 +2007,17 @@ mod tests {
                     )
                 );
 
-                //UnexpectedEndOfSlice
-                assert_eq!(
-                    &format!("ReadError: The length of {} in the dlt header is smaller then minimum required size of {} bytes.", usize1, usize0),
-                    &format!("{}", LengthSmallerThenMinimum { required_length: usize0, length: usize1 })
-                );
+                // DltMessageLengthTooSmall
+                {
+                    let c = error::DltMessageLengthTooSmallError{
+                        required_length: usize0,
+                        actual_length: usize1
+                    };
+                    assert_eq!(
+                        &format!("{}", c),
+                        &format!("{}", DltMessageLengthTooSmall(c))
+                    );
+                }
 
                 //IoError
                 {
@@ -1998,25 +2035,30 @@ mod tests {
             use crate::ReadError::*;
             use std::error::Error;
 
-            assert!(UnexpectedEndOfSlice(
-                error::UnexpectedEndOfSliceError {
-                    layer: error::Layer::DltHeader,
-                    minimum_size: 1,
-                    actual_size: 2
-                }
-            )
-            .source()
-            .is_none());
-            assert!(LengthSmallerThenMinimum {
-                required_length: 3,
-                length: 4
-            }
-            .source()
-            .is_none());
+            assert!(
+                UnexpectedEndOfSlice(
+                    error::UnexpectedEndOfSliceError {
+                        layer: error::Layer::DltHeader,
+                        minimum_size: 1,
+                        actual_size: 2
+                    }
+                )
+                .source()
+                .is_some());
+            assert!(
+                DltMessageLengthTooSmall(
+                    error::DltMessageLengthTooSmallError {
+                        required_length: 3,
+                        actual_length: 4
+                    }
+                )
+                .source()
+                .is_some()
+            );
             assert!(
                 IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                    .source()
-                    .is_some()
+                .source()
+                .is_some()
             );
         }
     } // mod read_error
@@ -2030,15 +2072,10 @@ mod tests {
         #[test]
         fn debug() {
             use WriteError::*;
-            for value in [
-                VersionTooLarge(123),
-                IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            ]
-            .iter()
-            {
-                todo!();
-                //println!("{:?}", value);
-            }
+            assert_eq!(
+                "VersionTooLarge(123)",
+                format!("{:?}", VersionTooLarge(123))
+            );
         }
 
         proptest! {
@@ -2091,8 +2128,11 @@ mod tests {
         #[test]
         fn debug() {
             use RangeError::*;
-            todo!();
-            //println!("{:?}", NetworkTypekUserDefinedOutsideOfRange(123));
+            let v = NetworkTypekUserDefinedOutsideOfRange(123);
+            assert_eq!(
+                "NetworkTypekUserDefinedOutsideOfRange(123)",
+                format!("{:?}", v)
+            );
         }
 
         proptest! {

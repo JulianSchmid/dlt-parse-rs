@@ -1,4 +1,5 @@
 use core::str::Utf8Error;
+use core::fmt;
 
 /// Error in which an error occured.
 #[derive(Debug, PartialEq, Eq)]
@@ -19,14 +20,21 @@ pub struct DltMessageLengthTooSmallError {
     pub actual_length: usize,
 }
 
-impl core::fmt::Display for DltMessageLengthTooSmallError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Display for DltMessageLengthTooSmallError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "DLT Header Error: The message length of {} present in the dlt header is smaller then minimum required size of {} bytes.",
             self.actual_length,
             self.required_length
         )
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for DltMessageLengthTooSmallError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
     }
 }
 
@@ -54,6 +62,25 @@ pub struct UnexpectedEndOfSliceError {
     pub actual_size: usize,
 }
 
+impl fmt::Display for UnexpectedEndOfSliceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{:?}: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.",
+            self.layer,
+            self.actual_size,
+            self.minimum_size
+        )
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for UnexpectedEndOfSliceError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
 /// Error that can occur if the data in an DltHeader can not be encoded.
 #[derive(Debug, PartialEq, Eq)]
 pub enum DltHeaderEncodeError {
@@ -62,8 +89,8 @@ pub enum DltHeaderEncodeError {
     VersionTooLarge(u8),
 }
 
-impl core::fmt::Display for DltHeaderEncodeError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Display for DltHeaderEncodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use DltHeaderEncodeError::*;
         match self {
             VersionTooLarge(version) => write!(
@@ -118,8 +145,8 @@ pub struct StorageHeaderStartPatternError {
     pub actual_pattern: [u8;4],
 }
 
-impl core::fmt::Display for StorageHeaderStartPatternError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl fmt::Display for StorageHeaderStartPatternError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f, "Error when parsing DLT storage header. Expected pattern {:?} at start but got {:?}",
             super::storage::StorageHeader::PATTERN_AT_START,
