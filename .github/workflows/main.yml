@@ -1,4 +1,4 @@
-name: Main
+name: main
 
 on:
   pull_request:
@@ -63,30 +63,35 @@ jobs:
         toolchain: ${{ matrix.rust }}
         override: true
 
+    - name: Use Cross
+      if: matrix.target != ''
+      run: |
+        echo "TARGET=--target ${{ matrix.target }}" >> $GITHUB_ENV
+
     - name: cargo build
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.use_cross }}
         command: build
-        args: --target ${{ matrix.target }}
+        args: $TARGET
 
     - name: cargo test
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.use_cross }}
         command: test
-        args: --target ${{ matrix.target }}
+        args: $TARGET
 
     - name: cargo build --no-default-features
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.use_cross }}
         command: build
-        args: --target ${{ matrix.target }} --no-default-features
+        args: $TARGET --no-default-features
 
     - name: cargo test --no-default-features
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ matrix.use_cross }}
         command: test
-        args: --target ${{ matrix.target }} --no-default-features
+        args: $TARGET --no-default-features
