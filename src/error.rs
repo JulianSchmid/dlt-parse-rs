@@ -1,5 +1,6 @@
 use core::str::Utf8Error;
 use core::fmt;
+use super::*;
 
 #[cfg(feature = "std")]
 use std::io;
@@ -353,7 +354,7 @@ impl fmt::Display for UnsupportedDltVersionError {
             f,
             "Encountered unsupported DLT version '{}' in header. Only versions {:?} are supported.",
             self.unsupported_version,
-            crate::DltHeader::SUPPORTED_DECODABLE_VERSIONS
+            DltHeader::SUPPORTED_DECODABLE_VERSIONS
         )
     }
 }
