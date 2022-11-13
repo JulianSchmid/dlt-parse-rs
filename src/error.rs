@@ -508,6 +508,12 @@ pub enum VerboseDecodeError {
     /// a verbose value.
     UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
 
+    /// Error if a variable name string is not zero terminated.
+    VariableNameStringMissingNullTermination,
+
+    /// Error if a variable unit string is not zero terminated.
+    VariableUnitStringMissingNullTermination,
+
     /// Error when decoding an string (can also occur for variable names or unit names).
     Utf8(Utf8Error),
 
@@ -515,12 +521,6 @@ pub enum VerboseDecodeError {
     ///
     /// TODO: Remove this value
     Unsupported,
-}
-
-impl From<Utf8Error> for VerboseDecodeError {
-    fn from(err: Utf8Error) -> VerboseDecodeError {
-        VerboseDecodeError::Utf8(err)
-    }
 }
 
 impl fmt::Display for VerboseDecodeError {
@@ -534,6 +534,12 @@ impl fmt::Display for VerboseDecodeError {
                 f, "DLT Verbose Message Field: Encountered invalid bool value '{}' (only 0 or 1 are valid)", value
             ),
             UnexpectedEndOfSlice(err) => err.fmt(f),
+            VariableNameStringMissingNullTermination => write!(
+                f, "DLT Verbose Message Field: Encountered a variable name string missing the terminating zero value"
+            ),
+            VariableUnitStringMissingNullTermination => write!(
+                f, "DLT Verbose Message Field: Encountered a variable unit string missing the terminating zero value"
+            ),
             Utf8(err) => err.fmt(f),
             Unsupported => write!(
                 f, "DLT Verbose Message Field: Unsupported field type"
@@ -550,9 +556,17 @@ impl std::error::Error for VerboseDecodeError {
             InvalidTypeInfo(_) => None,
             InvalidBoolValue(_) => None,
             UnexpectedEndOfSlice(err) => Some(err),
+            VariableNameStringMissingNullTermination => None,
+            VariableUnitStringMissingNullTermination => None,
             Utf8(err) => Some(err),
             Unsupported => None,
         }
+    }
+}
+
+impl From<Utf8Error> for VerboseDecodeError {
+    fn from(err: Utf8Error) -> VerboseDecodeError {
+        VerboseDecodeError::Utf8(err)
     }
 }
 
@@ -602,6 +616,17 @@ mod verbose_decode_error_tests {
                 format!("{}", UnexpectedEndOfSlice(v))
             );
         }
+
+        assert_eq!(
+            format!("DLT Verbose Message Field: Encountered a variable name string missing the terminating zero value"),
+            format!("{}", VariableNameStringMissingNullTermination)
+        );
+
+        assert_eq!(
+            format!("DLT Verbose Message Field: Encountered a variable unit string missing the terminating zero value"),
+            format!("{}", VariableUnitStringMissingNullTermination)
+        );
+
         {
             let v = std::str::from_utf8(&[0, 159, 146, 150]).unwrap_err();
             assert_eq!(
@@ -629,6 +654,8 @@ mod verbose_decode_error_tests {
                 minimum_size: 2,
             }).source().is_some()
         );
+        assert!(VariableNameStringMissingNullTermination.source().is_none());
+        assert!(VariableUnitStringMissingNullTermination.source().is_none());
         assert!(
             Utf8(std::str::from_utf8(&[0, 159, 146, 150]).unwrap_err())
             .source()
