@@ -103,6 +103,23 @@ mod storage_header_tests{
 
     proptest!{
         #[test]
+        fn debug(
+            header in storage_header_any()
+        ) {
+            prop_assert_eq!(
+                format!(
+                    "StorageHeader {{ timestamp_seconds: {}, timestamp_microseconds: {}, ecu_id: {:?} }}",
+                    header.timestamp_seconds,
+                    header.timestamp_microseconds,
+                    header.ecu_id
+                ),
+                format!("{:?}", header)
+            );
+        }
+    }
+
+    proptest!{
+        #[test]
         fn to_bytes(
             header in storage_header_any()
         ) {
@@ -167,7 +184,7 @@ mod storage_header_tests{
             // ok read
             {
                 let bytes = header.to_bytes();
-                let mut cursor = std::io::Cursor::new(&bytes);
+                let mut cursor = std::io::Cursor::new(&bytes[..]);
                 prop_assert_eq!(
                     header.clone(),
                     StorageHeader::read(&mut cursor).unwrap()
@@ -188,7 +205,7 @@ mod storage_header_tests{
                 bytes[1] = bad_pattern[1];
                 bytes[2] = bad_pattern[2];
                 bytes[3] = bad_pattern[3];
-                let mut cursor = std::io::Cursor::new(&bytes);
+                let mut cursor = std::io::Cursor::new(&bytes[..]);
                 prop_assert!(StorageHeader::read(&mut cursor).is_err());
             }
         }
@@ -202,8 +219,9 @@ mod storage_header_tests{
         ) {
             // ok write
             {
-                let mut buffer = Vec::with_capacity(StorageHeader::BYTE_LEN);
-                header.write(&mut buffer).unwrap();
+                let mut buffer = [0u8; StorageHeader::BYTE_LEN];
+                let mut cursor = std::io::Cursor::new(&mut buffer[..]);
+                header.write(&mut cursor).unwrap();
                 prop_assert_eq!(&buffer, &header.to_bytes());
             }
 
