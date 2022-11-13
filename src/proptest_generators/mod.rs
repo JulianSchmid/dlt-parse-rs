@@ -78,6 +78,20 @@ prop_compose! {
     }
 }
 
+prop_compose! {
+    pub fn storage_header_any()(
+        timestamp_seconds in any::<u32>(),
+        timestamp_microseconds in any::<u32>(),
+        ecu_id in any::<[u8;4]>()
+    ) -> storage::StorageHeader {
+        storage::StorageHeader{
+            timestamp_seconds,
+            timestamp_microseconds,
+            ecu_id
+        }
+    }
+}
+
 pub fn log_level_any() -> impl Strategy<Value = DltLogLevel> {
     use DltLogLevel::*;
     prop_oneof![
