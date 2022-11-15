@@ -25,7 +25,6 @@ prop_compose! {
         payload_length in 4usize..TEST_MAX_PAYLOAD_SIZE
     )(
         is_big_endian in any::<bool>(),
-        version in prop::bits::u8::between(0,3),
         message_counter in any::<u8>(),
         ecu_id in any::<Option<[u8;4]>>(),
         session_id in any::<Option<u32>>(),
@@ -38,7 +37,6 @@ prop_compose! {
             {
                 let mut header = DltHeader {
                     is_big_endian,
-                    version,
                     message_counter,
                     length: payload.len() as u16,
                     ecu_id,
@@ -57,7 +55,6 @@ prop_compose! {
 
 prop_compose! {
     pub fn dlt_header_any()(is_big_endian in any::<bool>(),
-                        version in prop::bits::u8::between(0,3),
                         message_counter in any::<u8>(),
                         length in any::<u16>(),
                         ecu_id in any::<Option<[u8;4]>>(),
@@ -67,7 +64,6 @@ prop_compose! {
     {
         DltHeader {
             is_big_endian,
-            version,
             message_counter,
             length,
             ecu_id,

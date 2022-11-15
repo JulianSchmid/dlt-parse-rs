@@ -419,77 +419,6 @@ mod unsupported_dlt_version_error_test {
     }
 }
 
-/// Error that can occur if the data in an DltHeader can not be encoded.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DltHeaderEncodeError {
-    /// Error that occurs when the given version number in the header was
-    /// larger [`DltHeader::MAX_VERSION`].
-    VersionTooLarge(u8),
-}
-
-impl fmt::Display for DltHeaderEncodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use DltHeaderEncodeError::*;
-        match self {
-            VersionTooLarge(version) => write!(
-                f,
-                "DLT Header Encode Error: Version value '{}' is not encodable (maximum allowed value is {}).",
-                version,
-                crate::MAX_VERSION,
-            )
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for DltHeaderEncodeError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
-#[cfg(test)]
-mod dlt_header_encode_error_test {
-    use super::*;
-
-    #[test]
-    fn clone_eq() {
-        use DltHeaderEncodeError::*;
-        let v = VersionTooLarge(123);
-        assert_eq!(v, v.clone());
-    }
-
-    #[test]
-    fn debug() {
-        use DltHeaderEncodeError::*;
-        assert_eq!(
-            format!("VersionTooLarge({})", 123),
-            format!("{:?}", VersionTooLarge(123))
-        );
-    }
-
-    #[test]
-    fn display() {
-        use DltHeaderEncodeError::*;
-        assert_eq!(
-            format!(
-                "DLT Header Encode Error: Version value '{}' is not encodable (maximum allowed value is {}).",
-                123,
-                crate::MAX_VERSION
-            ),
-            format!("{}", VersionTooLarge(123))
-        );
-    }
-
-    #[cfg(feature = "std")]
-    #[test]
-    fn source() {
-        use DltHeaderEncodeError::*;
-        use std::error::Error;
-        assert!(VersionTooLarge(123).source().is_none());
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VerboseDecodeError {
     /// Error that occurs if a type info is inconsistent.
@@ -757,27 +686,18 @@ pub enum ReadError {
     /// Error if the slice is smaller then dlt length field or minimal size.
     UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
 
+    /// An unsupporetd version number has been encountered
+    /// while decoding the header.
+    UnsupportedDltVersion(UnsupportedDltVersionError),
+
     /// Error if the dlt length is smaller then the header the calculated header size based on the flags (+ minimum payload size of 4 bytes/octetets)
     DltMessageLengthTooSmall(DltMessageLengthTooSmallError),
 
+    /// Error if a storage header does not start with the correct pattern.
     StorageHeaderStartPattern(StorageHeaderStartPatternError),
     
     /// Standard io error.
     IoError(io::Error),
-}
-
-#[cfg(feature = "std")]
-impl From<StorageHeaderStartPatternError> for ReadError {
-    fn from(err: StorageHeaderStartPatternError) -> ReadError {
-        ReadError::StorageHeaderStartPattern(err)
-    }
-}
-
-#[cfg(feature = "std")]
-impl From<io::Error> for ReadError {
-    fn from(err: io::Error) -> ReadError {
-        ReadError::IoError(err)
-    }
 }
 
 #[cfg(feature = "std")]
@@ -786,6 +706,7 @@ impl std::error::Error for ReadError {
         use ReadError::*;
         match self {
             UnexpectedEndOfSlice(ref err) => Some(err),
+            UnsupportedDltVersion(ref err) => Some(err),
             DltMessageLengthTooSmall(ref err) => Some(err),
             StorageHeaderStartPattern(ref err) => Some(err),
             IoError(ref err) => Some(err),
@@ -801,11 +722,38 @@ impl fmt::Display for ReadError {
         match self {
             UnexpectedEndOfSlice(err) => {
                 write!(f, "ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", err.actual_size, err.minimum_size)
-            }
+            },
+            UnsupportedDltVersion(err) => err.fmt(f),
             DltMessageLengthTooSmall(err) => err.fmt(f),
             StorageHeaderStartPattern(err) => err.fmt(f),
             IoError(err) => err.fmt(f),
         }
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<StorageHeaderStartPatternError> for ReadError {
+    fn from(err: StorageHeaderStartPatternError) -> ReadError {
+        ReadError::StorageHeaderStartPattern(err)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<PacketSliceError> for ReadError {
+    fn from(err: PacketSliceError) -> ReadError {
+        use PacketSliceError as I;
+        match err {
+            I::UnsupportedDltVersion(err) => ReadError::UnsupportedDltVersion(err),
+            I::MessageLengthTooSmall(err) => ReadError::DltMessageLengthTooSmall(err),
+            I::UnexpectedEndOfSlice(err) => ReadError::UnexpectedEndOfSlice(err),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<io::Error> for ReadError {
+    fn from(err: io::Error) -> ReadError {
+        ReadError::IoError(err)
     }
 }
 
@@ -828,6 +776,15 @@ mod read_error {
             assert_eq!(
                 format!("UnexpectedEndOfSlice({:?})", c),
                 format!("{:?}", UnexpectedEndOfSlice(c))
+            );
+        }
+        {
+            let c = UnsupportedDltVersionError{
+                unsupported_version: 123,
+            };
+            assert_eq!(
+                format!("UnsupportedDltVersion({:?})", c),
+                format!("{:?}", UnsupportedDltVersion(c))
             );
         }
         {
@@ -858,7 +815,7 @@ mod read_error {
 
             use ReadError::*;
 
-            //UnexpectedEndOfSlice
+            // UnexpectedEndOfSlice
             assert_eq!(
                 &format!("ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", usize1, usize0),
                 &format!(
@@ -872,6 +829,15 @@ mod read_error {
                     )
                 )
             );
+
+            // UnsupportedDltVersionError
+            {
+                let c = UnsupportedDltVersionError{ unsupported_version: 123 };
+                assert_eq!(
+                    &format!("{}", c),
+                    &format!("{}", UnsupportedDltVersion(c))
+                );
+            }
 
             // DltMessageLengthTooSmall
             {
@@ -923,6 +889,12 @@ mod read_error {
             .source()
             .is_some());
         assert!(
+            UnsupportedDltVersion(
+                UnsupportedDltVersionError { unsupported_version: 123 }
+            )
+            .source()
+            .is_some());
+        assert!(
             DltMessageLengthTooSmall(
                 DltMessageLengthTooSmallError {
                     required_length: 3,
@@ -967,101 +939,53 @@ mod read_error {
             ReadError::StorageHeaderStartPattern(_)
         );
     }
-} // mod read_error
-
-///Errors that can occur when serializing a dlt header.
-#[cfg(feature = "std")]
-#[derive(Debug)]
-pub enum WriteError {
-    VersionTooLarge(u8),
-    IoError(io::Error),
-}
-
-#[cfg(feature = "std")]
-impl From<io::Error> for WriteError {
-    fn from(err: io::Error) -> WriteError {
-        WriteError::IoError(err)
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for WriteError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            WriteError::IoError(ref err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl fmt::Display for WriteError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use WriteError::*;
-
-        match self {
-            VersionTooLarge(version) => {
-                write!(
-                    f,
-                    "WriteError: DLT version {} is larger then the maximum supported value of {}",
-                    version, crate::MAX_VERSION
-                )
-            }
-            IoError(err) => err.fmt(f),
-        }
-    }
-}
-
-/// Tests for `WriteError` methods
-#[cfg(all(feature = "std", test))]
-mod write_error {
-    use super::*;
-    use proptest::prelude::*;
 
     #[test]
-    fn debug() {
-        use WriteError::*;
-        assert_eq!(
-            "VersionTooLarge(123)",
-            format!("{:?}", VersionTooLarge(123))
-        );
-    }
+    fn from_packet_slice_error() {
+        use PacketSliceError as I;
 
-    proptest! {
-        #[test]
-        fn display(version in any::<u8>()) {
-            use WriteError::*;
-
-            // VersionTooLarge
-            assert_eq!(
-                &format!("WriteError: DLT version {} is larger then the maximum supported value of {}", version, crate::MAX_VERSION),
-                &format!("{}", VersionTooLarge(version))
+        // UnsupportedDltVersion
+        {
+            let r: ReadError = I::UnsupportedDltVersion(
+                UnsupportedDltVersionError { unsupported_version: 123 }
+            ).into();
+            assert_matches!(
+                r,
+                ReadError::UnsupportedDltVersion(_)
             );
+        }
 
-            //IoError
-            {
-                let custom_error = std::io::Error::new(std::io::ErrorKind::Other, "some error");
-                assert_eq!(
-                    &format!("{}", custom_error),
-                    &format!("{}", IoError(custom_error))
-                );
-            }
+        // MessageLengthTooSmall
+        {
+            let r: ReadError = I::MessageLengthTooSmall(
+                DltMessageLengthTooSmallError {
+                    required_length: 3,
+                    actual_length: 4
+                }
+            ).into();
+            assert_matches!(
+                r,
+                ReadError::DltMessageLengthTooSmall(_)
+            );
+        }
+
+        // UnexpectedEndOfSlice
+        {
+            let r: ReadError = I::UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError {
+                    layer: Layer::DltHeader,
+                    minimum_size: 1,
+                    actual_size: 2
+                }
+            ).into();
+            assert_matches!(
+                r,
+                ReadError::UnexpectedEndOfSlice(_)
+            );
         }
     }
 
-    #[test]
-    fn source() {
-        use std::error::Error;
-        use WriteError::*;
-
-        assert!(VersionTooLarge(123).source().is_none());
-        assert!(
-            IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                .source()
-                .is_some()
-        );
-    }
-} // mod write_error
+} // mod read_error
 
 /// Error that can occur when an out of range value is passed to a function.
 #[derive(Clone, Debug, PartialEq, Eq)]

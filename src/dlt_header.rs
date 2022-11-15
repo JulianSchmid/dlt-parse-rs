@@ -5,7 +5,6 @@ use super::*;
 pub struct DltHeader {
     ///If true the payload is encoded in big endian. This does not influence the fields of the dlt header, which is always encoded in big endian.
     pub is_big_endian: bool,
-    pub version: u8,
     pub message_counter: u8,
     pub length: u16,
     pub ecu_id: Option<[u8;4]>,
@@ -31,6 +30,9 @@ impl DltHeader {
     /// * 10 bytes for the extended header
     pub const MAX_SERIALIZED_SIZE: usize = 4 + 4 + 4 + 4 + 10;
 
+    /// Supported dlt version.
+    pub const VERSION: u8 = 1;
+
     pub fn from_slice(slice: &[u8]) -> Result<DltHeader, error::PacketSliceError> {
         use error::{PacketSliceError::*, *};
 
@@ -51,7 +53,7 @@ impl DltHeader {
 
         // check version
         let version = (header_type >> 5) & MAX_VERSION;
-        if 1 != version {
+        if DltHeader::VERSION != version {
             return Err(
                 UnsupportedDltVersion(
                     UnsupportedDltVersionError{
@@ -189,7 +191,6 @@ impl DltHeader {
         Ok(DltHeader {
             ///If true the payload is encoded in big endian. This does not influence the fields of the dlt header, which is always encoded in big endian.
             is_big_endian: 0 != header_type & BIG_ENDIAN_FLAG,
-            version,
             // SAFETY:
             // Safe, as the slice length was checked at the start of the function
             // to be at least 4.
@@ -215,14 +216,7 @@ impl DltHeader {
     ///
     /// An error is returned if the version present in the header
     /// is bigger then can be encoded in a 3 bit value ([`MAX_VERSION`]).
-    pub fn to_bytes(&self) -> Result<ArrayVec<u8, { DltHeader::MAX_SERIALIZED_SIZE }>, error::DltHeaderEncodeError> {
-        use error::DltHeaderEncodeError::*;
-
-        //pre check if the ranges of all fields are valid
-        if self.version > MAX_VERSION {
-            return Err(VersionTooLarge(self.version));
-        }
-
+    pub fn to_bytes(&self) -> ArrayVec<u8, { DltHeader::MAX_SERIALIZED_SIZE }> {
         // encode values
         let length_be = self.length.to_be_bytes();
         let mut bytes: [u8;26] = [
@@ -244,7 +238,7 @@ impl DltHeader {
                 if self.timestamp.is_some() {
                     result |= TIMESTAMP_FLAG;
                 }
-                result |= (self.version << 5) & 0b1110_0000;
+                result |= (DltHeader::VERSION << 5) & 0b1110_0000;
                 result
             },
             self.message_counter,
@@ -309,12 +303,14 @@ impl DltHeader {
         unsafe {
             result.set_len(offset);
         }
-        Ok(result)
+        result
     }
 
     ///Deserialize a DltHeader & TpHeader from the given reader.
     #[cfg(feature = "std")]
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<DltHeader, error::ReadError> {
+        use crate::error::UnsupportedDltVersionError;
+
         // read the standard header that is always present
         let standard_header_start = {
             let mut standard_header_start: [u8; 4] = [0; 4];
@@ -324,10 +320,22 @@ impl DltHeader {
 
         //first lets read the header type
         let header_type = standard_header_start[0];
+
+        // check version
+        let version = (header_type >> 5) & MAX_VERSION;
+        if 1 != version {
+            return Err(
+                error::ReadError::UnsupportedDltVersion(
+                    UnsupportedDltVersionError{
+                        unsupported_version: version,
+                    }
+                )
+            );
+        }
+
         //let extended_header = 0 != header_type & EXTDENDED_HEADER_FLAG;
         Ok(DltHeader {
             is_big_endian: 0 != header_type & BIG_ENDIAN_FLAG,
-            version: (header_type >> 5) & MAX_VERSION,
             message_counter: standard_header_start[1],
             length: u16::from_be_bytes([standard_header_start[2], standard_header_start[3]]),
             ecu_id: if 0 != header_type & ECU_ID_FLAG {
@@ -377,14 +385,7 @@ impl DltHeader {
 
     ///Serializes the header to the given writer.
     #[cfg(feature = "std")]
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), error::WriteError> {
-        use error::WriteError::*;
-
-        //pre check if the ranges of all fields are valid
-        if self.version > MAX_VERSION {
-            return Err(VersionTooLarge(self.version));
-        }
-
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         {
             let length_be = self.length.to_be_bytes();
             let standard_header_start: [u8; 4] = [
@@ -406,7 +407,7 @@ impl DltHeader {
                     if self.timestamp.is_some() {
                         result |= TIMESTAMP_FLAG;
                     }
-                    result |= (self.version << 5) & 0b1110_0000;
+                    result |= (DltHeader::VERSION << 5) & 0b1110_0000;
                     result
                 },
                 self.message_counter,
@@ -485,45 +486,29 @@ mod dlt_header_tests {
     use super::*;
     use proptest::prelude::*;
     use crate::proptest_generators::*;
-    use std::io::Cursor;
 
     proptest!{
         #[test]
         fn to_bytes_from_slice(
             ref dlt_header in dlt_header_any(),
-            too_big_dlt_version in 0b1000..u8::MAX,
             unsupported_version in (0u8..0b111u8).prop_filter(
                 "version must be unknown",
                 |v| !DltHeader::SUPPORTED_DECODABLE_VERSIONS.iter().any(|&x| v == &x)
             )
         ) {
             use error::PacketSliceError::*;
-            use error::DltHeaderEncodeError::*;
             // ok case
             {
-                let mut d = dlt_header.clone();
-                d.version = 1;
-                let bytes = d.to_bytes().unwrap();
+                let bytes = dlt_header.to_bytes();
                 assert_eq!(
-                    d,
+                    dlt_header.clone(),
                     DltHeader::from_slice(&bytes[..]).unwrap()
-                );
-            }
-            // to_bytes version error
-            {
-                let mut d = dlt_header.clone();
-                d.version = too_big_dlt_version;
-                assert_eq!(
-                    VersionTooLarge(too_big_dlt_version),
-                    d.to_bytes().unwrap_err()
                 );
             }
             // from_slice unexpected end of slice error
             {
                 for l in 0..dlt_header.header_len() as usize {
-                    let mut d = dlt_header.clone();
-                    d.version = 1;
-                    let bytes = d.to_bytes().unwrap();
+                    let bytes = dlt_header.to_bytes();
                     
                     assert_eq!(
                         UnexpectedEndOfSlice(
@@ -531,7 +516,7 @@ mod dlt_header_tests {
                                 minimum_size: if l < 4 {
                                     4
                                 } else {
-                                    d.header_len() as usize
+                                    dlt_header.header_len() as usize
                                 },
                                 actual_size: l,
                                 layer: error::Layer::DltHeader,
@@ -543,9 +528,7 @@ mod dlt_header_tests {
             }
             // from_slice unsupported version
             {
-                let mut d = dlt_header.clone();
-                d.version = 1;
-                let mut bytes = d.to_bytes().unwrap();
+                let mut bytes = dlt_header.to_bytes();
                 // modify the version in the encoded version
                 // directly
                 bytes[0] = (bytes[0] & 0b0001_1111) | ((unsupported_version << 5) & 0b1110_0000);
@@ -565,6 +548,8 @@ mod dlt_header_tests {
         #[test]
         #[cfg(feature = "std")]
         fn write_read(ref dlt_header in dlt_header_any()) {
+            use std::io::Cursor;
+
             let mut buffer = Vec::new();
             dlt_header.write(&mut buffer).unwrap();
             let mut reader = Cursor::new(&buffer[..]);
@@ -577,6 +562,8 @@ mod dlt_header_tests {
         #[test]
         #[cfg(feature = "std")]
         fn read_length_error(ref dlt_header in dlt_header_any()) {
+            use std::io::Cursor;
+
             let mut buffer = Vec::new();
             dlt_header.write(&mut buffer).unwrap();
             let reduced_len = buffer.len() - 1;
@@ -588,26 +575,16 @@ mod dlt_header_tests {
     proptest! {
         #[test]
         #[cfg(feature = "std")]
-        fn write_version_error(ref dlt_header in dlt_header_any(),
-                               version in MAX_VERSION+1..std::u8::MAX) {
-            let mut input = dlt_header.clone();
-            input.version = version;
-            let mut buffer = Vec::new();
-            assert_matches!(input.write(&mut buffer), Err(error::WriteError::VersionTooLarge(_)));
-        }
-    }
-
-    proptest! {
-        #[test]
-        #[cfg(feature = "std")]
         fn write_io_error(ref header in dlt_header_any()) {
+            use std::io::Cursor;
+            
             let mut buffer: Vec<u8> = Vec::with_capacity(
                 header.header_len().into()
             );
             for len in 0..header.header_len() {
                 buffer.resize(len.into(), 0);
                 let mut writer = Cursor::new(&mut buffer[..]);
-                assert_matches!(header.write(&mut writer), Err(error::WriteError::IoError(_)));
+                assert_matches!(header.write(&mut writer), Err(_));
             }
         }
     }
@@ -688,7 +665,6 @@ mod dlt_header_tests {
                 test.expected,
                 DltHeader {
                     is_big_endian: false,
-                    version: MAX_VERSION,
                     message_counter: 123,
                     length: 123,
                     ecu_id: test.ecu_id,
@@ -706,9 +682,8 @@ mod dlt_header_tests {
         let header: DltHeader = Default::default();
         assert_eq!(
             format!(
-                "DltHeader {{ is_big_endian: {}, version: {}, message_counter: {}, length: {}, ecu_id: {:?}, session_id: {:?}, timestamp: {:?}, extended_header: {:?} }}",
+                "DltHeader {{ is_big_endian: {}, message_counter: {}, length: {}, ecu_id: {:?}, session_id: {:?}, timestamp: {:?}, extended_header: {:?} }}",
                 header.is_big_endian,
-                header.version,
                 header.message_counter,
                 header.length,
                 header.ecu_id,
@@ -731,7 +706,6 @@ mod dlt_header_tests {
     fn default() {
         let header: DltHeader = Default::default();
         assert_eq!(header.is_big_endian, false);
-        assert_eq!(header.version, 0);
         assert_eq!(header.message_counter, 0);
         assert_eq!(header.length, 0);
         assert_eq!(header.ecu_id, None);

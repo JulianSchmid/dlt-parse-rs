@@ -82,7 +82,6 @@ impl DltExtendedHeader {
         use super::*;
         use proptest::prelude::*;
         use crate::proptest_generators::*;
-        use std::io::Cursor;
 
         #[test]
         fn clone_eq() {
