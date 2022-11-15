@@ -118,7 +118,6 @@ pub use dlt_packet_slice::*;
 mod dlt_slice_iterator;
 pub use dlt_slice_iterator::*;
 pub mod error;
-pub mod verbose;
 
 /// Module for decoding .dlt files or other formats that use the DLT storage header.
 pub mod storage;
