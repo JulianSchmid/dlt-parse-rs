@@ -28,7 +28,7 @@ impl<R: Read + BufRead> DltStorageReader<R> {
     }
 
     /// Returns the next DLT packet.
-    pub fn next<'a>(&'a mut self) -> Option<Result<StorageSlice<'a>, ReadError>> {
+    pub fn next_packet(&mut self) -> Option<Result<StorageSlice<'_>, ReadError>> {
 
         // check if iteration is done based as
         if self.read_error {
@@ -37,7 +37,7 @@ impl<R: Read + BufRead> DltStorageReader<R> {
 
         // check if there is data left in the reader
         match self.reader.fill_buf() {
-            Ok(slice) => if slice.len() == 0 {
+            Ok(slice) => if slice.is_empty() {
                 return None;
             },
             Err(err) => {
@@ -150,7 +150,7 @@ mod dlt_storage_reader_tests {
     }
 
     #[test]
-    fn next() {
+    fn next_packet() {
         use std::vec::Vec;
 
         // empty reader
@@ -158,7 +158,7 @@ mod dlt_storage_reader_tests {
             let mut r = DltStorageReader::new(
                 BufReader::new(Cursor::new(&[]))
             );
-            assert!(r.next().is_none());
+            assert!(r.next_packet().is_none());
         }
 
         // reader with working packets
@@ -220,20 +220,20 @@ mod dlt_storage_reader_tests {
                 BufReader::new(Cursor::new(&v[..]))
             );
             assert_eq!(
-                reader.next().unwrap().unwrap(),
+                reader.next_packet().unwrap().unwrap(),
                 StorageSlice{
                     storage_header: storage_header0,
                     packet: DltPacketSlice::from_slice(&packet0).unwrap()
                 }
             );
             assert_eq!(
-                reader.next().unwrap().unwrap(),
+                reader.next_packet().unwrap().unwrap(),
                 StorageSlice{
                     storage_header: storage_header1,
                     packet: DltPacketSlice::from_slice(&packet1).unwrap()
                 }
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next_packet().is_none());
         }
 
         // reader with error during buffering
@@ -241,13 +241,13 @@ mod dlt_storage_reader_tests {
             let mut buf = BufferFillErrorReader{};
             buf.consume(0);
             buf.read(&mut []).unwrap();
-            
+
             let mut reader = DltStorageReader::new(buf);
             assert_matches!(
-                reader.next(),
+                reader.next_packet(),
                 Some(Err(ReadError::IoError(_)))
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next_packet().is_none());
         }
 
         // storage header read error
@@ -257,10 +257,10 @@ mod dlt_storage_reader_tests {
                 BufReader::new(Cursor::new(&bytes[..]))
             );
             assert_matches!(
-                reader.next(),
+                reader.next_packet(),
                 Some(Err(ReadError::IoError(_)))
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next_packet().is_none());
         }
 
         // storage header pattern error
@@ -275,10 +275,10 @@ mod dlt_storage_reader_tests {
                 BufReader::new(Cursor::new(&bytes[..]))
             );
             assert_matches!(
-                reader.next(),
+                reader.next_packet(),
                 Some(Err(ReadError::StorageHeaderStartPattern(_)))
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next_packet().is_none());
         }
 
         // start read error
@@ -295,10 +295,10 @@ mod dlt_storage_reader_tests {
                 BufReader::new(Cursor::new(&v[..]))
             );
             assert_matches!(
-                reader.next(),
+                reader.next_packet(),
                 Some(Err(ReadError::IoError(_)))
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next_packet().is_none());
         }
 
         // dlt header version error
@@ -332,10 +332,10 @@ mod dlt_storage_reader_tests {
                 BufReader::new(Cursor::new(&v[..]))
             );
             assert_matches!(
-                reader.next(),
+                reader.next_packet(),
                 Some(Err(ReadError::UnsupportedDltVersion(_)))
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next_packet().is_none());
         }
 
         // read error of complete packet
@@ -365,10 +365,10 @@ mod dlt_storage_reader_tests {
                 BufReader::new(Cursor::new(&v[..]))
             );
             assert_matches!(
-                reader.next(),
+                reader.next_packet(),
                 Some(Err(ReadError::IoError(_)))
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next_packet().is_none());
         }
 
         // length size error
@@ -396,10 +396,10 @@ mod dlt_storage_reader_tests {
                 BufReader::new(Cursor::new(&v[..]))
             );
             assert_matches!(
-                reader.next(),
+                reader.next_packet(),
                 Some(Err(ReadError::DltMessageLengthTooSmall(_)))
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next_packet().is_none());
         }
 
         // dlt slice error
@@ -431,10 +431,10 @@ mod dlt_storage_reader_tests {
                 BufReader::new(Cursor::new(&v[..]))
             );
             assert_matches!(
-                reader.next(),
+                reader.next_packet(),
                 Some(Err(ReadError::DltMessageLengthTooSmall(_)))
             );
-            assert!(reader.next().is_none());
+            assert!(reader.next_packet().is_none());
         }
     }
 

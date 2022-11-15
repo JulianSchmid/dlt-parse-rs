@@ -88,7 +88,7 @@ impl StorageHeader {
 
     /// Returns the ecu id decoded as an UTF8 string or an error if
     /// decoding was not possible.
-    pub fn ecu_id_str<'a>(&'a self) -> Result<&str, Utf8Error> {
+    pub fn ecu_id_str(&self) -> Result<&str, Utf8Error> {
         core::str::from_utf8(&self.ecu_id)
     }
 }

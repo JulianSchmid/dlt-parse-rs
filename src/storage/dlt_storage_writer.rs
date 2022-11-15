@@ -20,7 +20,7 @@ impl<W: Write> DltStorageWriter<W> {
     }
 
     /// Writes a sliced packet into a storage file.
-    pub fn write_slice<'a>(&mut self, storage_header: StorageHeader, dlt_slice: DltPacketSlice<'a>) -> Result<(), Error> {
+    pub fn write_slice(&mut self, storage_header: StorageHeader, dlt_slice: DltPacketSlice<'_>) -> Result<(), Error> {
         storage_header.write(&mut self.writer)?;
         self.writer.write_all(dlt_slice.slice())
     }
