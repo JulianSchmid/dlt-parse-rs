@@ -1,13 +1,10 @@
-use structopt;
-
 use std::path::PathBuf;
 use structopt::StructOpt;
 
 use self::etherparse::*;
 use etherparse;
 
-use self::rpcap::read::PcapReader;
-use rpcap;
+use pcap_file::pcap::PcapReader;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -19,9 +16,11 @@ use dlt_parse::*;
 #[structopt(name = "print_messages_ids")]
 struct CommandLineArguments {
     /// Udp port on which dlt packets are send.
+    #[structopt(short, long)]
     udp_port: u16,
 
     /// Path to pcap file.
+    #[structopt(parse(from_os_str))]
     pcap_file: PathBuf,
 }
 
@@ -32,7 +31,7 @@ fn main() -> Result<(), Error> {
 #[derive(Debug)]
 enum Error {
     IoError(std::io::Error),
-    PcapError(rpcap::PcapError),
+    PcapError(pcap_file::PcapError),
 }
 
 impl From<std::io::Error> for Error {
@@ -41,17 +40,19 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<rpcap::PcapError> for Error {
-    fn from(err: rpcap::PcapError) -> Error {
+impl From<pcap_file::PcapError> for Error {
+    fn from(err: pcap_file::PcapError) -> Error {
         Error::PcapError(err)
     }
 }
 
 fn read(arguments: CommandLineArguments) -> Result<(), Error> {
-    let mut reader = PcapReader::new(BufReader::new(File::open(arguments.pcap_file)?))?;
 
-    while let Some(packet) = reader.next()? {
-        let sliced = SlicedPacket::from_ethernet(&packet.data);
+    let reader = PcapReader::new(BufReader::new(File::open(arguments.pcap_file)?))?;
+
+    for packet in reader {
+        let packet = packet?;
+        let sliced = SlicedPacket::from_ethernet(packet.data.as_ref());
 
         //only use the packet if the parsing from ethernet layer to transport layer was error free
         if let Ok(sliced_packet) = sliced {

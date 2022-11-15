@@ -8,7 +8,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! dlt_parse = "0.3.0"
+//! dlt_parse = "0.4.0"
 //! ```
 //!
 //! Next, add this to your crate:
