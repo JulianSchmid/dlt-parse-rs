@@ -81,7 +81,7 @@ impl StorageHeader {
 
     ///Serializes the header to the given writer.
     #[cfg(feature = "std")]
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), error::WriteError> {
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())?;
         Ok(())
     }

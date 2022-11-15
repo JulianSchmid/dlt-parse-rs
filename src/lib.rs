@@ -42,7 +42,6 @@
 //! let header = {
 //!     let mut header = DltHeader {
 //!         is_big_endian: true, //payload & message id are encoded with big endian
-//!         version: 0,
 //!         message_counter: 0,
 //!         length: 0,
 //!         ecu_id: None,
@@ -61,7 +60,7 @@
 //!
 //! //buffer to store serialized header & payload
 //! let mut buffer = Vec::<u8>::with_capacity(usize::from(header.length));
-//! buffer.extend_from_slice(&header.to_bytes().unwrap());
+//! buffer.extend_from_slice(&header.to_bytes());
 //!
 //! //write payload (message id 1234 & non verbose payload)
 //! {
@@ -329,13 +328,7 @@ impl DltMessageType {
 
 #[cfg(test)]
 mod tests {
-
-    use proptest::prelude::*;
-    use crate::proptest_generators::*;
     use super::*;
-
-    #[cfg(feature = "std")]
-    use std::{vec::Vec, io::Cursor};
 
     mod dlt_log_level {
         use super::*;

@@ -43,88 +43,87 @@ impl<'a> Iterator for SliceIterator<'a> {
     }
 }
 
+/// Tests for `SliceIterator`
+#[cfg(test)]
+mod slice_interator_tests {
 
-    /// Tests for `SliceIterator`
-    #[cfg(test)]
-    mod slice_interator_tests {
+    use super::*;
+    use proptest::prelude::*;
+    use crate::proptest_generators::*;
 
-        use super::*;
-        use proptest::prelude::*;
-        use crate::proptest_generators::*;
+    #[test]
+    fn clone_eq() {
+        let it = SliceIterator { slice: &[] };
+        assert_eq!(it, it.clone());
+    }
 
+    #[test]
+    fn debug() {
+        let it = SliceIterator { slice: &[] };
+        assert_eq!(
+            format!("SliceIterator {{ slice: {:?} }}", it.slice),
+            format!("{:?}", it)
+        );
+    }
+
+    proptest! {
         #[test]
-        fn clone_eq() {
-            let it = SliceIterator { slice: &[] };
-            assert_eq!(it, it.clone());
-        }
+        fn iterator(ref packets in prop::collection::vec(dlt_header_with_payload_any(), 1..5)) {
+            use error::PacketSliceError::*;
 
-        #[test]
-        fn debug() {
-            let it = SliceIterator { slice: &[] };
-            assert_eq!(
-                format!("SliceIterator {{ slice: {:?} }}", it.slice),
-                format!("{:?}", it)
+            //serialize the packets
+            let mut buffer = Vec::with_capacity(
+                (*packets).iter().fold(0, |acc, x| acc + usize::from(x.0.header_len()) + x.1.len())
             );
-        }
 
-        proptest! {
-            #[test]
-            fn iterator(ref packets in prop::collection::vec(dlt_header_with_payload_any(), 1..5)) {
-                use error::PacketSliceError::*;
+            let mut offsets: Vec<(usize, usize)> = Vec::with_capacity(packets.len());
 
-                //serialize the packets
-                let mut buffer = Vec::with_capacity(
-                    (*packets).iter().fold(0, |acc, x| acc + usize::from(x.0.header_len()) + x.1.len())
-                );
+            for packet in packets {
 
-                let mut offsets: Vec<(usize, usize)> = Vec::with_capacity(packets.len());
+                //save the start for later processing
+                let start = buffer.len();
 
-                for packet in packets {
+                //header & payload
+                buffer.extend_from_slice(&packet.0.to_bytes());
+                buffer.extend_from_slice(&packet.1);
 
-                    //save the start for later processing
-                    let start = buffer.len();
+                //safe the offset for later
+                offsets.push((start, buffer.len()));
+            }
 
-                    //header & payload
-                    buffer.extend_from_slice(&packet.0.to_bytes().unwrap());
-                    buffer.extend_from_slice(&packet.1);
+            //determine the expected output
+            let mut expected: Vec<DltPacketSlice<'_>> = Vec::with_capacity(packets.len());
+            for offset in &offsets {
+                //create the expected slice
+                let slice = &buffer[offset.0..offset.1];
+                let e = DltPacketSlice::from_slice(slice).unwrap();
+                assert_eq!(e.slice(), slice);
+                expected.push(e);
+            }
 
-                    //safe the offset for later
-                    offsets.push((start, buffer.len()));
-                }
+            //iterate over packets
+            assert_eq!(expected, SliceIterator::new(&buffer).map(|x| x.unwrap()).collect::<Vec<DltPacketSlice<'_>>>());
 
-                //determine the expected output
-                let mut expected: Vec<DltPacketSlice<'_>> = Vec::with_capacity(packets.len());
-                for offset in &offsets {
-                    //create the expected slice
-                    let slice = &buffer[offset.0..offset.1];
-                    let e = DltPacketSlice::from_slice(slice).unwrap();
-                    assert_eq!(e.slice(), slice);
-                    expected.push(e);
-                }
+            //check for error return when the slice is too small
+            //first entry
+            {
+                let o = offsets.first().unwrap();
+                let mut it = SliceIterator::new(&buffer[..(o.1 - 1)]);
 
-                //iterate over packets
-                assert_eq!(expected, SliceIterator::new(&buffer).map(|x| x.unwrap()).collect::<Vec<DltPacketSlice<'_>>>());
+                assert_matches!(it.next(), Some(Err(UnexpectedEndOfSlice(_))));
+                //check that the iterator does not continue
+                assert_matches!(it.next(), None);
+            }
+            //last entry
+            {
+                let o = offsets.last().unwrap();
+                let it = SliceIterator::new(&buffer[..(o.1 - 1)]);
+                let mut it = it.skip(offsets.len()-1);
 
-                //check for error return when the slice is too small
-                //first entry
-                {
-                    let o = offsets.first().unwrap();
-                    let mut it = SliceIterator::new(&buffer[..(o.1 - 1)]);
-
-                    assert_matches!(it.next(), Some(Err(UnexpectedEndOfSlice(_))));
-                    //check that the iterator does not continue
-                    assert_matches!(it.next(), None);
-                }
-                //last entry
-                {
-                    let o = offsets.last().unwrap();
-                    let it = SliceIterator::new(&buffer[..(o.1 - 1)]);
-                    let mut it = it.skip(offsets.len()-1);
-
-                    assert_matches!(it.next(), Some(Err(UnexpectedEndOfSlice(_))));
-                    //check that the iterator does not continue
-                    assert_matches!(it.next(), None);
-                }
+                assert_matches!(it.next(), Some(Err(UnexpectedEndOfSlice(_))));
+                //check that the iterator does not continue
+                assert_matches!(it.next(), None);
             }
         }
-    } // mod slice_iterator_tests
+    }
+} // mod slice_iterator_tests

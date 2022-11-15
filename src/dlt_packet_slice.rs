@@ -22,6 +22,23 @@ impl<'a> DltPacketSlice<'a> {
             ));
         }
 
+        // SAFETY:
+        // Safe as it is checked beforehand that the slice
+        // has at least 4 bytes.
+        let header_type = unsafe { *slice.get_unchecked(0) };
+
+        // check version
+        let version = (header_type >> 5) & MAX_VERSION;
+        if DltHeader::VERSION != version {
+            return Err(
+                UnsupportedDltVersion(
+                    UnsupportedDltVersionError{
+                        unsupported_version: version,
+                    }
+                )
+            );
+        }
+
         let length = u16::from_be_bytes(
             // SAFETY:
             // Safe as it is checked beforehand that the slice
@@ -237,12 +254,8 @@ impl<'a> DltPacketSlice<'a> {
         // Safe as it is checked in from_slice that the slice
         // has at least a length of 4 bytes.
         let header_type = unsafe { *self.slice.get_unchecked(0) };
-        let (is_big_endian, version) = {
-            (
-                0 != header_type & BIG_ENDIAN_FLAG,
-                (header_type >> 5) & MAX_VERSION,
-            )
-        };
+        let is_big_endian = 0 != header_type & BIG_ENDIAN_FLAG;
+        
         // SAFETY:
         // Safe as it is checked in from_slice that the slice
         // has at least a length of 4 bytes.
@@ -372,7 +385,6 @@ impl<'a> DltPacketSlice<'a> {
 
         DltHeader {
             is_big_endian,
-            version,
             message_counter,
             length,
             ecu_id,
@@ -396,7 +408,7 @@ mod dlt_packet_slice_tests {
         let mut header: DltHeader = Default::default();
         header.length = header.header_len() + 4;
         let mut buffer = Vec::with_capacity(usize::from(header.length));
-        buffer.extend_from_slice(&header.to_bytes().unwrap());
+        buffer.extend_from_slice(&header.to_bytes());
         buffer.extend_from_slice(&[0, 0, 0, 0]);
         let slice = DltPacketSlice::from_slice(&buffer).unwrap();
         assert_eq!(
@@ -415,7 +427,7 @@ mod dlt_packet_slice_tests {
             let mut buffer = Vec::with_capacity(
                 usize::from(packet.0.length)
             );
-            buffer.extend_from_slice(&packet.0.to_bytes().unwrap());
+            buffer.extend_from_slice(&packet.0.to_bytes());
             buffer.extend_from_slice(&packet.1);
             let slice = DltPacketSlice::from_slice(&buffer).unwrap();
 
@@ -434,7 +446,7 @@ mod dlt_packet_slice_tests {
             let mut buffer = Vec::with_capacity(
                 packet.1.len() + usize::from(packet.0.header_len())
             );
-            buffer.extend_from_slice(&packet.0.to_bytes().unwrap());
+            buffer.extend_from_slice(&packet.0.to_bytes());
             buffer.extend_from_slice(&packet.1[..]);
             //read the slice
             let slice = DltPacketSlice::from_slice(&buffer[..]).unwrap();
@@ -496,7 +508,7 @@ mod dlt_packet_slice_tests {
             let mut header: DltHeader = Default::default();
             header.length = 5;
             assert_matches!(
-                DltPacketSlice::from_slice(&header.to_bytes().unwrap()),
+                DltPacketSlice::from_slice(&header.to_bytes()),
                 Err(UnexpectedEndOfSlice(
                     UnexpectedEndOfSliceError {
                         layer: error::Layer::DltHeader,
@@ -510,13 +522,41 @@ mod dlt_packet_slice_tests {
 
     proptest! {
         #[test]
+        fn from_slice_version_errors(
+            ref packet in dlt_header_with_payload_any(),
+            unsupported_version in (0u8..0b111u8).prop_filter(
+                "version must be unknown",
+                |v| !DltHeader::SUPPORTED_DECODABLE_VERSIONS.iter().any(|&x| v == &x)
+            )
+        ) {
+            use error::{PacketSliceError::*, *};
+            
+            let mut buffer = Vec::with_capacity(
+                packet.1.len() + usize::from(packet.0.header_len())
+            );
+            buffer.extend_from_slice(&packet.0.to_bytes());
+            buffer.extend_from_slice(&packet.1[..]);
+
+            // inject unsupported version number
+            buffer[0] = (buffer[0] & 0b0001_1111) | ((unsupported_version << 5) & 0b1110_0000);
+
+            //read the slice
+            assert_eq!(
+                DltPacketSlice::from_slice(&buffer[..]),
+                Err(UnsupportedDltVersion(UnsupportedDltVersionError{ unsupported_version }))
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
         fn from_slice_header_variable_len_eof_errors(ref input in dlt_header_any()) {
             use error::PacketSliceError::*;
             let mut header = input.clone();
             header.length = header.header_len() + 3; //minimum payload size is 4
 
             let mut buffer = ArrayVec::<u8, {DltHeader::MAX_SERIALIZED_SIZE + 3}>::new();
-            buffer.try_extend_from_slice(&header.to_bytes().unwrap()).unwrap();
+            buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
             buffer.try_extend_from_slice(&[1,2,3]).unwrap();
             assert_matches!(
                 DltPacketSlice::from_slice(&buffer[..]),
@@ -578,7 +618,7 @@ mod dlt_packet_slice_tests {
 
                 //serialize
                 let mut buffer = ArrayVec::<u8, {DltHeader::MAX_SERIALIZED_SIZE + 4}>::new();
-                buffer.try_extend_from_slice(&header.to_bytes().unwrap()).unwrap();
+                buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
                 buffer.try_extend_from_slice(&0x1234_5678u32.to_be_bytes()).unwrap();
 
                 //slice
@@ -600,7 +640,7 @@ mod dlt_packet_slice_tests {
 
                 //serialize
                 let mut buffer = ArrayVec::<u8, {DltHeader::MAX_SERIALIZED_SIZE + 4}>::new();
-                buffer.try_extend_from_slice(&header.to_bytes().unwrap()).unwrap();
+                buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
                 buffer.try_extend_from_slice(&0x1234_5678u32.to_le_bytes()).unwrap();
 
                 //slice
