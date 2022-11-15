@@ -17,7 +17,7 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dlt_parse = "0.3.0"
+dlt_parse = "0.4.0"
 ```
 
 Next, add this to your crate:
@@ -53,7 +53,6 @@ let header = {
         is_big_endian: true, //payload & message id are encoded with big endian
         version: 0,
         message_counter: 0,
-        length: 0,
         ecu_id: None,
         session_id: None,
         timestamp: None,
