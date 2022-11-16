@@ -22,8 +22,8 @@ impl StorageHeader {
 
     /// Returns the serialized from of the header.
     pub fn to_bytes(&self) -> [u8; 16] {
-        let ts = self.timestamp_seconds.to_be_bytes();
-        let tms = self.timestamp_microseconds.to_be_bytes();
+        let ts = self.timestamp_seconds.to_le_bytes();
+        let tms = self.timestamp_microseconds.to_le_bytes();
         [
             StorageHeader::PATTERN_AT_START[0],
             StorageHeader::PATTERN_AT_START[1],
@@ -55,8 +55,8 @@ impl StorageHeader {
             })
         } else {
             Ok(StorageHeader {
-                timestamp_seconds: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
-                timestamp_microseconds: u32::from_be_bytes([
+                timestamp_seconds: u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
+                timestamp_microseconds: u32::from_le_bytes([
                     bytes[8], bytes[9], bytes[10], bytes[11],
                 ]),
                 ecu_id: [bytes[12], bytes[13], bytes[14], bytes[15]],
@@ -116,8 +116,8 @@ mod storage_header_tests {
         fn to_bytes(
             header in storage_header_any()
         ) {
-            let secs_be = header.timestamp_seconds.to_be_bytes();
-            let us_be = header.timestamp_microseconds.to_be_bytes();
+            let secs_be = header.timestamp_seconds.to_le_bytes();
+            let us_be = header.timestamp_microseconds.to_le_bytes();
 
             prop_assert_eq!(
                 header.to_bytes(),
