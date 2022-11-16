@@ -10,19 +10,18 @@ use core::str::Utf8Error;
 pub struct StorageHeader {
     pub timestamp_seconds: u32,
     pub timestamp_microseconds: u32,
-    pub ecu_id: [u8;4],
+    pub ecu_id: [u8; 4],
 }
 
 impl StorageHeader {
-
     /// Pattern/Magic Number that must be present at the start of a storage header.
-    pub const PATTERN_AT_START: [u8;4] = [0x44, 0x4C, 0x54, 0x01];
+    pub const PATTERN_AT_START: [u8; 4] = [0x44, 0x4C, 0x54, 0x01];
 
     /// Serialized length of the header in bytes.
     pub const BYTE_LEN: usize = 16;
 
     /// Returns the serialized from of the header.
-    pub fn to_bytes(&self) -> [u8;16] {
+    pub fn to_bytes(&self) -> [u8; 16] {
         let ts = self.timestamp_seconds.to_be_bytes();
         let tms = self.timestamp_microseconds.to_be_bytes();
         [
@@ -46,27 +45,21 @@ impl StorageHeader {
     }
 
     /// Tries to decode a storage header.
-    pub fn from_bytes(bytes: [u8;16]) -> Result<StorageHeader, error::StorageHeaderStartPatternError> {
-        let start_pattern = [
-            bytes[0], bytes[1], bytes[2], bytes[3],
-        ];
+    pub fn from_bytes(
+        bytes: [u8; 16],
+    ) -> Result<StorageHeader, error::StorageHeaderStartPatternError> {
+        let start_pattern = [bytes[0], bytes[1], bytes[2], bytes[3]];
         if start_pattern != StorageHeader::PATTERN_AT_START {
-            Err(
-                error::StorageHeaderStartPatternError{
-                    actual_pattern: start_pattern,
-                }
-            )
+            Err(error::StorageHeaderStartPatternError {
+                actual_pattern: start_pattern,
+            })
         } else {
-            Ok(StorageHeader{
-                timestamp_seconds: u32::from_be_bytes([
-                    bytes[4], bytes[5], bytes[6], bytes[7]
-                ]),
+            Ok(StorageHeader {
+                timestamp_seconds: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
                 timestamp_microseconds: u32::from_be_bytes([
-                    bytes[8], bytes[9], bytes[10], bytes[11]
+                    bytes[8], bytes[9], bytes[10], bytes[11],
                 ]),
-                ecu_id: [
-                    bytes[12], bytes[13], bytes[14], bytes[15]
-                ],
+                ecu_id: [bytes[12], bytes[13], bytes[14], bytes[15]],
             })
         }
     }
@@ -74,7 +67,7 @@ impl StorageHeader {
     ///Deserialize a DltHeader & TpHeader from the given reader.
     #[cfg(feature = "std")]
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<StorageHeader, error::ReadError> {
-        let mut bytes: [u8;16] = [0;16];
+        let mut bytes: [u8; 16] = [0; 16];
         reader.read_exact(&mut bytes)?;
         Ok(StorageHeader::from_bytes(bytes)?)
     }
@@ -94,14 +87,14 @@ impl StorageHeader {
 }
 
 #[cfg(test)]
-mod storage_header_tests{
+mod storage_header_tests {
 
     use super::*;
-    use std::format;
-    use proptest::prelude::*;
     use crate::proptest_generators::storage_header_any;
+    use proptest::prelude::*;
+    use std::format;
 
-    proptest!{
+    proptest! {
         #[test]
         fn debug(
             header in storage_header_any()
@@ -118,7 +111,7 @@ mod storage_header_tests{
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_bytes(
             header in storage_header_any()
@@ -132,13 +125,13 @@ mod storage_header_tests{
                     0x44, 0x4C, 0x54, 0x01,
                     secs_be[0], secs_be[1], secs_be[2], secs_be[3],
                     us_be[0], us_be[1], us_be[2], us_be[3],
-                    header.ecu_id[0], header.ecu_id[1], header.ecu_id[2], header.ecu_id[3], 
+                    header.ecu_id[0], header.ecu_id[1], header.ecu_id[2], header.ecu_id[3],
                 ]
             );
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_bytes(
             header in storage_header_any(),
@@ -152,7 +145,7 @@ mod storage_header_tests{
                 Ok(header.clone()),
                 StorageHeader::from_bytes(header.to_bytes())
             );
-            
+
             // start partern error
             {
                 let mut bytes = header.to_bytes();
@@ -170,7 +163,7 @@ mod storage_header_tests{
         }
     }
 
-    proptest!{
+    proptest! {
         #[cfg(feature = "std")]
         #[test]
         fn read(
@@ -211,7 +204,7 @@ mod storage_header_tests{
         }
     }
 
-    proptest!{
+    proptest! {
         #[cfg(feature = "std")]
         #[test]
         fn write(
@@ -234,7 +227,7 @@ mod storage_header_tests{
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn ecu_id_str(
             header in storage_header_any()
@@ -245,5 +238,4 @@ mod storage_header_tests{
             );
         }
     }
-
 }

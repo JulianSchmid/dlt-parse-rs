@@ -1,6 +1,6 @@
-use core::str::Utf8Error;
-use core::fmt;
 use super::*;
+use core::fmt;
+use core::str::Utf8Error;
 
 #[cfg(feature = "std")]
 use std::io;
@@ -32,10 +32,7 @@ mod layer_test {
     #[test]
     fn debug() {
         use Layer::*;
-        assert_eq!(
-            "VerboseTypeInfo",
-            format!("{:?}", VerboseTypeInfo)
-        );
+        assert_eq!("VerboseTypeInfo", format!("{:?}", VerboseTypeInfo));
     }
 }
 
@@ -87,8 +84,7 @@ mod dlt_message_length_too_small_error_test {
         assert_eq!(
             format!(
                 "DltMessageLengthTooSmallError {{ required_length: {}, actual_length: {} }}",
-                v.required_length,
-                v.actual_length,
+                v.required_length, v.actual_length,
             ),
             format!("{:?}", v)
         );
@@ -114,12 +110,12 @@ mod dlt_message_length_too_small_error_test {
     #[test]
     fn source() {
         use std::error::Error;
-        assert!(
-            DltMessageLengthTooSmallError {
-                required_length: 1,
-                actual_length: 2,
-            }.source().is_none()
-        );
+        assert!(DltMessageLengthTooSmallError {
+            required_length: 1,
+            actual_length: 2,
+        }
+        .source()
+        .is_none());
     }
 }
 
@@ -135,7 +131,7 @@ pub enum PacketSliceError {
     MessageLengthTooSmall(DltMessageLengthTooSmallError),
 
     /// Error if a slice did not contain enough data to decode a value.
-    UnexpectedEndOfSlice(UnexpectedEndOfSliceError)
+    UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
 }
 
 impl fmt::Display for PacketSliceError {
@@ -168,7 +164,7 @@ mod packet_slice_error_test {
     #[test]
     fn clone_eq() {
         use PacketSliceError::*;
-        let v = UnsupportedDltVersion(UnsupportedDltVersionError{
+        let v = UnsupportedDltVersion(UnsupportedDltVersionError {
             unsupported_version: 123,
         });
         assert_eq!(v, v.clone());
@@ -177,7 +173,7 @@ mod packet_slice_error_test {
     #[test]
     fn debug() {
         use PacketSliceError::*;
-        let inner = UnsupportedDltVersionError{
+        let inner = UnsupportedDltVersionError {
             unsupported_version: 123,
         };
         assert_eq!(
@@ -190,7 +186,7 @@ mod packet_slice_error_test {
     fn display() {
         use PacketSliceError::*;
         {
-            let inner = UnsupportedDltVersionError{
+            let inner = UnsupportedDltVersionError {
                 unsupported_version: 123,
             };
             assert_eq!(
@@ -199,7 +195,7 @@ mod packet_slice_error_test {
             );
         }
         {
-            let inner = DltMessageLengthTooSmallError{
+            let inner = DltMessageLengthTooSmallError {
                 actual_length: 1,
                 required_length: 2,
             };
@@ -224,25 +220,26 @@ mod packet_slice_error_test {
     #[cfg(feature = "std")]
     #[test]
     fn source() {
-        use PacketSliceError::*;
         use std::error::Error;
-        assert!(
-            UnsupportedDltVersion(UnsupportedDltVersionError{
-                unsupported_version: 123,
-            }).source().is_some()
-        );
-        assert!(MessageLengthTooSmall(DltMessageLengthTooSmallError{
-                actual_length: 1,
-                required_length: 2,
-            }).source().is_some()
-        );
-        assert!(
-            UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
-                actual_size: 1,
-                layer: Layer::DltHeader,
-                minimum_size: 3,
-            }).source().is_some()
-        );
+        use PacketSliceError::*;
+        assert!(UnsupportedDltVersion(UnsupportedDltVersionError {
+            unsupported_version: 123,
+        })
+        .source()
+        .is_some());
+        assert!(MessageLengthTooSmall(DltMessageLengthTooSmallError {
+            actual_length: 1,
+            required_length: 2,
+        })
+        .source()
+        .is_some());
+        assert!(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+            actual_size: 1,
+            layer: Layer::DltHeader,
+            minimum_size: 3,
+        })
+        .source()
+        .is_some());
     }
 }
 
@@ -284,7 +281,7 @@ mod unexpected_end_of_slice_error_test {
 
     #[test]
     fn clone_eq() {
-        let v = UnexpectedEndOfSliceError{
+        let v = UnexpectedEndOfSliceError {
             layer: Layer::DltHeader,
             minimum_size: 2,
             actual_size: 3,
@@ -294,7 +291,7 @@ mod unexpected_end_of_slice_error_test {
 
     #[test]
     fn debug() {
-        let v = UnexpectedEndOfSliceError{
+        let v = UnexpectedEndOfSliceError {
             layer: Layer::DltHeader,
             minimum_size: 2,
             actual_size: 3,
@@ -302,9 +299,7 @@ mod unexpected_end_of_slice_error_test {
         assert_eq!(
             format!(
                 "UnexpectedEndOfSliceError {{ layer: {:?}, minimum_size: {}, actual_size: {} }}",
-                v.layer,
-                v.minimum_size,
-                v.actual_size
+                v.layer, v.minimum_size, v.actual_size
             ),
             format!("{:?}", v)
         );
@@ -312,7 +307,7 @@ mod unexpected_end_of_slice_error_test {
 
     #[test]
     fn display() {
-        let v = UnexpectedEndOfSliceError{
+        let v = UnexpectedEndOfSliceError {
             layer: Layer::DltHeader,
             minimum_size: 2,
             actual_size: 3,
@@ -332,11 +327,13 @@ mod unexpected_end_of_slice_error_test {
     #[test]
     fn source() {
         use std::error::Error;
-        assert!(UnexpectedEndOfSliceError{
+        assert!(UnexpectedEndOfSliceError {
             layer: Layer::DltHeader,
             minimum_size: 2,
             actual_size: 3,
-        }.source().is_none());
+        }
+        .source()
+        .is_none());
     }
 }
 
@@ -372,7 +369,7 @@ mod unsupported_dlt_version_error_test {
 
     #[test]
     fn clone_eq() {
-        let v = UnsupportedDltVersionError{
+        let v = UnsupportedDltVersionError {
             unsupported_version: 123,
         };
         assert_eq!(v, v.clone());
@@ -380,7 +377,7 @@ mod unsupported_dlt_version_error_test {
 
     #[test]
     fn debug() {
-        let v = UnsupportedDltVersionError{
+        let v = UnsupportedDltVersionError {
             unsupported_version: 123,
         };
         assert_eq!(
@@ -395,7 +392,7 @@ mod unsupported_dlt_version_error_test {
 
     #[test]
     fn display() {
-        let v = UnsupportedDltVersionError{
+        let v = UnsupportedDltVersionError {
             unsupported_version: 123,
         };
         assert_eq!(
@@ -411,11 +408,11 @@ mod unsupported_dlt_version_error_test {
     #[test]
     fn source() {
         use std::error::Error;
-        assert!(
-            UnsupportedDltVersionError{
-                unsupported_version: 123,
-            }.source().is_none()
-        );
+        assert!(UnsupportedDltVersionError {
+            unsupported_version: 123,
+        }
+        .source()
+        .is_none());
     }
 }
 
@@ -428,7 +425,7 @@ pub enum VerboseDecodeError {
     /// each other.
     ///
     /// The encoded type info is given as an argument.
-    InvalidTypeInfo([u8;4]),
+    InvalidTypeInfo([u8; 4]),
 
     /// Error in case an invalid bool value is encountered (not 0 or 1).
     InvalidBoolValue(u8),
@@ -514,10 +511,7 @@ mod verbose_decode_error_tests {
     fn debug() {
         use VerboseDecodeError::*;
         let v = InvalidBoolValue(2);
-        assert_eq!(
-            format!("InvalidBoolValue({})", 2),
-            format!("{:?}", v)
-        );
+        assert_eq!(format!("InvalidBoolValue({})", 2), format!("{:?}", v));
     }
 
     #[test]
@@ -535,15 +529,12 @@ mod verbose_decode_error_tests {
         );
 
         {
-            let v = UnexpectedEndOfSliceError{
+            let v = UnexpectedEndOfSliceError {
                 layer: Layer::DltHeader,
                 actual_size: 1,
                 minimum_size: 2,
             };
-            assert_eq!(
-                format!("{}", v),
-                format!("{}", UnexpectedEndOfSlice(v))
-            );
+            assert_eq!(format!("{}", v), format!("{}", UnexpectedEndOfSlice(v)));
         }
 
         assert_eq!(
@@ -558,10 +549,7 @@ mod verbose_decode_error_tests {
 
         {
             let v = std::str::from_utf8(&[0, 159, 146, 150]).unwrap_err();
-            assert_eq!(
-                format!("{}", v),
-                format!("{}", Utf8(v))
-            );
+            assert_eq!(format!("{}", v), format!("{}", Utf8(v)));
         }
         assert_eq!(
             format!("DLT Verbose Message Field: Unsupported field type"),
@@ -572,24 +560,22 @@ mod verbose_decode_error_tests {
     #[cfg(feature = "std")]
     #[test]
     fn source() {
-        use VerboseDecodeError::*;
         use std::error::Error;
-        assert!(InvalidTypeInfo([1,2,3,4]).source().is_none());
+        use VerboseDecodeError::*;
+        assert!(InvalidTypeInfo([1, 2, 3, 4]).source().is_none());
         assert!(InvalidBoolValue(2).source().is_none());
-        assert!(
-            UnexpectedEndOfSlice(UnexpectedEndOfSliceError{
-                layer: Layer::DltHeader,
-                actual_size: 1,
-                minimum_size: 2,
-            }).source().is_some()
-        );
+        assert!(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+            layer: Layer::DltHeader,
+            actual_size: 1,
+            minimum_size: 2,
+        })
+        .source()
+        .is_some());
         assert!(VariableNameStringMissingNullTermination.source().is_none());
         assert!(VariableUnitStringMissingNullTermination.source().is_none());
-        assert!(
-            Utf8(std::str::from_utf8(&[0, 159, 146, 150]).unwrap_err())
+        assert!(Utf8(std::str::from_utf8(&[0, 159, 146, 150]).unwrap_err())
             .source()
-            .is_some()
-        );
+            .is_some());
         assert!(Unsupported.source().is_none());
     }
 
@@ -606,13 +592,14 @@ mod verbose_decode_error_tests {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StorageHeaderStartPatternError {
     /// Encountered pattern at the start.
-    pub actual_pattern: [u8;4],
+    pub actual_pattern: [u8; 4],
 }
 
 impl fmt::Display for StorageHeaderStartPatternError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
-            f, "Error when parsing DLT storage header. Expected pattern {:?} at start but got {:?}",
+            f,
+            "Error when parsing DLT storage header. Expected pattern {:?} at start but got {:?}",
             super::storage::StorageHeader::PATTERN_AT_START,
             self.actual_pattern
         )
@@ -632,16 +619,16 @@ mod storage_header_start_pattern_error_tests {
 
     #[test]
     fn clone_eq() {
-        let v = StorageHeaderStartPatternError{
-            actual_pattern: [1,2,3,4]
+        let v = StorageHeaderStartPatternError {
+            actual_pattern: [1, 2, 3, 4],
         };
         assert_eq!(v, v.clone());
     }
 
     #[test]
     fn debug() {
-        let v = StorageHeaderStartPatternError{
-            actual_pattern: [1,2,3,4]
+        let v = StorageHeaderStartPatternError {
+            actual_pattern: [1, 2, 3, 4],
         };
         assert_eq!(
             format!(
@@ -654,8 +641,8 @@ mod storage_header_start_pattern_error_tests {
 
     #[test]
     fn display() {
-        let v = StorageHeaderStartPatternError{
-            actual_pattern: [1,2,3,4]
+        let v = StorageHeaderStartPatternError {
+            actual_pattern: [1, 2, 3, 4],
         };
         assert_eq!(
             format!(
@@ -671,11 +658,11 @@ mod storage_header_start_pattern_error_tests {
     #[test]
     fn source() {
         use std::error::Error;
-        assert!(
-            StorageHeaderStartPatternError{
-                actual_pattern: [1,2,3,4]
-            }.source().is_none()
-        );
+        assert!(StorageHeaderStartPatternError {
+            actual_pattern: [1, 2, 3, 4]
+        }
+        .source()
+        .is_none());
     }
 }
 
@@ -695,7 +682,7 @@ pub enum ReadError {
 
     /// Error if a storage header does not start with the correct pattern.
     StorageHeaderStartPattern(StorageHeaderStartPatternError),
-    
+
     /// Standard io error.
     IoError(io::Error),
 }
@@ -722,7 +709,7 @@ impl fmt::Display for ReadError {
         match self {
             UnexpectedEndOfSlice(err) => {
                 write!(f, "ReadError: Unexpected end of slice. The given slice only contained {} bytes, which is less then minimum required {} bytes.", err.actual_size, err.minimum_size)
-            },
+            }
             UnsupportedDltVersion(err) => err.fmt(f),
             DltMessageLengthTooSmall(err) => err.fmt(f),
             StorageHeaderStartPattern(err) => err.fmt(f),
@@ -779,7 +766,7 @@ mod read_error {
             );
         }
         {
-            let c = UnsupportedDltVersionError{
+            let c = UnsupportedDltVersionError {
                 unsupported_version: 123,
             };
             assert_eq!(
@@ -788,7 +775,7 @@ mod read_error {
             );
         }
         {
-            let c = DltMessageLengthTooSmallError{
+            let c = DltMessageLengthTooSmallError {
                 required_length: 3,
                 actual_length: 4,
             };
@@ -799,10 +786,7 @@ mod read_error {
         }
         {
             let c = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
-            assert_eq!(
-                format!("IoError({:?})", c),
-                format!("{:?}", IoError(c))
-            );
+            assert_eq!(format!("IoError({:?})", c), format!("{:?}", IoError(c)));
         }
     }
 
@@ -875,69 +859,52 @@ mod read_error {
 
     #[test]
     fn source() {
-        use ReadError::*;
         use std::error::Error;
+        use ReadError::*;
 
-        assert!(
-            UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError {
-                    layer: Layer::DltHeader,
-                    minimum_size: 1,
-                    actual_size: 2
-                }
-            )
-            .source()
-            .is_some());
-        assert!(
-            UnsupportedDltVersion(
-                UnsupportedDltVersionError { unsupported_version: 123 }
-            )
-            .source()
-            .is_some());
-        assert!(
-            DltMessageLengthTooSmall(
-                DltMessageLengthTooSmallError {
-                    required_length: 3,
-                    actual_length: 4
-                }
-            )
-            .source()
-            .is_some()
-        );
-        assert!(
-            StorageHeaderStartPattern(
-                StorageHeaderStartPatternError{
-                    actual_pattern: [1,2,3,4]
-                }
-            )
-            .source()
-            .is_some()
-        );
+        assert!(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+            layer: Layer::DltHeader,
+            minimum_size: 1,
+            actual_size: 2
+        })
+        .source()
+        .is_some());
+        assert!(UnsupportedDltVersion(UnsupportedDltVersionError {
+            unsupported_version: 123
+        })
+        .source()
+        .is_some());
+        assert!(DltMessageLengthTooSmall(DltMessageLengthTooSmallError {
+            required_length: 3,
+            actual_length: 4
+        })
+        .source()
+        .is_some());
+        assert!(StorageHeaderStartPattern(StorageHeaderStartPatternError {
+            actual_pattern: [1, 2, 3, 4]
+        })
+        .source()
+        .is_some());
         assert!(
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-            .source()
-            .is_some()
+                .source()
+                .is_some()
         );
     }
 
     #[test]
     fn from_io_error() {
         let r: ReadError = std::io::Error::new(std::io::ErrorKind::Other, "oh no!").into();
-        assert_matches!(
-            r,
-            ReadError::IoError(_)
-        );
+        assert_matches!(r, ReadError::IoError(_));
     }
 
     #[test]
     fn from_storage_header_error() {
         let r: ReadError = StorageHeaderStartPatternError {
-            actual_pattern: [1,2,3,4],
-        }.into();
-        assert_matches!(
-            r,
-            ReadError::StorageHeaderStartPattern(_)
-        );
+            actual_pattern: [1, 2, 3, 4],
+        }
+        .into();
+        assert_matches!(r, ReadError::StorageHeaderStartPattern(_));
     }
 
     #[test]
@@ -946,45 +913,34 @@ mod read_error {
 
         // UnsupportedDltVersion
         {
-            let r: ReadError = I::UnsupportedDltVersion(
-                UnsupportedDltVersionError { unsupported_version: 123 }
-            ).into();
-            assert_matches!(
-                r,
-                ReadError::UnsupportedDltVersion(_)
-            );
+            let r: ReadError = I::UnsupportedDltVersion(UnsupportedDltVersionError {
+                unsupported_version: 123,
+            })
+            .into();
+            assert_matches!(r, ReadError::UnsupportedDltVersion(_));
         }
 
         // MessageLengthTooSmall
         {
-            let r: ReadError = I::MessageLengthTooSmall(
-                DltMessageLengthTooSmallError {
-                    required_length: 3,
-                    actual_length: 4
-                }
-            ).into();
-            assert_matches!(
-                r,
-                ReadError::DltMessageLengthTooSmall(_)
-            );
+            let r: ReadError = I::MessageLengthTooSmall(DltMessageLengthTooSmallError {
+                required_length: 3,
+                actual_length: 4,
+            })
+            .into();
+            assert_matches!(r, ReadError::DltMessageLengthTooSmall(_));
         }
 
         // UnexpectedEndOfSlice
         {
-            let r: ReadError = I::UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError {
-                    layer: Layer::DltHeader,
-                    minimum_size: 1,
-                    actual_size: 2
-                }
-            ).into();
-            assert_matches!(
-                r,
-                ReadError::UnexpectedEndOfSlice(_)
-            );
+            let r: ReadError = I::UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::DltHeader,
+                minimum_size: 1,
+                actual_size: 2,
+            })
+            .into();
+            assert_matches!(r, ReadError::UnexpectedEndOfSlice(_));
         }
     }
-
 } // mod read_error
 
 /// Error that can occur when an out of range value is passed to a function.

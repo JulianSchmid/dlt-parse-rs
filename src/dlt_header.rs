@@ -7,17 +7,16 @@ pub struct DltHeader {
     pub is_big_endian: bool,
     pub message_counter: u8,
     pub length: u16,
-    pub ecu_id: Option<[u8;4]>,
+    pub ecu_id: Option<[u8; 4]>,
     pub session_id: Option<u32>,
     pub timestamp: Option<u32>,
     pub extended_header: Option<DltExtendedHeader>,
 }
 
 impl DltHeader {
-
     /// Versions of the DLT header that can be decoded by the decoding
     /// functions in this library.
-    pub const SUPPORTED_DECODABLE_VERSIONS: [u8;1] = [1];
+    pub const SUPPORTED_DECODABLE_VERSIONS: [u8; 1] = [1];
 
     /// The maximum size in bytes/octets a V1 DLT header can be when encoded.
     ///
@@ -37,13 +36,11 @@ impl DltHeader {
         use error::{PacketSliceError::*, *};
 
         if slice.len() < 4 {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: error::Layer::DltHeader, 
-                    minimum_size: 4,
-                    actual_size: slice.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: error::Layer::DltHeader,
+                minimum_size: 4,
+                actual_size: slice.len(),
+            }));
         }
 
         // SAFETY:
@@ -54,13 +51,9 @@ impl DltHeader {
         // check version
         let version = (header_type >> 5) & MAX_VERSION;
         if DltHeader::VERSION != version {
-            return Err(
-                UnsupportedDltVersion(
-                    UnsupportedDltVersionError{
-                        unsupported_version: version,
-                    }
-                )
-            );
+            return Err(UnsupportedDltVersion(UnsupportedDltVersionError {
+                unsupported_version: version,
+            }));
         }
 
         // calculate the minimum size based on the header flags
@@ -91,20 +84,16 @@ impl DltHeader {
 
         // check that enough data based on the header size is available
         if slice.len() < header_len {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError {
-                    layer: error::Layer::DltHeader, 
-                    minimum_size: header_len,
-                    actual_size: slice.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: error::Layer::DltHeader,
+                minimum_size: header_len,
+                actual_size: slice.len(),
+            }));
         }
 
         // SAFETY: Safe as the slice lenght has been verfied to be long
         // enough for the optional header parts.
-        let mut next_option_ptr = unsafe {
-            slice.as_ptr().add(4)
-        };
+        let mut next_option_ptr = unsafe { slice.as_ptr().add(4) };
 
         let ecu_id = if 0 != header_type & ECU_ID_FLAG {
             // SAFETY: Safe as header_len was extended by 4 if the ECU_ID_FLAG
@@ -135,7 +124,7 @@ impl DltHeader {
                     *session_id_ptr,
                     *session_id_ptr.add(1),
                     *session_id_ptr.add(2),
-                    *session_id_ptr.add(3)
+                    *session_id_ptr.add(3),
                 ]))
             }
         } else {
@@ -153,7 +142,7 @@ impl DltHeader {
                     *timestamp_id_ptr,
                     *timestamp_id_ptr.add(1),
                     *timestamp_id_ptr.add(2),
-                    *timestamp_id_ptr.add(3)
+                    *timestamp_id_ptr.add(3),
                 ]))
             }
         } else {
@@ -194,16 +183,12 @@ impl DltHeader {
             // SAFETY:
             // Safe, as the slice length was checked at the start of the function
             // to be at least 4.
-            message_counter: unsafe {
-                *slice.get_unchecked(1)
-            },
+            message_counter: unsafe { *slice.get_unchecked(1) },
             length: u16::from_be_bytes(
                 // SAFETY:
                 // Safe, as the slice length was checked at the start of the function
                 // to be at least 4.
-                unsafe {
-                    [*slice.get_unchecked(2), *slice.get_unchecked(3)]
-                }
+                unsafe { [*slice.get_unchecked(2), *slice.get_unchecked(3)] },
             ),
             ecu_id,
             session_id,
@@ -216,7 +201,7 @@ impl DltHeader {
     pub fn to_bytes(&self) -> ArrayVec<u8, { DltHeader::MAX_SERIALIZED_SIZE }> {
         // encode values
         let length_be = self.length.to_be_bytes();
-        let mut bytes: [u8;26] = [
+        let mut bytes: [u8; 26] = [
             //header type bitfield
             {
                 let mut result = 0;
@@ -242,20 +227,37 @@ impl DltHeader {
             length_be[0],
             length_be[1],
             // 4 bytes ECU id
-            0,0,0,0,
+            0,
+            0,
+            0,
+            0,
             // 4 bytes for session id
-            0,0,0,0,
+            0,
+            0,
+            0,
+            0,
             // 4 bytes for timestamp
-            0,0,0,0,
+            0,
+            0,
+            0,
+            0,
             // 10 bytes for extension header
-            0,0,0,0,0,
-            0,0,0,0,0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
         ];
 
         let mut offset = 4;
-        let mut add_4bytes = |data: [u8;4]| {
+        let mut add_4bytes = |data: [u8; 4]| {
             // SAFETY: add_4bytes not called more then 4 times
-            // as and the 
+            // as and the
             unsafe {
                 let ptr = bytes.as_mut_slice().as_mut_ptr().add(offset);
                 *ptr = data[0];
@@ -321,13 +323,11 @@ impl DltHeader {
         // check version
         let version = (header_type >> 5) & MAX_VERSION;
         if 1 != version {
-            return Err(
-                error::ReadError::UnsupportedDltVersion(
-                    UnsupportedDltVersionError{
-                        unsupported_version: version,
-                    }
-                )
-            );
+            return Err(error::ReadError::UnsupportedDltVersion(
+                UnsupportedDltVersionError {
+                    unsupported_version: version,
+                },
+            ));
         }
 
         //let extended_header = 0 != header_type & EXTDENDED_HEADER_FLAG;
@@ -481,10 +481,10 @@ impl DltHeader {
 mod dlt_header_tests {
 
     use super::*;
-    use proptest::prelude::*;
     use crate::proptest_generators::*;
+    use proptest::prelude::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_bytes_from_slice(
             ref dlt_header in dlt_header_any(),
@@ -506,7 +506,7 @@ mod dlt_header_tests {
             {
                 for l in 0..dlt_header.header_len() as usize {
                     let bytes = dlt_header.to_bytes();
-                    
+
                     assert_eq!(
                         UnexpectedEndOfSlice(
                             error::UnexpectedEndOfSliceError{
@@ -574,7 +574,7 @@ mod dlt_header_tests {
         #[cfg(feature = "std")]
         fn write_io_error(ref header in dlt_header_any()) {
             use std::io::Cursor;
-            
+
             let mut buffer: Vec<u8> = Vec::with_capacity(
                 header.header_len().into()
             );
@@ -606,7 +606,7 @@ mod dlt_header_tests {
     fn header_len() {
         struct Test {
             expected: u16,
-            ecu_id: Option<[u8;4]>,
+            ecu_id: Option<[u8; 4]>,
             session_id: Option<u32>,
             timestamp: Option<u32>,
             extended_header: Option<DltExtendedHeader>,
@@ -622,14 +622,14 @@ mod dlt_header_tests {
             },
             Test {
                 expected: 4 + 4 + 4 + 4 + 10,
-                ecu_id: Some([0;4]),
+                ecu_id: Some([0; 4]),
                 session_id: Some(0),
                 timestamp: Some(0),
                 extended_header: Some(Default::default()),
             },
             Test {
                 expected: 4 + 4,
-                ecu_id: Some([0;4]),
+                ecu_id: Some([0; 4]),
                 session_id: None,
                 timestamp: None,
                 extended_header: None,

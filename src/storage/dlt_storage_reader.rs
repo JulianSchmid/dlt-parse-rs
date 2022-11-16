@@ -1,9 +1,9 @@
-use std::io::{Read, BufRead};
+use std::io::{BufRead, Read};
 use std::vec::Vec;
 
+use crate::error::{DltMessageLengthTooSmallError, ReadError, UnsupportedDltVersionError};
+use crate::{storage::StorageHeader, DltPacketSlice};
 use crate::{DltHeader, MAX_VERSION};
-use crate::error::{ReadError, UnsupportedDltVersionError, DltMessageLengthTooSmallError};
-use crate::{DltPacketSlice, storage::StorageHeader};
 
 use super::StorageSlice;
 
@@ -17,10 +17,9 @@ pub struct DltStorageReader<R: Read + BufRead> {
 
 #[cfg(feature = "std")]
 impl<R: Read + BufRead> DltStorageReader<R> {
-
     /// Creates a new reader.
     pub fn new(reader: R) -> DltStorageReader<R> {
-        DltStorageReader{
+        DltStorageReader {
             reader,
             last_packet: Vec::with_capacity(u16::MAX as usize),
             read_error: false,
@@ -29,7 +28,6 @@ impl<R: Read + BufRead> DltStorageReader<R> {
 
     /// Returns the next DLT packet.
     pub fn next_packet(&mut self) -> Option<Result<StorageSlice<'_>, ReadError>> {
-
         // check if iteration is done based as
         if self.read_error {
             return None;
@@ -37,9 +35,11 @@ impl<R: Read + BufRead> DltStorageReader<R> {
 
         // check if there is data left in the reader
         match self.reader.fill_buf() {
-            Ok(slice) => if slice.is_empty() {
-                return None;
-            },
+            Ok(slice) => {
+                if slice.is_empty() {
+                    return None;
+                }
+            }
             Err(err) => {
                 self.read_error = true;
                 return Some(Err(err.into()));
@@ -47,7 +47,7 @@ impl<R: Read + BufRead> DltStorageReader<R> {
         }
 
         // get the data from the storage header bytes
-        let mut storage_header_data = [0u8;StorageHeader::BYTE_LEN];
+        let mut storage_header_data = [0u8; StorageHeader::BYTE_LEN];
         if let Err(err) = self.reader.read_exact(&mut storage_header_data) {
             self.read_error = true;
             return Some(Err(err.into()));
@@ -61,7 +61,7 @@ impl<R: Read + BufRead> DltStorageReader<R> {
         };
 
         // read the start
-        let mut header_start = [0u8;4];
+        let mut header_start = [0u8; 4];
         if let Err(err) = self.reader.read_exact(&mut header_start) {
             self.read_error = true;
             return Some(Err(err.into()));
@@ -71,15 +71,13 @@ impl<R: Read + BufRead> DltStorageReader<R> {
         let version = (header_start[0] >> 5) & MAX_VERSION;
         if DltHeader::VERSION != version {
             self.read_error = true;
-            return Some(Err(
-                ReadError::UnsupportedDltVersion(
-                    UnsupportedDltVersionError{
-                        unsupported_version: version,
-                    }
-                )
-            ));
+            return Some(Err(ReadError::UnsupportedDltVersion(
+                UnsupportedDltVersionError {
+                    unsupported_version: version,
+                },
+            )));
         }
-        
+
         // check length to be at least 4
         let length = u16::from_be_bytes([header_start[2], header_start[3]]) as usize;
         if length < 4 {
@@ -88,7 +86,7 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                 DltMessageLengthTooSmallError {
                     required_length: 4,
                     actual_length: length,
-                }
+                },
             )));
         }
 
@@ -112,20 +110,27 @@ impl<R: Read + BufRead> DltStorageReader<R> {
             }
         };
 
-        Some(Ok(StorageSlice { storage_header, packet }))
-    } 
+        Some(Ok(StorageSlice {
+            storage_header,
+            packet,
+        }))
+    }
 }
 
 #[cfg(test)]
 #[cfg(feature = "std")]
 mod dlt_storage_reader_tests {
     use super::*;
-    use crate::{storage::{DltStorageReader, StorageHeader, StorageSlice}, DltHeader, DltPacketSlice, error::ReadError};
-    use std::io::{Cursor, BufReader, BufRead};
+    use crate::{
+        error::ReadError,
+        storage::{DltStorageReader, StorageHeader, StorageSlice},
+        DltHeader, DltPacketSlice,
+    };
     use std::format;
+    use std::io::{BufRead, BufReader, Cursor};
 
     /// Reader that returns an error when buffer_fill is called.
-    struct BufferFillErrorReader{}
+    struct BufferFillErrorReader {}
 
     impl Read for BufferFillErrorReader {
         fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
@@ -143,9 +148,7 @@ mod dlt_storage_reader_tests {
 
     #[test]
     fn debug() {
-        let r = DltStorageReader::new(
-            BufReader::new(Cursor::new(&[]))
-        );
+        let r = DltStorageReader::new(BufReader::new(Cursor::new(&[])));
         assert!(format!("{:?}", r).len() > 0);
     }
 
@@ -155,23 +158,21 @@ mod dlt_storage_reader_tests {
 
         // empty reader
         {
-            let mut r = DltStorageReader::new(
-                BufReader::new(Cursor::new(&[]))
-            );
+            let mut r = DltStorageReader::new(BufReader::new(Cursor::new(&[])));
             assert!(r.next_packet().is_none());
         }
 
         // reader with working packets
         {
             // build two packets
-            let storage_header0 = StorageHeader{
+            let storage_header0 = StorageHeader {
                 timestamp_seconds: 1,
                 timestamp_microseconds: 2,
                 ecu_id: [0, 0, 0, 0],
             };
             let packet0 = {
                 let mut packet = Vec::new();
-                let mut header = DltHeader{
+                let mut header = DltHeader {
                     is_big_endian: true,
                     message_counter: 1,
                     length: 0, // set afterwords
@@ -182,18 +183,18 @@ mod dlt_storage_reader_tests {
                 };
                 header.length = header.header_len() + 4;
                 header.write(&mut packet).unwrap();
-                packet.extend_from_slice(&[1,2,3,4]);
+                packet.extend_from_slice(&[1, 2, 3, 4]);
                 packet
             };
 
-            let storage_header1 = StorageHeader{
+            let storage_header1 = StorageHeader {
                 timestamp_seconds: 3,
                 timestamp_microseconds: 4,
                 ecu_id: [5, 6, 7, 8],
             };
             let packet1 = {
                 let mut packet = Vec::new();
-                let mut header = DltHeader{
+                let mut header = DltHeader {
                     is_big_endian: true,
                     message_counter: 2,
                     length: 0, // set afterwords
@@ -216,19 +217,17 @@ mod dlt_storage_reader_tests {
             v.extend_from_slice(&packet1);
 
             // check result
-            let mut reader = DltStorageReader::new(
-                BufReader::new(Cursor::new(&v[..]))
-            );
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
             assert_eq!(
                 reader.next_packet().unwrap().unwrap(),
-                StorageSlice{
+                StorageSlice {
                     storage_header: storage_header0,
                     packet: DltPacketSlice::from_slice(&packet0).unwrap()
                 }
             );
             assert_eq!(
                 reader.next_packet().unwrap().unwrap(),
-                StorageSlice{
+                StorageSlice {
                     storage_header: storage_header1,
                     packet: DltPacketSlice::from_slice(&packet1).unwrap()
                 }
@@ -238,42 +237,33 @@ mod dlt_storage_reader_tests {
 
         // reader with error during buffering
         {
-            let mut buf = BufferFillErrorReader{};
+            let mut buf = BufferFillErrorReader {};
             buf.consume(0);
             buf.read(&mut []).unwrap();
 
             let mut reader = DltStorageReader::new(buf);
-            assert_matches!(
-                reader.next_packet(),
-                Some(Err(ReadError::IoError(_)))
-            );
+            assert_matches!(reader.next_packet(), Some(Err(ReadError::IoError(_))));
             assert!(reader.next_packet().is_none());
         }
 
         // storage header read error
         {
-            let bytes = [0u8;StorageHeader::BYTE_LEN - 1];
-            let mut reader = DltStorageReader::new(
-                BufReader::new(Cursor::new(&bytes[..]))
-            );
-            assert_matches!(
-                reader.next_packet(),
-                Some(Err(ReadError::IoError(_)))
-            );
+            let bytes = [0u8; StorageHeader::BYTE_LEN - 1];
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&bytes[..])));
+            assert_matches!(reader.next_packet(), Some(Err(ReadError::IoError(_))));
             assert!(reader.next_packet().is_none());
         }
 
         // storage header pattern error
         {
-            let mut bytes = StorageHeader{
+            let mut bytes = StorageHeader {
                 timestamp_seconds: 0,
                 timestamp_microseconds: 0,
-                ecu_id: [0u8;4],
-            }.to_bytes();
+                ecu_id: [0u8; 4],
+            }
+            .to_bytes();
             bytes[0] = 0;
-            let mut reader = DltStorageReader::new(
-                BufReader::new(Cursor::new(&bytes[..]))
-            );
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&bytes[..])));
             assert_matches!(
                 reader.next_packet(),
                 Some(Err(ReadError::StorageHeaderStartPattern(_)))
@@ -284,20 +274,18 @@ mod dlt_storage_reader_tests {
         // start read error
         {
             let mut v = Vec::new();
-            v.extend_from_slice(&StorageHeader{
-                timestamp_seconds: 0,
-                timestamp_microseconds: 0,
-                ecu_id: [0u8;4],
-            }.to_bytes());
-            v.extend_from_slice(&[1,2,3]);
+            v.extend_from_slice(
+                &StorageHeader {
+                    timestamp_seconds: 0,
+                    timestamp_microseconds: 0,
+                    ecu_id: [0u8; 4],
+                }
+                .to_bytes(),
+            );
+            v.extend_from_slice(&[1, 2, 3]);
 
-            let mut reader = DltStorageReader::new(
-                BufReader::new(Cursor::new(&v[..]))
-            );
-            assert_matches!(
-                reader.next_packet(),
-                Some(Err(ReadError::IoError(_)))
-            );
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
+            assert_matches!(reader.next_packet(), Some(Err(ReadError::IoError(_))));
             assert!(reader.next_packet().is_none());
         }
 
@@ -305,13 +293,16 @@ mod dlt_storage_reader_tests {
         {
             let mut v = Vec::new();
             {
-                v.extend_from_slice(&StorageHeader{
-                    timestamp_seconds: 1,
-                    timestamp_microseconds: 2,
-                    ecu_id: [0, 0, 0, 0],
-                }.to_bytes());
-                
-                let mut header = DltHeader{
+                v.extend_from_slice(
+                    &StorageHeader {
+                        timestamp_seconds: 1,
+                        timestamp_microseconds: 2,
+                        ecu_id: [0, 0, 0, 0],
+                    }
+                    .to_bytes(),
+                );
+
+                let mut header = DltHeader {
                     is_big_endian: true,
                     message_counter: 1,
                     length: 0, // set afterwords
@@ -322,15 +313,13 @@ mod dlt_storage_reader_tests {
                 };
                 header.length = header.header_len() + 4;
                 header.write(&mut v).unwrap();
-                v.extend_from_slice(&[1,2,3,4]);
+                v.extend_from_slice(&[1, 2, 3, 4]);
             }
 
             // change the version to 0
             v[StorageHeader::BYTE_LEN] = 0;
 
-            let mut reader = DltStorageReader::new(
-                BufReader::new(Cursor::new(&v[..]))
-            );
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
             assert_matches!(
                 reader.next_packet(),
                 Some(Err(ReadError::UnsupportedDltVersion(_)))
@@ -342,13 +331,16 @@ mod dlt_storage_reader_tests {
         {
             let mut v = Vec::new();
             {
-                v.extend_from_slice(&StorageHeader{
-                    timestamp_seconds: 1,
-                    timestamp_microseconds: 2,
-                    ecu_id: [0, 0, 0, 0],
-                }.to_bytes());
-                
-                let mut header = DltHeader{
+                v.extend_from_slice(
+                    &StorageHeader {
+                        timestamp_seconds: 1,
+                        timestamp_microseconds: 2,
+                        ecu_id: [0, 0, 0, 0],
+                    }
+                    .to_bytes(),
+                );
+
+                let mut header = DltHeader {
                     is_big_endian: true,
                     message_counter: 1,
                     length: 0, // set afterwords
@@ -359,15 +351,10 @@ mod dlt_storage_reader_tests {
                 };
                 header.length = header.header_len() + 4;
                 header.write(&mut v).unwrap();
-                v.extend_from_slice(&[1,2,3]); // missing one byte
+                v.extend_from_slice(&[1, 2, 3]); // missing one byte
             }
-            let mut reader = DltStorageReader::new(
-                BufReader::new(Cursor::new(&v[..]))
-            );
-            assert_matches!(
-                reader.next_packet(),
-                Some(Err(ReadError::IoError(_)))
-            );
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
+            assert_matches!(reader.next_packet(), Some(Err(ReadError::IoError(_))));
             assert!(reader.next_packet().is_none());
         }
 
@@ -375,13 +362,16 @@ mod dlt_storage_reader_tests {
         {
             let mut v = Vec::new();
             {
-                v.extend_from_slice(&StorageHeader{
-                    timestamp_seconds: 1,
-                    timestamp_microseconds: 2,
-                    ecu_id: [0, 0, 0, 0],
-                }.to_bytes());
-                
-                DltHeader{
+                v.extend_from_slice(
+                    &StorageHeader {
+                        timestamp_seconds: 1,
+                        timestamp_microseconds: 2,
+                        ecu_id: [0, 0, 0, 0],
+                    }
+                    .to_bytes(),
+                );
+
+                DltHeader {
                     is_big_endian: true,
                     message_counter: 1,
                     length: 3, // trigger error
@@ -389,12 +379,12 @@ mod dlt_storage_reader_tests {
                     session_id: None,
                     timestamp: None,
                     extended_header: None,
-                }.write(&mut v).unwrap();
-                v.extend_from_slice(&[1,2,3]); // missing one byte
+                }
+                .write(&mut v)
+                .unwrap();
+                v.extend_from_slice(&[1, 2, 3]); // missing one byte
             }
-            let mut reader = DltStorageReader::new(
-                BufReader::new(Cursor::new(&v[..]))
-            );
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
             assert_matches!(
                 reader.next_packet(),
                 Some(Err(ReadError::DltMessageLengthTooSmall(_)))
@@ -406,19 +396,22 @@ mod dlt_storage_reader_tests {
         {
             let mut v = Vec::new();
             {
-                v.extend_from_slice(&StorageHeader{
-                    timestamp_seconds: 1,
-                    timestamp_microseconds: 2,
-                    ecu_id: [0, 0, 0, 0],
-                }.to_bytes());
-                
+                v.extend_from_slice(
+                    &StorageHeader {
+                        timestamp_seconds: 1,
+                        timestamp_microseconds: 2,
+                        ecu_id: [0, 0, 0, 0],
+                    }
+                    .to_bytes(),
+                );
+
                 // setup a header that needs more then 4 bytes
                 // so the slicing method triggers an error
-                let mut header = DltHeader{
+                let mut header = DltHeader {
                     is_big_endian: true,
                     message_counter: 1,
                     length: 0, // set later
-                    ecu_id: Some([0u8;4]),
+                    ecu_id: Some([0u8; 4]),
                     session_id: Some(1234),
                     timestamp: None,
                     extended_header: None,
@@ -427,9 +420,7 @@ mod dlt_storage_reader_tests {
                 header.write(&mut v).unwrap();
                 v.extend_from_slice(&[]); // missing one byte
             }
-            let mut reader = DltStorageReader::new(
-                BufReader::new(Cursor::new(&v[..]))
-            );
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
             assert_matches!(
                 reader.next_packet(),
                 Some(Err(ReadError::DltMessageLengthTooSmall(_)))
@@ -437,5 +428,4 @@ mod dlt_storage_reader_tests {
             assert!(reader.next_packet().is_none());
         }
     }
-
 }

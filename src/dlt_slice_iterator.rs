@@ -48,8 +48,8 @@ impl<'a> Iterator for SliceIterator<'a> {
 mod slice_interator_tests {
 
     use super::*;
-    use proptest::prelude::*;
     use crate::proptest_generators::*;
+    use proptest::prelude::*;
 
     #[test]
     fn clone_eq() {

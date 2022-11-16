@@ -1,6 +1,14 @@
-use std::{path::PathBuf, io::{BufReader, BufWriter}, fs::File, time::UNIX_EPOCH};
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter},
+    path::PathBuf,
+    time::UNIX_EPOCH,
+};
 
-use dlt_parse::{storage::{DltStorageWriter, StorageHeader}, SliceIterator};
+use dlt_parse::{
+    storage::{DltStorageWriter, StorageHeader},
+    SliceIterator,
+};
 use etherparse::{SlicedPacket, TransportSlice::Udp};
 use rpcap::read::PcapReader;
 use structopt::StructOpt;
@@ -50,14 +58,13 @@ fn main() -> Result<(), Error> {
     let (_, mut reader) = PcapReader::new(BufReader::new(pcap_file))?;
 
     while let Some(packet) = reader.next()? {
-
         // decode from ethernet to udp layer
         let sliced = match SlicedPacket::from_ethernet(&packet.data) {
             Ok(value) => value,
             Err(err) => {
                 eprintln!("Error parsing packet: {}", err);
                 continue;
-            },
+            }
         };
 
         // verify the packet is an udp packet with the correct destination port
@@ -87,7 +94,7 @@ fn main() -> Result<(), Error> {
             } else {
                 // you might want to determine the ecu id via the ip here
                 // if you have that option
-                [0,0,0,0]
+                [0, 0, 0, 0]
             };
 
             // determine utc time (unwrap is ok, as all pcap timestamps start at UNIX_EPOCH)
@@ -95,12 +102,12 @@ fn main() -> Result<(), Error> {
 
             // write the packet
             dlt_writer.write_slice(
-                StorageHeader{
+                StorageHeader {
                     timestamp_seconds: d.as_secs() as u32,
                     timestamp_microseconds: d.subsec_micros(),
-                    ecu_id
+                    ecu_id,
                 },
-                dlt_packet
+                dlt_packet,
             )?;
         }
     }
