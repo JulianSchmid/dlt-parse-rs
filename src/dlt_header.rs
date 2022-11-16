@@ -213,9 +213,6 @@ impl DltHeader {
     }
 
     /// Encodes the header to the on the wire format.
-    ///
-    /// An error is returned if the version present in the header
-    /// is bigger then can be encoded in a 3 bit value ([`MAX_VERSION`]).
     pub fn to_bytes(&self) -> ArrayVec<u8, { DltHeader::MAX_SERIALIZED_SIZE }> {
         // encode values
         let length_be = self.length.to_be_bytes();
