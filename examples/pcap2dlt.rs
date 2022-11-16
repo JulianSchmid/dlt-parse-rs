@@ -1,8 +1,8 @@
-use std::{path::PathBuf, io::BufReader, fs::File};
+use std::{path::PathBuf, io::BufReader, fs::File, time::UNIX_EPOCH};
 
 use dlt_parse::{storage::{DltStorageWriter, StorageHeader}, SliceIterator};
 use etherparse::{SlicedPacket, TransportSlice::Udp};
-use pcap_file::PcapReader;
+use rpcap::read::PcapReader;
 use structopt::StructOpt;
 
 /// Expected command line arguments
@@ -25,7 +25,7 @@ struct CommandLineArguments {
 #[derive(Debug)]
 enum Error {
     IoError(std::io::Error),
-    PcapError(pcap_file::PcapError),
+    PcapError(rpcap::PcapError),
 }
 
 impl From<std::io::Error> for Error {
@@ -34,8 +34,8 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<pcap_file::PcapError> for Error {
-    fn from(err: pcap_file::PcapError) -> Error {
+impl From<rpcap::PcapError> for Error {
+    fn from(err: rpcap::PcapError) -> Error {
         Error::PcapError(err)
     }
 }
@@ -47,10 +47,9 @@ fn main() -> Result<(), Error> {
     let mut dlt_writer = DltStorageWriter::new(dlt_file);
 
     let pcap_file = File::open(args.pcap_file)?;
-    let reader = PcapReader::new(BufReader::new(pcap_file))?;
+    let (_, mut reader) = PcapReader::new(BufReader::new(pcap_file))?;
 
-    for packet in reader {
-        let packet = packet?;
+    while let Some(packet) = reader.next()? {
 
         // decode from ethernet to udp layer
         let sliced = match SlicedPacket::from_ethernet(&packet.data) {
@@ -91,11 +90,14 @@ fn main() -> Result<(), Error> {
                 [0,0,0,0]
             };
 
+            // determine utc time (unwrap is ok, as all pcap timestamps start at UNIX_EPOCH)
+            let d = packet.time.duration_since(UNIX_EPOCH).unwrap();
+
             // write the packet
             dlt_writer.write_slice(
                 StorageHeader{
-                    timestamp_seconds: packet.header.ts_sec,
-                    timestamp_microseconds: packet.header.ts_nsec/1000,
+                    timestamp_seconds: d.as_secs() as u32,
+                    timestamp_microseconds: d.subsec_micros(),
                     ecu_id
                 },
                 dlt_packet

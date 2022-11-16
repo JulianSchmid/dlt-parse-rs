@@ -32,4 +32,8 @@ proptest = "1.0.0"
 # for examples
 etherparse = "0.12.0"
 structopt = "0.3.26"
-pcap-file = "1.1.1"
+rpcap = "1.0.0"
+
+[[example]]
+name = "pcap2dlt"
+required-features = ["std"]
