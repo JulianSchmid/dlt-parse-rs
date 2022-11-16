@@ -37,3 +37,7 @@ rpcap = "1.0.0"
 [[example]]
 name = "pcap2dlt"
 required-features = ["std"]
+
+[[example]]
+name = "print_dlt_file"
+required-features = ["std"]
