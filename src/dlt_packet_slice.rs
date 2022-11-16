@@ -13,13 +13,11 @@ impl<'a> DltPacketSlice<'a> {
         use error::{PacketSliceError::*, *};
 
         if slice.len() < 4 {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: error::Layer::DltHeader, 
-                    minimum_size: 4,
-                    actual_size: slice.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: error::Layer::DltHeader,
+                minimum_size: 4,
+                actual_size: slice.len(),
+            }));
         }
 
         // SAFETY:
@@ -30,13 +28,9 @@ impl<'a> DltPacketSlice<'a> {
         // check version
         let version = (header_type >> 5) & MAX_VERSION;
         if DltHeader::VERSION != version {
-            return Err(
-                UnsupportedDltVersion(
-                    UnsupportedDltVersionError{
-                        unsupported_version: version,
-                    }
-                )
-            );
+            return Err(UnsupportedDltVersion(UnsupportedDltVersionError {
+                unsupported_version: version,
+            }));
         }
 
         let length = u16::from_be_bytes(
@@ -47,13 +41,11 @@ impl<'a> DltPacketSlice<'a> {
         ) as usize;
 
         if slice.len() < length {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: error::Layer::DltHeader,
-                    minimum_size: length,
-                    actual_size: slice.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: error::Layer::DltHeader,
+                minimum_size: length,
+                actual_size: slice.len(),
+            }));
         }
 
         // calculate the minimum size based on the header flags
@@ -92,12 +84,10 @@ impl<'a> DltPacketSlice<'a> {
         // + the minimum size for the payload (4 for message id in non verbose
         // or 4 for the typeinfo in verbose)
         if length < header_len + 4 {
-            return Err(MessageLengthTooSmall(
-                DltMessageLengthTooSmallError {
-                    required_length: header_len + 4,
-                    actual_length: length,
-                }
-            ));
+            return Err(MessageLengthTooSmall(DltMessageLengthTooSmallError {
+                required_length: header_len + 4,
+                actual_length: length,
+            }));
         }
 
         //looks ok -> create the DltPacketSlice
@@ -255,7 +245,7 @@ impl<'a> DltPacketSlice<'a> {
         // has at least a length of 4 bytes.
         let header_type = unsafe { *self.slice.get_unchecked(0) };
         let is_big_endian = 0 != header_type & BIG_ENDIAN_FLAG;
-        
+
         // SAFETY:
         // Safe as it is checked in from_slice that the slice
         // has at least a length of 4 bytes.
@@ -400,8 +390,8 @@ impl<'a> DltPacketSlice<'a> {
 mod dlt_packet_slice_tests {
 
     use super::*;
-    use proptest::prelude::*;
     use crate::proptest_generators::*;
+    use proptest::prelude::*;
 
     #[test]
     fn debug() {
@@ -494,13 +484,11 @@ mod dlt_packet_slice_tests {
             let buffer = [1, 2, 3];
             assert_matches!(
                 DltPacketSlice::from_slice(&buffer[..]),
-                Err(UnexpectedEndOfSlice(
-                    UnexpectedEndOfSliceError {
-                        layer: error::Layer::DltHeader,
-                        minimum_size: 4,
-                        actual_size: 3,
-                    }
-                ))
+                Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                    layer: error::Layer::DltHeader,
+                    minimum_size: 4,
+                    actual_size: 3,
+                }))
             );
         }
         //too small for the length
@@ -509,13 +497,11 @@ mod dlt_packet_slice_tests {
             header.length = 5;
             assert_matches!(
                 DltPacketSlice::from_slice(&header.to_bytes()),
-                Err(UnexpectedEndOfSlice(
-                    UnexpectedEndOfSliceError {
-                        layer: error::Layer::DltHeader,
-                        minimum_size: 5,
-                        actual_size: 4,
-                    }
-                ))
+                Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                    layer: error::Layer::DltHeader,
+                    minimum_size: 5,
+                    actual_size: 4,
+                }))
             );
         }
     }
@@ -530,7 +516,7 @@ mod dlt_packet_slice_tests {
             )
         ) {
             use error::{PacketSliceError::*, *};
-            
+
             let mut buffer = Vec::with_capacity(
                 packet.1.len() + usize::from(packet.0.header_len())
             );
@@ -617,9 +603,11 @@ mod dlt_packet_slice_tests {
                 };
 
                 //serialize
-                let mut buffer = ArrayVec::<u8, {DltHeader::MAX_SERIALIZED_SIZE + 4}>::new();
+                let mut buffer = ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 4 }>::new();
                 buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
-                buffer.try_extend_from_slice(&0x1234_5678u32.to_be_bytes()).unwrap();
+                buffer
+                    .try_extend_from_slice(&0x1234_5678u32.to_be_bytes())
+                    .unwrap();
 
                 //slice
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();
@@ -639,9 +627,11 @@ mod dlt_packet_slice_tests {
                 };
 
                 //serialize
-                let mut buffer = ArrayVec::<u8, {DltHeader::MAX_SERIALIZED_SIZE + 4}>::new();
+                let mut buffer = ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 4 }>::new();
                 buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
-                buffer.try_extend_from_slice(&0x1234_5678u32.to_le_bytes()).unwrap();
+                buffer
+                    .try_extend_from_slice(&0x1234_5678u32.to_le_bytes())
+                    .unwrap();
 
                 //slice
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();

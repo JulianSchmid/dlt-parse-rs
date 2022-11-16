@@ -47,7 +47,6 @@ impl From<rpcap::PcapError> for Error {
 }
 
 fn read(arguments: CommandLineArguments) -> Result<(), Error> {
-
     let (_, mut reader) = PcapReader::new(BufReader::new(File::open(arguments.pcap_file)?))?;
 
     while let Some(packet) = reader.next()? {
@@ -71,7 +70,6 @@ fn read(arguments: CommandLineArguments) -> Result<(), Error> {
 
             // parse the dlt message in the udp payload
             for dlt_slice in SliceIterator::new(sliced_packet.payload) {
-
                 let dlt_slice = match dlt_slice {
                     Ok(dlt_slice) => dlt_slice,
                     Err(err) => {
@@ -105,10 +103,7 @@ fn read(arguments: CommandLineArguments) -> Result<(), Error> {
                     } else {
                         println!("non verbose message 0x{:x}", message_id);
                     }
-                    println!(
-                        "  with payload {:?}",
-                        dlt_slice.non_verbose_payload()
-                    );
+                    println!("  with payload {:?}", dlt_slice.non_verbose_payload());
                 } else {
                     println!("verbose message (parsing not yet supported)");
                 }

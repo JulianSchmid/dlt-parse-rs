@@ -100,12 +100,12 @@
 
 #![no_std]
 
-#[cfg(any(feature = "std", test))]
-extern crate std;
 #[cfg(test)]
 extern crate alloc;
 #[cfg(test)]
 extern crate proptest;
+#[cfg(any(feature = "std", test))]
+extern crate std;
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
@@ -123,12 +123,12 @@ pub mod error;
 /// Module for decoding .dlt files or other formats that use the DLT storage header.
 pub mod storage;
 
-use core::slice::from_raw_parts;
-use arrayvec::ArrayVec;
-#[cfg(feature = "std")]
-use std::io;
 #[cfg(test)]
 use alloc::{format, vec, vec::Vec};
+use arrayvec::ArrayVec;
+use core::slice::from_raw_parts;
+#[cfg(feature = "std")]
+use std::io;
 #[cfg(test)]
 mod proptest_generators;
 
@@ -149,7 +149,6 @@ const EXT_MSIN_MSTP_TYPE_TRACE: u8 = 0x1 << 1;
 const EXT_MSIN_MSTP_TYPE_NW_TRACE: u8 = 0x2 << 1;
 ///Shifted value in the msin extended header field for dlt "control" messages.
 const EXT_MSIN_MSTP_TYPE_CONTROL: u8 = 0x3 << 1;
-
 
 ///Log level for dlt log messages.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -286,9 +285,9 @@ impl DltMessageType {
 
     ///Set message type info and based on that the message type.
     pub fn to_byte(&self) -> Result<u8, error::RangeError> {
+        use error::RangeError::NetworkTypekUserDefinedOutsideOfRange;
         use DltMessageType::*;
         use DltNetworkType::UserDefined;
-        use error::RangeError::NetworkTypekUserDefinedOutsideOfRange;
 
         //check ranges
         if let NetworkTrace(UserDefined(user_defined_value)) = *self {
@@ -323,8 +322,6 @@ impl DltMessageType {
         Ok(message_type | ((message_type_info << 4) & 0b1111_0000))
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

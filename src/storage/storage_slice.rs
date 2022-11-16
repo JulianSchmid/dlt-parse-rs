@@ -1,5 +1,5 @@
-use crate::DltPacketSlice;
 use super::StorageHeader;
+use crate::DltPacketSlice;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StorageSlice<'a> {
