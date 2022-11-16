@@ -7,6 +7,27 @@ use crate::{DltHeader, MAX_VERSION};
 
 use super::StorageSlice;
 
+/// Reader to parse a dlt storage file.
+///
+/// # Example
+/// ```no_run
+/// # let dlt_file = "dummy.dlt";
+/// use std::{fs::File, io::BufReader};
+/// use dlt_parse::storage::DltStorageReader;
+///
+/// let dlt_file = File::open(dlt_file).expect("failed to open file");
+/// let mut reader = DltStorageReader::new(BufReader::new(dlt_file));
+///
+/// while let Some(msg_result) = reader.next_packet() {
+///     let msg = msg_result.expect("failed to parse dlt packet");
+///
+///     // the storage header contains the ecu id and the timestamp
+///     println!("{:?}", msg.storage_header);
+///
+///     // the dlt packet
+///     println!("{:?}", msg.packet);
+/// }
+/// ```
 #[cfg(feature = "std")]
 #[derive(Debug)]
 pub struct DltStorageReader<R: Read + BufRead> {
