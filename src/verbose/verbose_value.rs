@@ -28,24 +28,24 @@ pub enum VerboseValue<'a> {
 }
 
 impl<'a> VerboseValue<'a> {
-    pub fn from_slice(slice: &'a [u8], is_big_endian: bool) -> Result<(VerboseValue<'a>, &'a [u8]), error::VerboseDecodeError> {
-
+    pub fn from_slice(
+        slice: &'a [u8],
+        is_big_endian: bool,
+    ) -> Result<(VerboseValue<'a>, &'a [u8]), error::VerboseDecodeError> {
         use error::{UnexpectedEndOfSliceError, VerboseDecodeError::*};
         use VerboseValue::*;
 
         // check that enough data for the type info is present
         if slice.len() < 4 {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: error::Layer::VerboseTypeInfo,
-                    minimum_size: 4,
-                    actual_size: slice.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: error::Layer::VerboseTypeInfo,
+                minimum_size: 4,
+                actual_size: slice.len(),
+            }));
         }
 
         // SAFETY: Length of at least 4 verified in the previous if.
-        let type_info: [u8;4] = unsafe {
+        let type_info: [u8; 4] = unsafe {
             [
                 *slice.get_unchecked(0),
                 *slice.get_unchecked(1),
@@ -71,27 +71,22 @@ impl<'a> VerboseValue<'a> {
 
         let mut slicer = FieldSlicer::new(
             // SAFETY: Length of at least 4 verified in the if at the beginning.
-            unsafe {
-                slice::from_raw_parts(slice.as_ptr().add(4), slice.len() - 4)
-            },
-            4
+            unsafe { slice::from_raw_parts(slice.as_ptr().add(4), slice.len() - 4) },
+            4,
         );
 
         if 0 != type_info[0] & BOOL_FLAG_0 {
-            
             const CONTRADICTING_MASK_0: u8 = 0b1110_0000;
             const CONTRADICTING_MASK_1: u8 = 0b0111_0111;
             if
-                // check type length (must be 1 for bool)
-                (1 != type_info[0] & TYPE_LEN_MASK_0) ||
+            // check type length (must be 1 for bool)
+            (1 != type_info[0] & TYPE_LEN_MASK_0) ||
                 // check none of the other type flags other then varinfo
                 // flag is set
                 (0 != type_info[0] & CONTRADICTING_MASK_0) ||
                 (0 != type_info[1] & CONTRADICTING_MASK_1)
             {
-                return Err(
-                    InvalidTypeInfo(type_info)
-                );
+                return Err(InvalidTypeInfo(type_info));
             }
 
             // check for varinfo
@@ -107,17 +102,9 @@ impl<'a> VerboseValue<'a> {
             let value = match value_u8 {
                 0 => false,
                 1 => true,
-                value => return Err(
-                    InvalidBoolValue(value)
-                ),
+                value => return Err(InvalidBoolValue(value)),
             };
-            Ok((
-                Bool(BoolValue{
-                    name,
-                    value,
-                }),
-                slicer.rest()
-            ))
+            Ok((Bool(BoolValue { name, value }), slicer.rest()))
         } else if 0 != type_info[0] & SIGNED_FLAG_0 {
             // verify no conflicting information is present
             // TODO implement
@@ -143,14 +130,12 @@ impl<'a> VerboseValue<'a> {
             const CONTRADICTING_MASK_0: u8 = 0b1111_0000;
             const CONTRADICTING_MASK_1: u8 = 0b0111_0011;
             if
-                // check none of the other type flags other then varinfo
-                // flag is set
-                (0 != type_info[0] & CONTRADICTING_MASK_0) ||
-                (0 != type_info[1] & CONTRADICTING_MASK_1)
+            // check none of the other type flags other then varinfo
+            // flag is set
+            (0 != type_info[0] & CONTRADICTING_MASK_0)
+                || (0 != type_info[1] & CONTRADICTING_MASK_1)
             {
-                return Err(
-                    InvalidTypeInfo(type_info)
-                );
+                return Err(InvalidTypeInfo(type_info));
             }
 
             // read len of raw data
@@ -164,11 +149,11 @@ impl<'a> VerboseValue<'a> {
             };
 
             Ok((
-                Raw(RawValue{
+                Raw(RawValue {
                     name,
                     data: slicer.read_raw(len)?,
                 }),
-                slicer.rest()
+                slicer.rest(),
             ))
         } else if 0 != type_info[1] & TRACE_INFO_FLAG_1 {
             // verify no conflicting information is present
@@ -180,9 +165,7 @@ impl<'a> VerboseValue<'a> {
             Err(Unsupported)
         } else {
             // nothing matches type info uninterpretable
-            Err(
-                InvalidTypeInfo(type_info)
-            )
+            Err(InvalidTypeInfo(type_info))
         }
     }
 }

@@ -127,7 +127,7 @@ pub struct U128Value<'a> {
 pub struct F16Value<'a> {
     pub name: Option<&'a str>,
     pub unit: Option<&'a str>,
-    pub value: [u8;2],
+    pub value: [u8; 2],
 }
 
 /// Verbose 32 bit float number.
@@ -151,7 +151,7 @@ pub struct F64Value<'a> {
 pub struct F128Value<'a> {
     pub name: Option<&'a str>,
     pub unit: Option<&'a str>,
-    pub value: [u8;16],
+    pub value: [u8; 16],
 }
 
 #[derive(Debug, PartialEq)]
@@ -171,7 +171,7 @@ pub struct ArrayDimensions<'a> {
 //      - creates more types
 //
 //   open questions:
-//      - does this conflict with dlt v2? (e.g. does v2 support more 
+//      - does this conflict with dlt v2? (e.g. does v2 support more
 //        array types)
 //
 //   alternative:
@@ -183,9 +183,8 @@ pub struct ArrayValue<'a> {
     // TODO
     // temp until actually implemented
     pub dummy: core::marker::PhantomData<&'a u8>,
-    
-    pub dimensions: ArrayDimensions<'a>,
 
+    pub dimensions: ArrayDimensions<'a>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -264,5 +263,5 @@ pub struct StructValue<'a> {
 #[derive(Debug, Eq, PartialEq)]
 pub struct RawValue<'a> {
     pub name: Option<&'a str>,
-    pub data: &'a[u8],
+    pub data: &'a [u8],
 }

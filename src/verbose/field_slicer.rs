@@ -10,13 +10,9 @@ pub struct FieldSlicer<'a> {
 }
 
 impl<'a> FieldSlicer<'a> {
-
     #[inline]
     pub fn new(data: &[u8], offset: usize) -> FieldSlicer {
-        FieldSlicer {
-            rest: data,
-            offset,
-        }
+        FieldSlicer { rest: data, offset }
     }
 
     #[inline]
@@ -29,98 +25,76 @@ impl<'a> FieldSlicer<'a> {
 
         // check length
         if self.rest.len() < 1 {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: Layer::VerboseValue,
-                    minimum_size: self.offset + 1,
-                    actual_size: self.offset + self.rest.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseValue,
+                minimum_size: self.offset + 1,
+                actual_size: self.offset + self.rest.len(),
+            }));
         }
 
         // SAFETY: Length of at least 1 verified in the previous if.
-        let result = unsafe {
-            *self.rest.get_unchecked(0)
-        };
+        let result = unsafe { *self.rest.get_unchecked(0) };
 
         // move slice
         // SAFETY: Length of at least 1 verified in the previous if.
-        self.rest = unsafe {
-            core::slice::from_raw_parts(
-                self.rest.as_ptr().add(1),
-                self.rest.len() - 1
-            )
-        };
+        self.rest =
+            unsafe { core::slice::from_raw_parts(self.rest.as_ptr().add(1), self.rest.len() - 1) };
         self.offset += 1;
 
         Ok(result)
     }
 
-    pub fn read_2bytes(&mut self) -> Result<[u8;2], VerboseDecodeError> {
+    pub fn read_2bytes(&mut self) -> Result<[u8; 2], VerboseDecodeError> {
         use VerboseDecodeError::*;
 
         // check length
         if self.rest.len() < 2 {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: Layer::VerboseValue,
-                    minimum_size: self.offset + 2,
-                    actual_size: self.offset + self.rest.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseValue,
+                minimum_size: self.offset + 2,
+                actual_size: self.offset + self.rest.len(),
+            }));
         }
 
         // read value
         // SAFETY: Length of at least 2 verified in the previous if.
-        let result = unsafe {[
-            *self.rest.get_unchecked(0),
-            *self.rest.get_unchecked(1)
-        ]};
+        let result = unsafe { [*self.rest.get_unchecked(0), *self.rest.get_unchecked(1)] };
 
         // move slice
         // SAFETY: Length of at least 2 verified in the previous if.
-        self.rest = unsafe {
-            core::slice::from_raw_parts(
-                self.rest.as_ptr().add(2),
-                self.rest.len() - 2
-            )
-        };
+        self.rest =
+            unsafe { core::slice::from_raw_parts(self.rest.as_ptr().add(2), self.rest.len() - 2) };
         self.offset += 2;
 
         Ok(result)
     }
 
     pub fn read_u16(&mut self, is_big_endian: bool) -> Result<u16, VerboseDecodeError> {
-        self.read_2bytes().map(
-            |bytes| if is_big_endian {
+        self.read_2bytes().map(|bytes| {
+            if is_big_endian {
                 u16::from_be_bytes(bytes)
             } else {
                 u16::from_le_bytes(bytes)
             }
-        )
+        })
     }
 
     pub fn read_var_name(&mut self, is_big_endian: bool) -> Result<&'a str, VerboseDecodeError> {
         use VerboseDecodeError::*;
-        
+
         // check length
         if self.rest.len() < 2 {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: Layer::VerboseValue,
-                    minimum_size: self.offset + 2,
-                    actual_size: self.offset + self.rest.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseValue,
+                minimum_size: self.offset + 2,
+                actual_size: self.offset + self.rest.len(),
+            }));
         }
-        
+
         // read lengths
         let name_length = {
             // SAFETY: Length of at least 2 verified in the previous if.
-            let bytes = unsafe {[
-                *self.rest.get_unchecked(0),
-                *self.rest.get_unchecked(1)
-            ]};
+            let bytes = unsafe { [*self.rest.get_unchecked(0), *self.rest.get_unchecked(1)] };
             if is_big_endian {
                 u16::from_be_bytes(bytes) as usize
             } else {
@@ -131,13 +105,11 @@ impl<'a> FieldSlicer<'a> {
         // check length of slice
         let total_size = 2 + name_length;
         if self.rest.len() < total_size {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: Layer::VerboseValue,
-                    minimum_size: self.offset + total_size,
-                    actual_size: self.offset + self.rest.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseValue,
+                minimum_size: self.offset + total_size,
+                actual_size: self.offset + self.rest.len(),
+            }));
         }
 
         // read name
@@ -148,14 +120,12 @@ impl<'a> FieldSlicer<'a> {
                 core::slice::from_raw_parts(
                     self.rest.as_ptr().add(2),
                     // substract 1 to skip the zero termination
-                    name_length - 1
+                    name_length - 1,
                 )
             };
             // SAFETY: Length of at least 2 + name_length verified in the previous if.
             //         Additionally name_length is guranteed to be at least 1.
-            let last = unsafe {
-                *self.rest.as_ptr().add(2 + name_length - 1)
-            };
+            let last = unsafe { *self.rest.as_ptr().add(2 + name_length - 1) };
 
             // check for zero termination
             if last != 0 {
@@ -172,35 +142,33 @@ impl<'a> FieldSlicer<'a> {
         self.rest = unsafe {
             core::slice::from_raw_parts(
                 self.rest.as_ptr().add(total_size),
-                self.rest.len() - total_size
+                self.rest.len() - total_size,
             )
         };
         self.offset += total_size;
-        
+
         Ok(name)
     }
 
-    pub fn read_var_name_and_unit(&mut self, is_big_endian: bool) -> Result<(&'a str, &'a str), VerboseDecodeError> {
+    pub fn read_var_name_and_unit(
+        &mut self,
+        is_big_endian: bool,
+    ) -> Result<(&'a str, &'a str), VerboseDecodeError> {
         use VerboseDecodeError::*;
-        
+
         // check length
         if self.rest.len() < 4 {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: Layer::VerboseValue,
-                    minimum_size: self.offset + 4,
-                    actual_size: self.offset + self.rest.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseValue,
+                minimum_size: self.offset + 4,
+                actual_size: self.offset + self.rest.len(),
+            }));
         }
 
         // read lengths
         let name_length = {
             // SAFETY: Length of at least 4 verified in the previous if.
-            let bytes = unsafe {[
-                *self.rest.get_unchecked(0),
-                *self.rest.get_unchecked(1)
-            ]};
+            let bytes = unsafe { [*self.rest.get_unchecked(0), *self.rest.get_unchecked(1)] };
             if is_big_endian {
                 u16::from_be_bytes(bytes) as usize
             } else {
@@ -209,10 +177,7 @@ impl<'a> FieldSlicer<'a> {
         };
         let unit_length = {
             // SAFETY: Length of at least 4 verified in the previous if.
-            let bytes = unsafe {[
-                *self.rest.get_unchecked(2),
-                *self.rest.get_unchecked(3)
-            ]};
+            let bytes = unsafe { [*self.rest.get_unchecked(2), *self.rest.get_unchecked(3)] };
             if is_big_endian {
                 u16::from_be_bytes(bytes) as usize
             } else {
@@ -223,13 +188,11 @@ impl<'a> FieldSlicer<'a> {
         // check length of slice
         let total_size = 4 + name_length + unit_length;
         if self.rest.len() < total_size {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: Layer::VerboseValue,
-                    minimum_size: self.offset + total_size,
-                    actual_size: self.offset + self.rest.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseValue,
+                minimum_size: self.offset + total_size,
+                actual_size: self.offset + self.rest.len(),
+            }));
         }
 
         // read name
@@ -240,14 +203,12 @@ impl<'a> FieldSlicer<'a> {
                 core::slice::from_raw_parts(
                     self.rest.as_ptr().add(4),
                     // substract 1 to skip the zero termination
-                    name_length - 1
+                    name_length - 1,
                 )
             };
             // SAFETY: Length of at least 4 + name_length verified in the previous if.
             //         Additionally name_length is guranteed to be at least 1.
-            let last = unsafe {
-                *self.rest.as_ptr().add(4 + name_length - 1)
-            };
+            let last = unsafe { *self.rest.as_ptr().add(4 + name_length - 1) };
 
             // check for zero termination
             if last != 0 {
@@ -267,14 +228,12 @@ impl<'a> FieldSlicer<'a> {
                 core::slice::from_raw_parts(
                     self.rest.as_ptr().add(4 + name_length),
                     // substract 1 to skip the zero termination
-                    unit_length - 1
+                    unit_length - 1,
                 )
             };
             // SAFETY: Length of at least 4 + name_length + unit_length verified in the previous if.
             //         Additionally unit_length is guranteed to be at least 1.
-            let last = unsafe {
-                *self.rest.as_ptr().add(4 + name_length + unit_length - 1)
-            };
+            let last = unsafe { *self.rest.as_ptr().add(4 + name_length + unit_length - 1) };
 
             // check for zero termination
             if last != 0 {
@@ -291,7 +250,7 @@ impl<'a> FieldSlicer<'a> {
         self.rest = unsafe {
             core::slice::from_raw_parts(
                 self.rest.as_ptr().add(total_size),
-                self.rest.len() - total_size
+                self.rest.len() - total_size,
             )
         };
         self.offset += total_size;
@@ -305,29 +264,19 @@ impl<'a> FieldSlicer<'a> {
 
         // check that the string length is present
         if self.rest.len() < len {
-            return Err(UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{
-                    layer: Layer::VerboseValue,
-                    minimum_size: self.offset + len,
-                    actual_size: self.offset + self.rest.len(),
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseValue,
+                minimum_size: self.offset + len,
+                actual_size: self.offset + self.rest.len(),
+            }));
         }
 
         // SAFETY: Slice length checked above to be at least len
-        let result = unsafe {
-            core::slice::from_raw_parts(
-                self.rest.as_ptr(),
-                len
-            )
-        };
+        let result = unsafe { core::slice::from_raw_parts(self.rest.as_ptr(), len) };
 
         // move rest & offset
         self.rest = unsafe {
-            core::slice::from_raw_parts(
-                self.rest.as_ptr().add(len),
-                self.rest.len() - len
-            )
+            core::slice::from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len)
         };
         self.offset += len;
 
@@ -338,14 +287,14 @@ impl<'a> FieldSlicer<'a> {
 #[cfg(test)]
 mod test_field_slicer {
     use super::*;
-    use std::format;
-    use proptest::prelude::*;
-    use proptest::arbitrary::any;
-    use proptest::collection::vec;
     use crate::error::{Layer, UnexpectedEndOfSliceError, VerboseDecodeError};
     use alloc::vec::Vec;
+    use proptest::arbitrary::any;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use std::format;
 
-    proptest!{
+    proptest! {
         #[test]
         fn new(
             data in prop::collection::vec(any::<u8>(), 0..10),
@@ -360,7 +309,7 @@ mod test_field_slicer {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read_u8(
             value in any::<u8>(),
@@ -401,7 +350,7 @@ mod test_field_slicer {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read_2bytes(
             value in any::<[u8;2]>(),
@@ -440,7 +389,7 @@ mod test_field_slicer {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read_u16(
             value in any::<u16>(),
@@ -501,7 +450,7 @@ mod test_field_slicer {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read_var_name(
             ref value in "\\PC*",
@@ -645,7 +594,7 @@ mod test_field_slicer {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read_var_name_and_unit(
             ref name in "\\PC*",
@@ -913,7 +862,7 @@ mod test_field_slicer {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read_raw(
             data in prop::collection::vec(any::<u8>(), 0..1024),
@@ -932,7 +881,7 @@ mod test_field_slicer {
                 prop_assert_eq!(slicer.offset, offset + data.len());
                 prop_assert_eq!(slicer.rest, &rest);
             }
-    
+
             // length error
             if data.len() > 0 {
 
@@ -960,5 +909,4 @@ mod test_field_slicer {
             }
         }
     }
-
 }
