@@ -3,6 +3,51 @@ use std::io::{Write, Error};
 
 use crate::{DltPacketSlice, storage::StorageHeader};
 
+/// Allows the writing of dlt storage files.
+/// 
+/// # Example
+/// 
+/// ```no_run
+/// use std::{fs::File, io::BufWriter};
+/// use dlt_parse::storage::{DltStorageWriter, StorageHeader};
+/// 
+/// let dlt_file = File::create("out.dlt").expect("failed to open output file");
+/// let mut dlt_writer = DltStorageWriter::new(BufWriter::new(dlt_file));
+/// 
+/// // ...
+/// # use dlt_parse::{DltHeader, DltPacketSlice};
+/// # use std::io::Write;
+/// # let packet0 = {
+/// #    let mut packet = Vec::<u8>::new();
+/// #    let mut header = DltHeader{
+/// #        is_big_endian: true,
+/// #        message_counter: 0,
+/// #        length: 0,
+/// #        ecu_id: None,
+/// #        session_id: None,
+/// #        timestamp: None,
+/// #        extended_header: None,
+/// #    };
+/// #    header.length = header.header_len() + 4;
+/// #    header.write(&mut packet).unwrap();
+/// #    packet.write_all(&[1,2,3,4]).unwrap();
+/// #    packet
+/// # };
+/// # let dlt_slice = DltPacketSlice::from_slice(&packet0).unwrap();
+/// # let timestamp_seconds = 0;
+/// # let timestamp_microseconds = 0;
+/// # let ecu_id = [0u8;4];
+///
+/// // write a dlt message
+/// dlt_writer.write_slice(
+///     StorageHeader{
+///         timestamp_seconds,
+///         timestamp_microseconds,
+///         ecu_id
+///     },
+///     dlt_slice
+/// ).expect("failed to write dlt packet");
+/// ```
 #[cfg(feature = "std")]
 #[derive(Debug)]
 pub struct DltStorageWriter<W: Write> {

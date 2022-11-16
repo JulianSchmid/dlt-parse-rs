@@ -1,4 +1,4 @@
-use std::{path::PathBuf, io::BufReader, fs::File, time::UNIX_EPOCH};
+use std::{path::PathBuf, io::{BufReader, BufWriter}, fs::File, time::UNIX_EPOCH};
 
 use dlt_parse::{storage::{DltStorageWriter, StorageHeader}, SliceIterator};
 use etherparse::{SlicedPacket, TransportSlice::Udp};
@@ -44,7 +44,7 @@ fn main() -> Result<(), Error> {
     let args = CommandLineArguments::from_args();
 
     let dlt_file = File::create(args.output_file)?;
-    let mut dlt_writer = DltStorageWriter::new(dlt_file);
+    let mut dlt_writer = DltStorageWriter::new(BufWriter::new(dlt_file));
 
     let pcap_file = File::open(args.pcap_file)?;
     let (_, mut reader) = PcapReader::new(BufReader::new(pcap_file))?;
