@@ -96,7 +96,7 @@
 //! An complete example which includes the parsing of the ethernet & udp headers can be found in [examples/print_messages_ids.rs](https://github.com/JulianSchmid/dlt-parse-rs/blob/0.1.0/examples/print_messages_ids.rs)
 //!
 //! # References
-//! * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/user_upload/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
+//! * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
 
 #![no_std]
 

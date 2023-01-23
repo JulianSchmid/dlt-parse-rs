@@ -105,7 +105,7 @@ for dlt_message in SliceIterator::new(&buffer) {
 An complete example which includes the parsing of the ethernet & udp headers can be found in [examples/print_messages_ids.rs](examples/print_messages_ids.rs)
 
 ## References
-* [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/user_upload/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
+* [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
 
 ## License
 Licensed under the BSD 3-Clause license. Please see the LICENSE file for more information.
