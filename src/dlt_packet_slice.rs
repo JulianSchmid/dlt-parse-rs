@@ -80,12 +80,10 @@ impl<'a> DltPacketSlice<'a> {
             header_len
         };
 
-        //the minimum size is composed out of the header size
-        // + the minimum size for the payload (4 for message id in non verbose
-        // or 4 for the typeinfo in verbose)
-        if length < header_len + 4 {
+        // check there is enough data to at least contain the dlt header
+        if length < header_len {
             return Err(MessageLengthTooSmall(DltMessageLengthTooSmallError {
-                required_length: header_len + 4,
+                required_length: header_len,
                 actual_length: length,
             }));
         }
@@ -180,15 +178,16 @@ impl<'a> DltPacketSlice<'a> {
         }
     }
 
-    ///Returns the message id if the message is a non verbose message otherwise None is returned.
+    /// Returns the message id if the message is a non verbose message
+    /// and enough data for a message is present. Otherwise None is returned.
     #[inline]
     pub fn message_id(&self) -> Option<u32> {
-        if self.is_verbose() {
+        if self.is_verbose() || self.header_len + 4 > self.slice.len() {
             None
         } else {
             // SAFETY:
             // Safe as the slice len is checked to be at least
-            // header_len + 4 in from_slice.
+            // header_len + 4 in the if branch above.
             let id_bytes = unsafe {
                 [
                     *self.slice.get_unchecked(self.header_len),
@@ -225,16 +224,58 @@ impl<'a> DltPacketSlice<'a> {
         }
     }
 
-    ///Returns a slice containing the payload of a non verbose message (after the message id).
-    pub fn non_verbose_payload(&self) -> &'a [u8] {
-        // SAFETY:
-        // Safe as the slice len is checked to be at least
-        // header_len + 4 in from_slice.
-        unsafe {
-            from_raw_parts(
-                self.slice.as_ptr().add(self.header_len + 4),
-                self.slice.len() - self.header_len - 4,
-            )
+    /// Returns the message id and a slice containing the payload (after the
+    /// message id) if the dlt message is a non verbose message.
+    /// 
+    /// If the message is not a non verbose message or does not have enough
+    /// memory for the message id `None` is returned.
+    pub fn message_id_and_payload(&self) -> Option<(u32, &'a [u8])> {
+        if self.is_verbose() || self.header_len + 4 > self.slice.len() {
+            None
+        } else {
+            // SAFETY:
+            // Safe as the slice len is checked to be at least
+            // header_len + 4 in the if branch above.
+            let id_bytes = unsafe {
+                [
+                    *self.slice.get_unchecked(self.header_len),
+                    *self.slice.get_unchecked(self.header_len + 1),
+                    *self.slice.get_unchecked(self.header_len + 2),
+                    *self.slice.get_unchecked(self.header_len + 3),
+                ]
+            };
+            let message_id = if self.is_big_endian() {
+                u32::from_be_bytes(id_bytes)
+            } else {
+                u32::from_le_bytes(id_bytes)
+            };
+            // SAFETY:
+            // Safe as the slice len is checked to be at least
+            // header_len + 4 in the if check above.
+            let non_verbose_payload = unsafe {
+                from_raw_parts(
+                    self.slice.as_ptr().add(self.header_len + 4),
+                    self.slice.len() - self.header_len - 4,
+                )
+            };
+            Some((message_id, non_verbose_payload))
+        }
+    }
+
+    /// Returns a slice containing the payload of a non verbose message (after the message id).
+    pub fn non_verbose_payload(&self) -> Option<&'a [u8]> {
+        if self.is_verbose() || self.header_len + 4 > self.slice.len() {
+            None
+        } else {
+            // SAFETY:
+            // Safe as the slice len is checked to be at least
+            // header_len + 4 in the if check above.
+            Some(unsafe {
+                from_raw_parts(
+                    self.slice.as_ptr().add(self.header_len + 4),
+                    self.slice.len() - self.header_len - 4,
+                )
+            })
         }
     }
 
@@ -453,7 +494,6 @@ mod dlt_packet_slice_tests {
             assert_eq!(slice.is_verbose(), packet.0.is_verbose());
             assert_eq!(slice.payload(), &packet.1[..]);
             assert_eq!(slice.extended_header(), packet.0.extended_header);
-            assert_eq!(slice.non_verbose_payload(), &packet.1[4..]);
 
             if let Some(packet_ext_header) = packet.0.extended_header.as_ref() {
                 assert_eq!(slice.message_type(), packet_ext_header.message_type());
@@ -545,20 +585,22 @@ mod dlt_packet_slice_tests {
         fn from_slice_header_variable_len_eof_errors(ref input in dlt_header_any()) {
             use error::PacketSliceError::*;
             let mut header = input.clone();
-            header.length = header.header_len() + 3; //minimum payload size is 4
+            header.length = header.header_len() - 1; // length must contain the header
 
-            let mut buffer = ArrayVec::<u8, {DltHeader::MAX_SERIALIZED_SIZE + 3}>::new();
+            let mut buffer = ArrayVec::<u8, {DltHeader::MAX_SERIALIZED_SIZE}>::new();
             buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
-            buffer.try_extend_from_slice(&[1,2,3]).unwrap();
-            assert_matches!(
+            assert_eq!(
                 DltPacketSlice::from_slice(&buffer[..]),
-                Err(MessageLengthTooSmall(_))
+                Err(MessageLengthTooSmall(error::DltMessageLengthTooSmallError{
+                    required_length: header.header_len().into(),
+                    actual_length: header.header_len() as usize - 1usize,
+                }))
             );
         }
     }
 
     #[test]
-    fn message_id() {
+    fn message_id_and_payload() {
         //pairs of (header, expected_some)
         let tests = [
             //verbose (does not have message id)
@@ -597,54 +639,99 @@ mod dlt_packet_slice_tests {
                 true,
             ),
         ];
-        //verbose (does not have message id)
+        // run tests
         for t in tests.iter() {
-            //big endian
+            // big endian
             {
                 let header = {
                     let mut header = t.0.clone();
                     header.is_big_endian = true;
-                    header.length = header.header_len() + 4;
+                    header.length = header.header_len() + 6;
                     header
                 };
 
-                //serialize
+                // serialize
                 let mut buffer = ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 4 }>::new();
                 buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
                 buffer
                     .try_extend_from_slice(&0x1234_5678u32.to_be_bytes())
                     .unwrap();
+                buffer
+                    .try_extend_from_slice(&[0x10, 0x11])
+                    .unwrap();
 
-                //slice
+                // slice
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();
-                assert_eq!(
-                    slice.message_id(),
-                    if t.1 { Some(0x1234_5678) } else { None }
-                );
+                if t.1 {
+                    assert_eq!(Some(0x1234_5678), slice.message_id());
+                    assert_eq!(
+                        Some((0x1234_5678u32, &[0x10u8, 0x11][..])),
+                        slice.message_id_and_payload()
+                    );
+                    assert_eq!(Some(&[0x10u8, 0x11][..]), slice.non_verbose_payload());
+                } else {
+                    assert_eq!(None, slice.message_id());
+                    assert_eq!(None, slice.message_id_and_payload());
+                    assert_eq!(None, slice.non_verbose_payload());
+                }
             }
 
-            //little endian
+            // little endian
             {
                 let header = {
                     let mut header = t.0.clone();
                     header.is_big_endian = false;
-                    header.length = header.header_len() + 4;
+                    header.length = header.header_len() + 6;
                     header
                 };
 
-                //serialize
+                // serialize
                 let mut buffer = ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 4 }>::new();
                 buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
                 buffer
                     .try_extend_from_slice(&0x1234_5678u32.to_le_bytes())
                     .unwrap();
+                buffer
+                    .try_extend_from_slice(&[0x10, 0x11])
+                    .unwrap();
 
-                //slice
+                // slice
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();
-                assert_eq!(
-                    slice.message_id(),
-                    if t.1 { Some(0x1234_5678) } else { None }
-                );
+                if t.1 {
+                    assert_eq!(Some(0x1234_5678), slice.message_id());
+                    assert_eq!(
+                        Some((0x1234_5678u32, &[0x10u8, 0x11][..])),
+                        slice.message_id_and_payload()
+                    );
+                    assert_eq!(Some(&[0x10u8, 0x11][..]), slice.non_verbose_payload());
+                } else {
+                    assert_eq!(None, slice.message_id());
+                    assert_eq!(None, slice.message_id_and_payload());
+                    assert_eq!(None, slice.non_verbose_payload());
+                }
+            }
+
+            // not enough data for the message id
+            for missing_len in 1..=4 {
+                let header = {
+                    let mut header = t.0.clone();
+                    header.is_big_endian = false;
+                    header.length = header.header_len() + 4 - missing_len as u16;
+                    header
+                };
+
+                // serialize
+                let mut buffer = ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 4 }>::new();
+                buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
+                buffer
+                    .try_extend_from_slice(&0x1234_5678u32.to_le_bytes())
+                    .unwrap();
+                
+                // slice
+                let slice = DltPacketSlice::from_slice(&buffer[..buffer.len() - missing_len]).unwrap();
+                assert_eq!(None, slice.message_id());
+                assert_eq!(None, slice.message_id_and_payload());
+                assert_eq!(None, slice.non_verbose_payload());
             }
         }
     }
