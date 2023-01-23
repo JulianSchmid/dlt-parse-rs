@@ -2,8 +2,8 @@ use std::io::{BufRead, Read};
 use std::vec::Vec;
 
 use crate::error::{DltMessageLengthTooSmallError, ReadError, UnsupportedDltVersionError};
-use crate::{storage::StorageHeader, DltPacketSlice};
 use crate::MAX_VERSION;
+use crate::{storage::StorageHeader, DltPacketSlice};
 
 use super::StorageSlice;
 

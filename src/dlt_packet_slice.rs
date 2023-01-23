@@ -226,7 +226,7 @@ impl<'a> DltPacketSlice<'a> {
 
     /// Returns the message id and a slice containing the payload (after the
     /// message id) if the dlt message is a non verbose message.
-    /// 
+    ///
     /// If the message is not a non verbose message or does not have enough
     /// memory for the message id `None` is returned.
     pub fn message_id_and_payload(&self) -> Option<(u32, &'a [u8])> {
@@ -656,9 +656,7 @@ mod dlt_packet_slice_tests {
                 buffer
                     .try_extend_from_slice(&0x1234_5678u32.to_be_bytes())
                     .unwrap();
-                buffer
-                    .try_extend_from_slice(&[0x10, 0x11])
-                    .unwrap();
+                buffer.try_extend_from_slice(&[0x10, 0x11]).unwrap();
 
                 // slice
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();
@@ -691,9 +689,7 @@ mod dlt_packet_slice_tests {
                 buffer
                     .try_extend_from_slice(&0x1234_5678u32.to_le_bytes())
                     .unwrap();
-                buffer
-                    .try_extend_from_slice(&[0x10, 0x11])
-                    .unwrap();
+                buffer.try_extend_from_slice(&[0x10, 0x11]).unwrap();
 
                 // slice
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();
@@ -726,9 +722,10 @@ mod dlt_packet_slice_tests {
                 buffer
                     .try_extend_from_slice(&0x1234_5678u32.to_le_bytes())
                     .unwrap();
-                
+
                 // slice
-                let slice = DltPacketSlice::from_slice(&buffer[..buffer.len() - missing_len]).unwrap();
+                let slice =
+                    DltPacketSlice::from_slice(&buffer[..buffer.len() - missing_len]).unwrap();
                 assert_eq!(None, slice.message_id());
                 assert_eq!(None, slice.message_id_and_payload());
                 assert_eq!(None, slice.non_verbose_payload());
