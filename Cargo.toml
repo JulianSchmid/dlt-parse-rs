@@ -1,13 +1,13 @@
 [package]
 name = "dlt_parse"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["Julian Schmid <info@julianschmid.name>"]
 edition = "2021"
 description = "A library for parsing the \"Diagnostic Log and Trace\" network protocol (currently without payload interpretation)."
 repository = "https://github.com/JulianSchmid/dlt-parse-rs"
 categories = ["network-programming", "parser-implementations", "no-std"]
 keywords = ["dlt", "autosar"]
-license = "BSD-3-Clause"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 exclude = [
     ".gitignore",
