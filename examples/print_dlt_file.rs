@@ -23,7 +23,7 @@ fn main() -> Result<(), ReadError> {
 
         println!("{:?}", msg.storage_header);
 
-        if let Some(message_id) = msg.packet.message_id() {
+        if let Some((message_id, non_verbose_payload)) = msg.packet.message_id_and_payload() {
             if let Some(extended_header) = msg.packet.extended_header() {
                 use core::str::from_utf8;
 
@@ -46,7 +46,7 @@ fn main() -> Result<(), ReadError> {
             } else {
                 println!("non verbose message 0x{:x}", message_id);
             }
-            println!("  with payload {:?}", msg.packet.non_verbose_payload());
+            println!("  with payload {:?}", non_verbose_payload);
         } else {
             println!("verbose message (parsing not yet supported)");
         }

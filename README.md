@@ -87,9 +87,9 @@ for dlt_message in SliceIterator::new(&buffer) {
     match dlt_message {
         Ok(dlt_slice) => {
             //check if the message is verbose or non verbose (non verbose messages have message ids)
-            if let Some(message_id) = dlt_slice.message_id() {
+            if let Some((message_id, non_verbose_payload)) = dlt_slice.message_id_and_payload() {
                 println!("non verbose message {:x}", message_id);
-                println!("  with payload {:?}", dlt_slice.non_verbose_payload());
+                println!("  with payload {:?}", non_verbose_payload);
             } else {
                 println!("verbose message (parsing not yet supported)");
             }
