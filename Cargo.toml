@@ -30,7 +30,7 @@ assert_matches = "1.5.0"
 proptest = "1.0.0"
 
 # for examples
-etherparse = "0.12.0"
+etherparse = "0.13.0"
 structopt = "0.3.26"
 rpcap = "1.0.0"
 
