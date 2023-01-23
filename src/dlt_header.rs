@@ -16,7 +16,7 @@ pub struct DltHeader {
 impl DltHeader {
     /// Versions of the DLT header that can be decoded by the decoding
     /// functions in this library.
-    pub const SUPPORTED_DECODABLE_VERSIONS: [u8; 1] = [1];
+    pub const SUPPORTED_DECODABLE_VERSIONS: [u8; 2] = [0, 1];
 
     /// The maximum size in bytes/octets a V1 DLT header can be when encoded.
     ///
@@ -29,7 +29,7 @@ impl DltHeader {
     /// * 10 bytes for the extended header
     pub const MAX_SERIALIZED_SIZE: usize = 4 + 4 + 4 + 4 + 10;
 
-    /// Supported dlt version.
+    /// Version that will be written into the DLT header version field when writing this header.
     pub const VERSION: u8 = 1;
 
     pub fn from_slice(slice: &[u8]) -> Result<DltHeader, error::PacketSliceError> {
@@ -50,7 +50,7 @@ impl DltHeader {
 
         // check version
         let version = (header_type >> 5) & MAX_VERSION;
-        if DltHeader::VERSION != version {
+        if 0 != version && 1 != version {
             return Err(UnsupportedDltVersion(UnsupportedDltVersionError {
                 unsupported_version: version,
             }));
@@ -322,7 +322,7 @@ impl DltHeader {
 
         // check version
         let version = (header_type >> 5) & MAX_VERSION;
-        if 1 != version {
+        if 0 != version && 1 != version {
             return Err(error::ReadError::UnsupportedDltVersion(
                 UnsupportedDltVersionError {
                     unsupported_version: version,
@@ -487,6 +487,7 @@ mod dlt_header_tests {
     proptest! {
         #[test]
         fn to_bytes_from_slice(
+            version in 0..=1u8,
             ref dlt_header in dlt_header_any(),
             unsupported_version in (0u8..0b111u8).prop_filter(
                 "version must be unknown",
@@ -496,7 +497,12 @@ mod dlt_header_tests {
             use error::PacketSliceError::*;
             // ok case
             {
-                let bytes = dlt_header.to_bytes();
+                let bytes = {
+                    let mut bytes = dlt_header.to_bytes();
+                    // inject the supported version number
+                    bytes[0] = (bytes[0] & 0b0001_1111) | ((version << 5) & 0b1110_0000);
+                    bytes
+                };
                 assert_eq!(
                     dlt_header.clone(),
                     DltHeader::from_slice(&bytes[..]).unwrap()
@@ -506,7 +512,6 @@ mod dlt_header_tests {
             {
                 for l in 0..dlt_header.header_len() as usize {
                     let bytes = dlt_header.to_bytes();
-
                     assert_eq!(
                         UnexpectedEndOfSlice(
                             error::UnexpectedEndOfSliceError{
