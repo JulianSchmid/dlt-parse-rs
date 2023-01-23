@@ -22,7 +22,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn dlt_header_with_payload_any()(
-        payload_length in 4usize..TEST_MAX_PAYLOAD_SIZE
+        payload_length in 0usize..TEST_MAX_PAYLOAD_SIZE
     )(
         is_big_endian in any::<bool>(),
         message_counter in any::<u8>(),
