@@ -3,7 +3,7 @@ use std::vec::Vec;
 
 use crate::error::{DltMessageLengthTooSmallError, ReadError, UnsupportedDltVersionError};
 use crate::{storage::StorageHeader, DltPacketSlice};
-use crate::{DltHeader, MAX_VERSION};
+use crate::MAX_VERSION;
 
 use super::StorageSlice;
 
@@ -90,7 +90,7 @@ impl<R: Read + BufRead> DltStorageReader<R> {
 
         // check version
         let version = (header_start[0] >> 5) & MAX_VERSION;
-        if DltHeader::VERSION != version {
+        if 0 != version && 1 != version {
             self.read_error = true;
             return Some(Err(ReadError::UnsupportedDltVersion(
                 UnsupportedDltVersionError {
@@ -204,6 +204,8 @@ mod dlt_storage_reader_tests {
                 };
                 header.length = header.header_len() + 4;
                 header.write(&mut packet).unwrap();
+                // set version to 0
+                packet[0] = packet[0] & 0b0001_1111;
                 packet.extend_from_slice(&[1, 2, 3, 4]);
                 packet
             };
@@ -337,8 +339,8 @@ mod dlt_storage_reader_tests {
                 v.extend_from_slice(&[1, 2, 3, 4]);
             }
 
-            // change the version to 0
-            v[StorageHeader::BYTE_LEN] = 0;
+            // change the version to 2
+            v[StorageHeader::BYTE_LEN] = 2 << 5;
 
             let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
             assert_matches!(
