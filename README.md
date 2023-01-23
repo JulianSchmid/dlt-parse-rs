@@ -17,7 +17,7 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dlt_parse = "0.6"
+dlt_parse = "0.7"
 ```
 
 Next, add this to your crate:
@@ -108,7 +108,7 @@ An complete example which includes the parsing of the ethernet & udp headers can
 * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
 
 ## License
-Licensed under the BSD 3-Clause license. Please see the LICENSE file for more information.
+Licensed under either of Apache License, Version 2.0 or MIT license at your option. The corresponding license texts can be found in the LICENSE-APACHE file and the LICENSE-MIT file.
 
 ### Contribution
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you shall be licensed as above, without any additional terms or conditions.
