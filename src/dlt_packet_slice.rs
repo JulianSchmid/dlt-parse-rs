@@ -27,7 +27,7 @@ impl<'a> DltPacketSlice<'a> {
 
         // check version
         let version = (header_type >> 5) & MAX_VERSION;
-        if DltHeader::VERSION != version {
+        if 0 != version && 1 != version {
             return Err(UnsupportedDltVersion(UnsupportedDltVersionError {
                 unsupported_version: version,
             }));
@@ -429,14 +429,20 @@ mod dlt_packet_slice_tests {
     proptest! {
         #[test]
         fn from_slice(
-            ref packet in dlt_header_with_payload_any()
+            ref packet in dlt_header_with_payload_any(),
+            version in 0..=1u8,
         ) {
             use error::PacketSliceError::*;
 
             let mut buffer = Vec::with_capacity(
                 packet.1.len() + usize::from(packet.0.header_len())
             );
-            buffer.extend_from_slice(&packet.0.to_bytes());
+            buffer.extend_from_slice(&{
+                let mut bytes = packet.0.to_bytes();
+                // inject the supported version number
+                bytes[0] = (bytes[0] & 0b0001_1111) | ((version << 5) & 0b1110_0000);
+                bytes
+            });
             buffer.extend_from_slice(&packet.1[..]);
             //read the slice
             let slice = DltPacketSlice::from_slice(&buffer[..]).unwrap();
