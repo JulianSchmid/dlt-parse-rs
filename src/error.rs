@@ -446,7 +446,7 @@ pub enum VerboseDecodeError {
     /// Error in case value decoding is not yet supported.
     ///
     /// TODO: Remove this value
-    Unsupported,
+    Unsupported(u8, u8),
 }
 
 impl fmt::Display for VerboseDecodeError {
@@ -467,8 +467,8 @@ impl fmt::Display for VerboseDecodeError {
                 f, "DLT Verbose Message Field: Encountered a variable unit string missing the terminating zero value"
             ),
             Utf8(err) => err.fmt(f),
-            Unsupported => write!(
-                f, "DLT Verbose Message Field: Unsupported field type"
+            Unsupported(t0, t1) => write!(
+                f, "DLT Verbose Message Field: Unsupported field type {t0} {t1}"
             ),
         }
     }
@@ -485,7 +485,7 @@ impl std::error::Error for VerboseDecodeError {
             VariableNameStringMissingNullTermination => None,
             VariableUnitStringMissingNullTermination => None,
             Utf8(err) => Some(err),
-            Unsupported => None,
+            Unsupported(_, _) => None,
         }
     }
 }
