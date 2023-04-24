@@ -44,6 +44,10 @@ impl<'a> FieldSlicer<'a> {
         Ok(result)
     }
 
+    pub fn read_i8(&mut self) -> Result<i8, VerboseDecodeError> {
+        Ok(i8::from_ne_bytes([self.read_u8()?]))
+    }
+
     pub fn read_2bytes(&mut self) -> Result<[u8; 2], VerboseDecodeError> {
         use VerboseDecodeError::*;
 
@@ -69,12 +73,215 @@ impl<'a> FieldSlicer<'a> {
         Ok(result)
     }
 
+    pub fn read_4bytes(&mut self) -> Result<[u8; 4], VerboseDecodeError> {
+        use VerboseDecodeError::*;
+
+        // check length
+        if self.rest.len() < 4 {
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseValue,
+                minimum_size: self.offset + 4,
+                actual_size: self.offset + self.rest.len(),
+            }));
+        }
+
+        // read value
+        // SAFETY: Length of at least 4 verified in the previous if.
+        let result = unsafe {
+            [
+                *self.rest.get_unchecked(0),
+                *self.rest.get_unchecked(1),
+                *self.rest.get_unchecked(2),
+                *self.rest.get_unchecked(3),
+            ]
+        };
+
+        // move slice
+        // SAFETY: Length of at least 4 verified in the previous if.
+        self.rest =
+            unsafe { core::slice::from_raw_parts(self.rest.as_ptr().add(4), self.rest.len() - 4) };
+        self.offset += 4;
+
+        Ok(result)
+    }
+
+    pub fn read_8bytes(&mut self) -> Result<[u8; 8], VerboseDecodeError> {
+        use VerboseDecodeError::*;
+
+        // check length
+        if self.rest.len() < 8 {
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseValue,
+                minimum_size: self.offset + 8,
+                actual_size: self.offset + self.rest.len(),
+            }));
+        }
+
+        // read value
+        // SAFETY: Length of at least 8 verified in the previous if.
+        let result = unsafe {
+            [
+                *self.rest.get_unchecked(0),
+                *self.rest.get_unchecked(1),
+                *self.rest.get_unchecked(2),
+                *self.rest.get_unchecked(3),
+                *self.rest.get_unchecked(4),
+                *self.rest.get_unchecked(5),
+                *self.rest.get_unchecked(6),
+                *self.rest.get_unchecked(7),
+            ]
+        };
+
+        // move slice
+        // SAFETY: Length of at least 8 verified in the previous if.
+        self.rest =
+            unsafe { core::slice::from_raw_parts(self.rest.as_ptr().add(8), self.rest.len() - 8) };
+        self.offset += 8;
+
+        Ok(result)
+    }
+
+    pub fn read_16bytes(&mut self) -> Result<[u8; 16], VerboseDecodeError> {
+        use VerboseDecodeError::*;
+
+        // check length
+        if self.rest.len() < 16 {
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseValue,
+                minimum_size: self.offset + 16,
+                actual_size: self.offset + self.rest.len(),
+            }));
+        }
+
+        // read value
+        // SAFETY: Length of at least 16 verified in the previous if.
+        let result = unsafe {
+            [
+                *self.rest.get_unchecked(0),
+                *self.rest.get_unchecked(1),
+                *self.rest.get_unchecked(2),
+                *self.rest.get_unchecked(3),
+                *self.rest.get_unchecked(4),
+                *self.rest.get_unchecked(5),
+                *self.rest.get_unchecked(6),
+                *self.rest.get_unchecked(7),
+                *self.rest.get_unchecked(8),
+                *self.rest.get_unchecked(9),
+                *self.rest.get_unchecked(10),
+                *self.rest.get_unchecked(11),
+                *self.rest.get_unchecked(12),
+                *self.rest.get_unchecked(13),
+                *self.rest.get_unchecked(14),
+                *self.rest.get_unchecked(15),
+            ]
+        };
+
+        // move slice
+        // SAFETY: Length of at least 8 verified in the previous if.
+        self.rest = unsafe {
+            core::slice::from_raw_parts(self.rest.as_ptr().add(16), self.rest.len() - 16)
+        };
+        self.offset += 16;
+
+        Ok(result)
+    }
+
     pub fn read_u16(&mut self, is_big_endian: bool) -> Result<u16, VerboseDecodeError> {
         self.read_2bytes().map(|bytes| {
             if is_big_endian {
                 u16::from_be_bytes(bytes)
             } else {
                 u16::from_le_bytes(bytes)
+            }
+        })
+    }
+
+    pub fn read_i16(&mut self, is_big_endian: bool) -> Result<i16, VerboseDecodeError> {
+        self.read_2bytes().map(|bytes| {
+            if is_big_endian {
+                i16::from_be_bytes(bytes)
+            } else {
+                i16::from_le_bytes(bytes)
+            }
+        })
+    }
+
+    pub fn read_u32(&mut self, is_big_endian: bool) -> Result<u32, VerboseDecodeError> {
+        self.read_4bytes().map(|bytes| {
+            if is_big_endian {
+                u32::from_be_bytes(bytes)
+            } else {
+                u32::from_le_bytes(bytes)
+            }
+        })
+    }
+
+    pub fn read_i32(&mut self, is_big_endian: bool) -> Result<i32, VerboseDecodeError> {
+        self.read_4bytes().map(|bytes| {
+            if is_big_endian {
+                i32::from_be_bytes(bytes)
+            } else {
+                i32::from_le_bytes(bytes)
+            }
+        })
+    }
+
+    pub fn read_u64(&mut self, is_big_endian: bool) -> Result<u64, VerboseDecodeError> {
+        self.read_8bytes().map(|bytes| {
+            if is_big_endian {
+                u64::from_be_bytes(bytes)
+            } else {
+                u64::from_le_bytes(bytes)
+            }
+        })
+    }
+
+    pub fn read_i64(&mut self, is_big_endian: bool) -> Result<i64, VerboseDecodeError> {
+        self.read_8bytes().map(|bytes| {
+            if is_big_endian {
+                i64::from_be_bytes(bytes)
+            } else {
+                i64::from_le_bytes(bytes)
+            }
+        })
+    }
+
+    pub fn read_u128(&mut self, is_big_endian: bool) -> Result<u128, VerboseDecodeError> {
+        self.read_16bytes().map(|bytes| {
+            if is_big_endian {
+                u128::from_be_bytes(bytes)
+            } else {
+                u128::from_le_bytes(bytes)
+            }
+        })
+    }
+
+    pub fn read_i128(&mut self, is_big_endian: bool) -> Result<i128, VerboseDecodeError> {
+        self.read_16bytes().map(|bytes| {
+            if is_big_endian {
+                i128::from_be_bytes(bytes)
+            } else {
+                i128::from_le_bytes(bytes)
+            }
+        })
+    }
+
+    pub fn read_f32(&mut self, is_big_endian: bool) -> Result<f32, VerboseDecodeError> {
+        self.read_4bytes().map(|bytes| {
+            if is_big_endian {
+                f32::from_be_bytes(bytes)
+            } else {
+                f32::from_le_bytes(bytes)
+            }
+        })
+    }
+
+    pub fn read_f64(&mut self, is_big_endian: bool) -> Result<f64, VerboseDecodeError> {
+        self.read_8bytes().map(|bytes| {
+            if is_big_endian {
+                f64::from_be_bytes(bytes)
+            } else {
+                f64::from_le_bytes(bytes)
             }
         })
     }

@@ -20,9 +20,9 @@ pub struct BoolValue<'a> {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum StringValue<'a> {
-    Ascii(&'a str),
-    Utf8(&'a str),
+pub struct StringValue<'a> {
+    pub name: Option<&'a str>,
+    pub value: &'a str,
 }
 
 #[derive(Debug, Eq, PartialEq)]
