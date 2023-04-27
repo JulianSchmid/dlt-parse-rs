@@ -266,6 +266,16 @@ impl<'a> FieldSlicer<'a> {
         })
     }
 
+    pub fn read_f16(&mut self, is_big_endian: bool) -> Result<[u8; 2], VerboseDecodeError> {
+        //TODO: Maybe consider endianess here? E. g. Swap bytes
+        self.read_2bytes()
+    }
+
+    pub fn read_f128(&mut self, is_big_endian: bool) -> Result<[u8; 16], VerboseDecodeError> {
+        //TODO: Maybe consider endianess here? E. g. Swap bytes
+        self.read_16bytes()
+    }
+
     pub fn read_f32(&mut self, is_big_endian: bool) -> Result<f32, VerboseDecodeError> {
         self.read_4bytes().map(|bytes| {
             if is_big_endian {
