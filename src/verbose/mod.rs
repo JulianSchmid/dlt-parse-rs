@@ -27,9 +27,7 @@ pub struct StringValue<'a> {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct TraceInfoValue<'a> {
-    // TODO
-    // temp until actually implemented
-    pub dummy: core::marker::PhantomData<&'a u8>,
+    pub value: &'a str,
 }
 
 /// Verbose 8 bit signed integer.
@@ -118,8 +116,8 @@ pub struct U64Value<'a> {
 pub struct U128Value<'a> {
     pub name: Option<&'a str>,
     pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<u64>>,
-    pub value: u64,
+    pub scaling: Option<Scaling<u128>>,
+    pub value: u128,
 }
 
 /// Verbose 16 bit float number.
