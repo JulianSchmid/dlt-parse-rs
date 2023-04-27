@@ -119,7 +119,7 @@ impl<'a> VerboseValue<'a> {
             const CONTRADICTING_MASK_0: u8 = 0b1101_0000;
             const CONTRADICTING_MASK_1: u8 = 0b0110_0111;
 
-            // check that no contradicting type info is presebt
+            // check that no contradicting type info is present
             if (0 != type_info[0] & CONTRADICTING_MASK_0)
                 || (0 != type_info[1] & CONTRADICTING_MASK_1)
             {
@@ -225,17 +225,198 @@ impl<'a> VerboseValue<'a> {
             }
         } else if 0 != type_info[0] & UNSIGNED_FLAG_0 {
             // verify no conflicting information is present
+            // todo: handle arrays (currently set as contradicting)
+            const CONTRADICTING_MASK_0: u8 = 0b1011_0000;
+            const CONTRADICTING_MASK_1: u8 = 0b0110_0111;
+
+            // check that no contradicting type info is present
+            if (0 != type_info[0] & CONTRADICTING_MASK_0)
+                || (0 != type_info[1] & CONTRADICTING_MASK_1)
+            {
+                return Err(InvalidTypeInfo(type_info));
+            }
+
+            let type_len = type_info[0] & 0b1111;
+            match type_len {
+                1 | 2 | 3 | 4 | 5 => {}
+                _ => return Err(InvalidTypeInfo(type_info)),
+            }
+
+            // check for varinfo
+            let name_and_unit = if 0 != type_info[1] & VARINFO_FLAG_1 {
+                Some(slicer.read_var_name_and_unit(is_big_endian)?)
+            } else {
+                None
+            };
+
+            let read_u32_scaling =
+                |slicer: &mut FieldSlicer| -> Result<Option<Scaling<u32>>, VerboseDecodeError> {
+                    if 0 != type_info[1] & FIXED_POINT_FLAG_1 {
+                        Ok(Some(Scaling {
+                            quantization: slicer.read_f32(is_big_endian)?,
+                            offset: slicer.read_u32(is_big_endian)?,
+                        }))
+                    } else {
+                        Ok(None)
+                    }
+                };
+
+            let read_u64_scaling =
+                |slicer: &mut FieldSlicer| -> Result<Option<Scaling<u64>>, VerboseDecodeError> {
+                    if 0 != type_info[1] & FIXED_POINT_FLAG_1 {
+                        Ok(Some(Scaling {
+                            quantization: slicer.read_f32(is_big_endian)?,
+                            offset: slicer.read_u64(is_big_endian)?,
+                        }))
+                    } else {
+                        Ok(None)
+                    }
+                };
+
+            let read_u128_scaling =
+                |slicer: &mut FieldSlicer| -> Result<Option<Scaling<u128>>, VerboseDecodeError> {
+                    if 0 != type_info[1] & FIXED_POINT_FLAG_1 {
+                        Ok(Some(Scaling {
+                            quantization: slicer.read_f32(is_big_endian)?,
+                            offset: slicer.read_u128(is_big_endian)?,
+                        }))
+                    } else {
+                        Ok(None)
+                    }
+                };
+
+            match type_len {
+                1 => Ok((
+                    U8(U8Value {
+                        name: name_and_unit.map(|v| v.0),
+                        unit: name_and_unit.map(|v| v.1),
+                        scaling: read_u32_scaling(&mut slicer)?,
+                        value: slicer.read_u8()?,
+                    }),
+                    slicer.rest(),
+                )),
+                2 => Ok((
+                    U16(U16Value {
+                        name: name_and_unit.map(|v| v.0),
+                        unit: name_and_unit.map(|v| v.1),
+                        scaling: read_u32_scaling(&mut slicer)?,
+                        value: slicer.read_u16(is_big_endian)?,
+                    }),
+                    slicer.rest(),
+                )),
+                3 => Ok((
+                    U32(U32Value {
+                        name: name_and_unit.map(|v| v.0),
+                        unit: name_and_unit.map(|v| v.1),
+                        scaling: read_u32_scaling(&mut slicer)?,
+                        value: slicer.read_u32(is_big_endian)?,
+                    }),
+                    slicer.rest(),
+                )),
+                4 => Ok((
+                    U64(U64Value {
+                        name: name_and_unit.map(|v| v.0),
+                        unit: name_and_unit.map(|v| v.1),
+                        scaling: read_u64_scaling(&mut slicer)?,
+                        value: slicer.read_u64(is_big_endian)?,
+                    }),
+                    slicer.rest(),
+                )),
+                5 => Ok((
+                    U128(U128Value {
+                        name: name_and_unit.map(|v| v.0),
+                        unit: name_and_unit.map(|v| v.1),
+                        scaling: read_u128_scaling(&mut slicer)?,
+                        value: slicer.read_u128(is_big_endian)?,
+                    }),
+                    slicer.rest(),
+                )),
+                _ => unreachable!(),
+            }
+
             // TODO implement
-            Err(Unsupported(type_info[0], type_info[1]))
         } else if 0 != type_info[0] & FLOAT_FLAG_0 {
             // verify no conflicting information is present
+            // todo: handle arrays (currently set as contradicting)
+
+            const CONTRADICTING_MASK_0: u8 = 0b0111_0000;
+            const CONTRADICTING_MASK_1: u8 = 0b0111_0111;
+
+            // check that no contradicting type info is present
+            if (0 != type_info[0] & CONTRADICTING_MASK_0)
+                || (0 != type_info[1] & CONTRADICTING_MASK_1)
+            {
+                return Err(InvalidTypeInfo(type_info));
+            }
+
+            let type_len = type_info[0] & 0b1111;
+            match type_len {
+                2 | 3 | 4 | 5 => {}
+                _ => return Err(InvalidTypeInfo(type_info)),
+            }
+
+            // check for varinfo
+            let name_and_unit = if 0 != type_info[1] & VARINFO_FLAG_1 {
+                Some(slicer.read_var_name_and_unit(is_big_endian)?)
+            } else {
+                None
+            };
+
+            match type_len {
+                2 => Ok((
+                    F16(F16Value {
+                        name: name_and_unit.map(|v| v.0),
+                        unit: name_and_unit.map(|v| v.1),
+                        value: slicer.read_f16(is_big_endian)?,
+                    }),
+                    slicer.rest(),
+                )),
+                3 => Ok((
+                    F32(F32Value {
+                        name: name_and_unit.map(|v| v.0),
+                        unit: name_and_unit.map(|v| v.1),
+                        value: slicer.read_f32(is_big_endian)?,
+                    }),
+                    slicer.rest(),
+                )),
+                4 => Ok((
+                    F64(F64Value {
+                        name: name_and_unit.map(|v| v.0),
+                        unit: name_and_unit.map(|v| v.1),
+                        value: slicer.read_f64(is_big_endian)?,
+                    }),
+                    slicer.rest(),
+                )),
+                5 => Ok((
+                    F128(F128Value {
+                        name: name_and_unit.map(|v| v.0),
+                        unit: name_and_unit.map(|v| v.1),
+                        value: slicer.read_f128(is_big_endian)?,
+                    }),
+                    slicer.rest(),
+                )),
+                _ => unreachable!(),
+            }
+
             // TODO implement
-            Err(Unsupported(type_info[0], type_info[1]))
+            //Err(Unsupported(type_info[0], type_info[1]))
         } else if 0 != type_info[1] & ARRAY_FLAG_1 {
             // verify no conflicting information is present
             // TODO implement
             Err(Unsupported(type_info[0], type_info[1]))
         } else if 0 != type_info[1] & STRING_FLAG_1 {
+            const CONTRADICTING_MASK_0: u8 = 0b1111_0000;
+            const CONTRADICTING_MASK_1: u8 = 0b0111_0101;
+
+            if
+            // check none of the other type flags other then varinfo
+            // flag is set
+            (0 != type_info[0] & CONTRADICTING_MASK_0)
+                || (0 != type_info[1] & CONTRADICTING_MASK_1)
+            {
+                return Err(InvalidTypeInfo(type_info));
+            }
+
             let len = usize::from(slicer.read_u16(is_big_endian)?);
 
             let name = if 0 != type_info[1] & VARINFO_FLAG_1 {
@@ -295,8 +476,35 @@ impl<'a> VerboseValue<'a> {
             ))
         } else if 0 != type_info[1] & TRACE_INFO_FLAG_1 {
             // verify no conflicting information is present
-            // TODO implement
-            Err(Unsupported(type_info[0], type_info[1]))
+
+            const CONTRADICTING_MASK_0: u8 = 0b1111_1111;
+            const CONTRADICTING_MASK_1: u8 = 0b0101_1111;
+
+            // check that no contradicting type info is present
+            if (0 != type_info[0] & CONTRADICTING_MASK_0)
+                || (0 != type_info[1] & CONTRADICTING_MASK_1)
+            {
+                return Err(InvalidTypeInfo(type_info));
+            }
+
+            // read len of trace data string
+            let len = usize::from(slicer.read_u16(is_big_endian)?);
+
+            let parse: Result<&str, str::Utf8Error> = match slicer.read_raw(len) {
+                Ok(valid_parse) => {
+                    if len > 0 {
+                        str::from_utf8(&valid_parse[..valid_parse.len() - 1])
+                    } else {
+                        Ok("")
+                    }
+                }
+                Err(_) => return Err(Unsupported(type_info[0], type_info[1])),
+            };
+
+            match parse {
+                Ok(value) => Ok((TraceInfo(TraceInfoValue { value }), slicer.rest())),
+                Err(_) => Err(Unsupported(type_info[0], type_info[1])),
+            }
         } else if 0 != type_info[1] & STRUCT_FLAG_1 {
             // verify no conflicting information is present
             // TODO implement
