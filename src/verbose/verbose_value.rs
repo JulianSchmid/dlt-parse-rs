@@ -86,7 +86,7 @@ impl<'a> VerboseValue<'a> {
 
         if 0 != type_info[0] & BOOL_FLAG_0 {
             const CONTRADICTING_MASK_0: u8 = 0b1110_0000;
-            const CONTRADICTING_MASK_1: u8 = 0b0111_0111;
+            const CONTRADICTING_MASK_1: u8 = 0b1111_0111;
             if
             // check type length (must be 1 for bool)
             (1 != type_info[0] & TYPE_LEN_MASK_0) ||
@@ -117,7 +117,7 @@ impl<'a> VerboseValue<'a> {
         } else if 0 != type_info[0] & SIGNED_FLAG_0 {
             // todo: handle arrays (currently set as contradicting)
             const CONTRADICTING_MASK_0: u8 = 0b1101_0000;
-            const CONTRADICTING_MASK_1: u8 = 0b0110_0111;
+            const CONTRADICTING_MASK_1: u8 = 0b1110_0111;
 
             // check that no contradicting type info is present
             if (0 != type_info[0] & CONTRADICTING_MASK_0)
@@ -227,7 +227,7 @@ impl<'a> VerboseValue<'a> {
             // verify no conflicting information is present
             // todo: handle arrays (currently set as contradicting)
             const CONTRADICTING_MASK_0: u8 = 0b1011_0000;
-            const CONTRADICTING_MASK_1: u8 = 0b0110_0111;
+            const CONTRADICTING_MASK_1: u8 = 0b1110_0111;
 
             // check that no contradicting type info is present
             if (0 != type_info[0] & CONTRADICTING_MASK_0)
@@ -340,7 +340,7 @@ impl<'a> VerboseValue<'a> {
             // todo: handle arrays (currently set as contradicting)
 
             const CONTRADICTING_MASK_0: u8 = 0b0111_0000;
-            const CONTRADICTING_MASK_1: u8 = 0b0111_0111;
+            const CONTRADICTING_MASK_1: u8 = 0b1111_0111;
 
             // check that no contradicting type info is present
             if (0 != type_info[0] & CONTRADICTING_MASK_0)
@@ -403,6 +403,18 @@ impl<'a> VerboseValue<'a> {
         } else if 0 != type_info[1] & ARRAY_FLAG_1 {
             // verify no conflicting information is present
             // TODO implement
+            const CONTRADICTING_MASK_0: u8 = 0b1111_0000;
+            const CONTRADICTING_MASK_1: u8 = 0b1111_0110;
+
+            if
+            // check none of the other type flags other then varinfo
+            // flag is set
+            (0 != type_info[0] & CONTRADICTING_MASK_0)
+                || (0 != type_info[1] & CONTRADICTING_MASK_1)
+            {
+                return Err(InvalidTypeInfo(type_info));
+            }
+
             Err(Unsupported(type_info[0], type_info[1]))
         } else if 0 != type_info[1] & STRING_FLAG_1 {
             const CONTRADICTING_MASK_0: u8 = 0b1111_0000;
@@ -507,6 +519,25 @@ impl<'a> VerboseValue<'a> {
             }
         } else if 0 != type_info[1] & STRUCT_FLAG_1 {
             // verify no conflicting information is present
+            const CONTRADICTING_MASK_0: u8 = 0b1111_1111;
+            const CONTRADICTING_MASK_1: u8 = 0b1011_0111;
+
+            // check that no contradicting type info is present
+            if (0 != type_info[0] & CONTRADICTING_MASK_0)
+                || (0 != type_info[1] & CONTRADICTING_MASK_1)
+            {
+                return Err(InvalidTypeInfo(type_info));
+            }
+
+            // read number of struct entries
+            let len = usize::from(slicer.read_u16(is_big_endian)?);
+
+            let name = if 0 != type_info[1] & VARINFO_FLAG_1 {
+                Some(slicer.read_var_name(is_big_endian)?)
+            } else {
+                None
+            };
+
             // TODO implement
             Err(Unsupported(type_info[0], type_info[1]))
         } else {
