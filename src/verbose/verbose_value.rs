@@ -1,8 +1,5 @@
 extern crate alloc;
 
-use alloc::borrow::ToOwned;
-use alloc::string::String;
-
 use crate::error::VerboseDecodeError;
 
 use super::*;
@@ -12,6 +9,7 @@ use core::str;
 use std::println;
 
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum VerboseValue<'a> {
     Bool(BoolValue<'a>),
     Str(StringValue<'a>),
