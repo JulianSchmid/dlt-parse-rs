@@ -1,6 +1,6 @@
 use super::*;
 
-///Allows iterating over the someip message in a udp or tcp payload.
+/// Allows iterating over the someip message in a udp or tcp payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SliceIterator<'a> {
     slice: &'a [u8],
@@ -10,6 +10,11 @@ impl<'a> SliceIterator<'a> {
     #[inline]
     pub fn new(slice: &'a [u8]) -> SliceIterator<'a> {
         SliceIterator { slice }
+    }
+
+    /// Returns the slice of data still left in the iterator.
+    pub fn slice(&self) -> &'a [u8] {
+        self.slice
     }
 }
 
@@ -64,6 +69,13 @@ mod slice_interator_tests {
             format!("SliceIterator {{ slice: {:?} }}", it.slice),
             format!("{:?}", it)
         );
+    }
+
+    #[test]
+    fn slice() {
+        let buffer: [u8;4] = [1, 2, 3, 4];
+        let it = SliceIterator { slice: &buffer };
+        assert_eq!(it.slice(), &buffer);
     }
 
     proptest! {
