@@ -17,7 +17,7 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dlt_parse = "0.7"
+dlt_parse = "0.7.2"
 ```
 
 Next, add this to your crate:
