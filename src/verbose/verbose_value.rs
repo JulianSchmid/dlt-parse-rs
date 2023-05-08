@@ -8,7 +8,7 @@ use core::slice;
 use core::str;
 use std::println;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub enum VerboseValue<'a> {
     Bool(BoolValue<'a>),
