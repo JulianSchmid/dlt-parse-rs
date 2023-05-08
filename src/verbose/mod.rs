@@ -7,35 +7,35 @@ pub use verbose_value::*;
 use super::*;
 use core::str;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Scaling<T: Sized> {
     quantization: f32,
     offset: T,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct BoolValue<'a> {
     pub name: Option<&'a str>,
     pub value: bool,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct StringValue<'a> {
     pub name: Option<&'a str>,
     pub value: &'a str,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct TraceInfoValue<'a> {
     pub value: &'a str,
 }
 
 /// Verbose 8 bit signed integer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct I8Value<'a> {
     pub name: Option<&'a str>,
@@ -45,7 +45,7 @@ pub struct I8Value<'a> {
 }
 
 /// Verbose 16 bit signed integer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct I16Value<'a> {
     pub name: Option<&'a str>,
@@ -55,7 +55,7 @@ pub struct I16Value<'a> {
 }
 
 /// Verbose 32 bit signed integer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct I32Value<'a> {
     pub name: Option<&'a str>,
@@ -65,7 +65,7 @@ pub struct I32Value<'a> {
 }
 
 /// Verbose 32 bit signed integer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct I64Value<'a> {
     pub name: Option<&'a str>,
@@ -75,7 +75,7 @@ pub struct I64Value<'a> {
 }
 
 /// Verbose 32 bit signed integer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct I128Value<'a> {
     pub name: Option<&'a str>,
@@ -85,7 +85,7 @@ pub struct I128Value<'a> {
 }
 
 /// Verbose 8 bit unsigned integer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct U8Value<'a> {
     pub name: Option<&'a str>,
@@ -95,7 +95,7 @@ pub struct U8Value<'a> {
 }
 
 /// Verbose 16 bit unsigned integer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct U16Value<'a> {
     pub name: Option<&'a str>,
@@ -105,7 +105,7 @@ pub struct U16Value<'a> {
 }
 
 /// Verbose 32 bit unsigned integer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct U32Value<'a> {
     pub name: Option<&'a str>,
@@ -115,7 +115,7 @@ pub struct U32Value<'a> {
 }
 
 /// Verbose 32 bit unsigned integer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct U64Value<'a> {
     pub name: Option<&'a str>,
@@ -125,7 +125,7 @@ pub struct U64Value<'a> {
 }
 
 /// Verbose 32 bit unsigned integer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct U128Value<'a> {
     pub name: Option<&'a str>,
@@ -135,7 +135,7 @@ pub struct U128Value<'a> {
 }
 
 /// Verbose 16 bit float number.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct F16Value<'a> {
     pub name: Option<&'a str>,
@@ -144,7 +144,7 @@ pub struct F16Value<'a> {
 }
 
 /// Verbose 32 bit float number.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct F32Value<'a> {
     pub name: Option<&'a str>,
@@ -153,7 +153,7 @@ pub struct F32Value<'a> {
 }
 
 /// Verbose 64 bit float number.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct F64Value<'a> {
     pub name: Option<&'a str>,
@@ -162,7 +162,7 @@ pub struct F64Value<'a> {
 }
 
 /// Verbose 128 bit float number.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct F128Value<'a> {
     pub name: Option<&'a str>,
@@ -170,7 +170,7 @@ pub struct F128Value<'a> {
     pub value: [u8; 16],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayDimensions<'a> {
     /// Pointer to the raw dimensions data.
@@ -195,7 +195,7 @@ pub struct ArrayDimensions<'a> {
 //      - some kind of generic?
 //         -> this only
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayValue<'a> {
     // TODO
@@ -205,84 +205,84 @@ pub struct ArrayValue<'a> {
     pub dimensions: ArrayDimensions<'a>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayBool<'a> {
     pub dimensions: ArrayDimensions<'a>,
     pub data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayU8<'a> {
     pub dimensions: ArrayDimensions<'a>,
     pub data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayU16<'a> {
     dimensions: ArrayDimensions<'a>,
     data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayU32<'a> {
     dimensions: ArrayDimensions<'a>,
     data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayU64<'a> {
     dimensions: ArrayDimensions<'a>,
     data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayU128<'a> {
     dimensions: ArrayDimensions<'a>,
     data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayI8<'a> {
     dimensions: ArrayDimensions<'a>,
     data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayI16<'a> {
     dimensions: ArrayDimensions<'a>,
     data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayI32<'a> {
     dimensions: ArrayDimensions<'a>,
     data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayI64<'a> {
     dimensions: ArrayDimensions<'a>,
     data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayI128<'a> {
     dimensions: ArrayDimensions<'a>,
     data: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct StructValue<'a> {
     // TODO
@@ -290,7 +290,7 @@ pub struct StructValue<'a> {
     pub dummy: core::marker::PhantomData<&'a u8>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct RawValue<'a> {
     pub name: Option<&'a str>,
