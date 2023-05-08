@@ -73,7 +73,7 @@ mod slice_interator_tests {
 
     #[test]
     fn slice() {
-        let buffer: [u8;4] = [1, 2, 3, 4];
+        let buffer: [u8; 4] = [1, 2, 3, 4];
         let it = SliceIterator { slice: &buffer };
         assert_eq!(it.slice(), &buffer);
     }
