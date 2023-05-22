@@ -1,5 +1,7 @@
 use crate::error::{Layer, UnexpectedEndOfSliceError, VerboseDecodeError};
 
+use super::{ArrayDimensions, Scaling};
+
 /// Helper for parsing verbose messages.
 pub struct FieldSlicer<'a> {
     /// Unparsed part of the verbose message.
@@ -266,14 +268,12 @@ impl<'a> FieldSlicer<'a> {
         })
     }
 
-    pub fn read_f16(&mut self, is_big_endian: bool) -> Result<[u8; 2], VerboseDecodeError> {
-        //TODO: Maybe consider endianess here? E. g. Swap bytes
-        self.read_2bytes()
+    pub fn read_f16(&mut self, is_big_endian: bool) -> Result<u16, VerboseDecodeError> {
+        self.read_u16(is_big_endian)
     }
 
-    pub fn read_f128(&mut self, is_big_endian: bool) -> Result<[u8; 16], VerboseDecodeError> {
-        //TODO: Maybe consider endianess here? E. g. Swap bytes
-        self.read_16bytes()
+    pub fn read_f128(&mut self, is_big_endian: bool) -> Result<u128, VerboseDecodeError> {
+        self.read_u128(is_big_endian)
     }
 
     pub fn read_f32(&mut self, is_big_endian: bool) -> Result<f32, VerboseDecodeError> {
@@ -499,6 +499,87 @@ impl<'a> FieldSlicer<'a> {
 
         Ok(result)
     }
+
+    const FIXED_POINT_FLAG_1: u8 = 0b0001_0000;
+
+    pub fn read_i32_scaling(
+        &mut self,
+        is_big_endian: bool,
+        type_info: [u8; 4],
+    ) -> Result<Option<Scaling<i32>>, VerboseDecodeError> {
+        if 0 != type_info[1] & Self::FIXED_POINT_FLAG_1 {
+            Ok(Some(Scaling {
+                quantization: self.read_f32(is_big_endian)?,
+                offset: self.read_i32(is_big_endian)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn read_i64_scaling(
+        &mut self,
+        is_big_endian: bool,
+        type_info: [u8; 4],
+    ) -> Result<Option<Scaling<i64>>, VerboseDecodeError> {
+        if 0 != type_info[1] & Self::FIXED_POINT_FLAG_1 {
+            Ok(Some(Scaling {
+                quantization: self.read_f32(is_big_endian)?,
+                offset: self.read_i64(is_big_endian)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn read_i128_scaling(
+        &mut self,
+        is_big_endian: bool,
+        type_info: [u8; 4],
+    ) -> Result<Option<Scaling<i128>>, VerboseDecodeError> {
+        if 0 != type_info[1] & Self::FIXED_POINT_FLAG_1 {
+            Ok(Some(Scaling {
+                quantization: self.read_f32(is_big_endian)?,
+                offset: self.read_i128(is_big_endian)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn read_array_dimesions(
+        &mut self,
+        is_big_endian: bool,
+    ) -> Result<ArrayDimensions<'a>, VerboseDecodeError> {
+        use VerboseDecodeError::*;
+
+        // first read the number of dimensions
+        let num_dims = self.read_u16(is_big_endian)?;
+
+        // check if enough data is present for the dimensions
+        let len = usize::from(num_dims) * 2;
+        if self.rest.len() < len {
+            return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                layer: Layer::VerboseTypeInfo,
+                minimum_size: self.offset + len,
+                actual_size: self.offset + self.rest.len(),
+            }));
+        }
+
+        // safe array dimensions slice
+        let result = ArrayDimensions {
+            is_big_endian,
+            dimensions: unsafe { core::slice::from_raw_parts(self.rest.as_ptr(), len) },
+        };
+
+        // move rest and offset
+        self.rest = unsafe {
+            core::slice::from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len)
+        };
+        self.offset += len;
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
@@ -523,6 +604,162 @@ mod test_field_slicer {
             );
             prop_assert_eq!(s.rest(), &data);
             prop_assert_eq!(s.offset, offset);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_2bytes(
+            value in any::<[u8;2]>(),
+            slice_len in 2usize..4,
+            offset in 0usize..usize::MAX-1,
+            bad_len in 0usize..2,
+        ) {
+            // ok
+            {
+                let data = [value[0], value[1], 1, 2];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_2bytes(),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 2);
+                prop_assert_eq!(slicer.rest, &[1,2][..slice_len - 2]);
+            }
+
+            // length error
+            {
+                let mut slicer = FieldSlicer::new(&value[..bad_len], offset);
+                prop_assert_eq!(
+                    slicer.read_2bytes(),
+                    Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                        UnexpectedEndOfSliceError{
+                            layer: Layer::VerboseValue,
+                            actual_size: offset + bad_len,
+                            minimum_size: offset + 2,
+                        }
+                    ))
+                );
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &value[..bad_len]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_4bytes(
+            value in any::<[u8;4]>(),
+            slice_len in 4usize..8,
+            offset in 0usize..usize::MAX-3,
+            bad_len in 0usize..4,
+        ) {
+            // ok
+            {
+                let data = [value[0], value[1], value[2], value[3], 1, 2, 3, 4];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_4bytes(),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 4);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4][..slice_len - 4]);
+            }
+
+            // length error
+            {
+                let mut slicer = FieldSlicer::new(&value[..bad_len], offset);
+                prop_assert_eq!(
+                    slicer.read_4bytes(),
+                    Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                        UnexpectedEndOfSliceError{
+                            layer: Layer::VerboseValue,
+                            actual_size: offset + bad_len,
+                            minimum_size: offset + 4,
+                        }
+                    ))
+                );
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &value[..bad_len]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_8bytes(
+            value in any::<[u8;8]>(),
+            slice_len in 8usize..16,
+            offset in 0usize..usize::MAX-7,
+            bad_len in 0usize..8,
+        ) {
+            // ok
+            {
+                let data = [value[0], value[1], value[2], value[3], value[4], value[5], value[6], value[7], 1, 2, 3, 4, 5, 6, 7, 8];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_8bytes(),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 8);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4,5,6,7,8][..slice_len - 8]);
+            }
+
+            // length error
+            {
+                let mut slicer = FieldSlicer::new(&value[..bad_len], offset);
+                prop_assert_eq!(
+                    slicer.read_8bytes(),
+                    Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                        UnexpectedEndOfSliceError{
+                            layer: Layer::VerboseValue,
+                            actual_size: offset + bad_len,
+                            minimum_size: offset + 8,
+                        }
+                    ))
+                );
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &value[..bad_len]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_16bytes(
+            value in any::<[u8;16]>(),
+            slice_len in 16usize..32,
+            offset in 0usize..usize::MAX-15,
+            bad_len in 0usize..16,
+        ) {
+            // ok
+            {
+                let data = [value[0], value[1], value[2], value[3], value[4], value[5], value[6], value[7], value[8], value[9], value[10], value[11], value[12], value[13], value[14], value[15], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_16bytes(),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 16);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16][..slice_len - 16]);
+            }
+
+            // length error
+            {
+                let mut slicer = FieldSlicer::new(&value[..bad_len], offset);
+                prop_assert_eq!(
+                    slicer.read_16bytes(),
+                    Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                        UnexpectedEndOfSliceError{
+                            layer: Layer::VerboseValue,
+                            actual_size: offset + bad_len,
+                            minimum_size: offset + 16,
+                        }
+                    ))
+                );
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &value[..bad_len]);
+            }
         }
     }
 
@@ -569,39 +806,41 @@ mod test_field_slicer {
 
     proptest! {
         #[test]
-        fn read_2bytes(
-            value in any::<[u8;2]>(),
-            slice_len in 2usize..4,
-            offset in 0usize..usize::MAX-1,
-            bad_len in 0usize..2,
+        fn read_i8(
+            value in any::<i8>(),
+            slice_len in 1usize..3,
+            offset in 0usize..usize::MAX,
         ) {
             // ok
             {
-                let data = [value[0], value[1], 1, 2];
-                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                let data = [value as u8, i8::MIN as u8, i8::MAX as u8];
+                let mut slicer = FieldSlicer{
+                    rest: &data[..slice_len],
+                    offset,
+                };
                 prop_assert_eq!(
-                    slicer.read_2bytes(),
+                    slicer.read_i8(),
                     Ok(value)
                 );
-                prop_assert_eq!(slicer.offset, offset + 2);
-                prop_assert_eq!(slicer.rest, &[1,2][..slice_len - 2]);
+                prop_assert_eq!(slicer.rest, &data[1..slice_len]);
+                prop_assert_eq!(slicer.offset, offset + 1);
             }
-
             // length error
             {
-                let mut slicer = FieldSlicer::new(&value[..bad_len], offset);
+                let mut slicer = FieldSlicer{
+                    rest: &[],
+                    offset,
+                };
                 prop_assert_eq!(
-                    slicer.read_2bytes(),
+                    slicer.read_i8(),
                     Err(VerboseDecodeError::UnexpectedEndOfSlice(
                         UnexpectedEndOfSliceError{
                             layer: Layer::VerboseValue,
-                            actual_size: offset + bad_len,
-                            minimum_size: offset + 2,
+                            actual_size: offset,
+                            minimum_size: offset + 1,
                         }
                     ))
                 );
-                prop_assert_eq!(slicer.offset, offset);
-                prop_assert_eq!(slicer.rest, &value[..bad_len]);
             }
         }
     }
@@ -661,6 +900,433 @@ mod test_field_slicer {
 
                 // big endian
                 prop_assert_eq!(slicer.read_u16(true), expected);
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_i16(
+            value in any::<i16>(),
+            slice_len in 2usize..4,
+            offset in 0usize..usize::MAX-1,
+            bad_len in 0usize..2
+        ) {
+
+            // ok big endian
+            {
+                let value_be = value.to_be_bytes();
+                let data = [value_be[0], value_be[1], 1, 2];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_i16(true),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 2);
+                prop_assert_eq!(slicer.rest, &[1,2][..slice_len - 2]);
+            }
+            // ok little endian
+            {
+                let value_le = value.to_le_bytes();
+                let data = [
+                    value_le[0], value_le[1], 1, 2,
+                ];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_i16(false),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 2);
+                prop_assert_eq!(slicer.rest, &[1,2][..slice_len - 2]);
+            }
+
+            // length error
+            {
+                let expected = Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError{
+                        layer: Layer::VerboseValue,
+                        actual_size: offset + bad_len,
+                        minimum_size: offset + 2,
+                    }
+                ));
+                let data = value.to_le_bytes();
+                let mut slicer = FieldSlicer::new(&data[..bad_len], offset);
+
+                // little endian
+                prop_assert_eq!(slicer.read_i16(false), expected.clone());
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+
+                // big endian
+                prop_assert_eq!(slicer.read_i16(true), expected);
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_u32(
+            value in any::<u32>(),
+            slice_len in 4usize..8,
+            offset in 0usize..usize::MAX-3,
+            bad_len in 0usize..4
+        ) {
+
+            // ok big endian
+            {
+                let value_be = value.to_be_bytes();
+                let data = [value_be[0], value_be[1], value_be[2], value_be[3], 1, 2, 3, 4];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_u32(true),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 4);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4][..slice_len - 4]);
+            }
+            // ok little endian
+            {
+                let value_le = value.to_le_bytes();
+                let data = [
+                    value_le[0], value_le[1], value_le[2], value_le[3], 1, 2, 3, 4
+                ];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_u32(false),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 4);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4][..slice_len - 4]);
+            }
+
+            // length error
+            {
+                let expected = Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError{
+                        layer: Layer::VerboseValue,
+                        actual_size: offset + bad_len,
+                        minimum_size: offset + 4,
+                    }
+                ));
+                let data = value.to_le_bytes();
+                let mut slicer = FieldSlicer::new(&data[..bad_len], offset);
+
+                // little endian
+                prop_assert_eq!(slicer.read_u32(false), expected.clone());
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+
+                // big endian
+                prop_assert_eq!(slicer.read_u32(true), expected);
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_i32(
+            value in any::<i32>(),
+            slice_len in 4usize..8,
+            offset in 0usize..usize::MAX-3,
+            bad_len in 0usize..4
+        ) {
+
+            // ok big endian
+            {
+                let value_be = value.to_be_bytes();
+                let data = [value_be[0], value_be[1], value_be[2], value_be[3], 1, 2, 3, 4];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_i32(true),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 4);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4][..slice_len - 4]);
+            }
+            // ok little endian
+            {
+                let value_le = value.to_le_bytes();
+                let data = [
+                    value_le[0], value_le[1], value_le[2], value_le[3], 1, 2, 3, 4
+                ];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_i32(false),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 4);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4][..slice_len - 4]);
+            }
+
+            // length error
+            {
+                let expected = Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError{
+                        layer: Layer::VerboseValue,
+                        actual_size: offset + bad_len,
+                        minimum_size: offset + 4,
+                    }
+                ));
+                let data = value.to_le_bytes();
+                let mut slicer = FieldSlicer::new(&data[..bad_len], offset);
+
+                // little endian
+                prop_assert_eq!(slicer.read_i32(false), expected.clone());
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+
+                // big endian
+                prop_assert_eq!(slicer.read_i32(true), expected);
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_u64(
+            value in any::<u64>(),
+            slice_len in 8usize..16,
+            offset in 0usize..usize::MAX-7,
+            bad_len in 0usize..8
+        ) {
+
+            // ok big endian
+            {
+                let value_be = value.to_be_bytes();
+                let data = [value_be[0], value_be[1], value_be[2], value_be[3], value_be[4], value_be[5], value_be[6], value_be[7], 1, 2, 3, 4, 5, 6, 7, 8];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_u64(true),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 8);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4,5,6,7,8][..slice_len - 8]);
+            }
+            // ok little endian
+            {
+                let value_le = value.to_le_bytes();
+                let data = [
+                    value_le[0], value_le[1], value_le[2], value_le[3], value_le[4], value_le[5], value_le[6], value_le[7], 1, 2, 3, 4, 5, 6, 7, 8
+                ];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_u64(false),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 8);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4,5,6,7,8][..slice_len - 8]);
+            }
+
+            // length error
+            {
+                let expected = Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError{
+                        layer: Layer::VerboseValue,
+                        actual_size: offset + bad_len,
+                        minimum_size: offset + 8,
+                    }
+                ));
+                let data = value.to_le_bytes();
+                let mut slicer = FieldSlicer::new(&data[..bad_len], offset);
+
+                // little endian
+                prop_assert_eq!(slicer.read_u64(false), expected.clone());
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+
+                // big endian
+                prop_assert_eq!(slicer.read_u64(true), expected);
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_i64(
+            value in any::<i64>(),
+            slice_len in 8usize..16,
+            offset in 0usize..usize::MAX-7,
+            bad_len in 0usize..8
+        ) {
+
+            // ok big endian
+            {
+                let value_be = value.to_be_bytes();
+                let data = [value_be[0], value_be[1], value_be[2], value_be[3], value_be[4], value_be[5], value_be[6], value_be[7], 1, 2, 3, 4, 5, 6, 7, 8];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_i64(true),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 8);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4,5,6,7,8][..slice_len - 8]);
+            }
+            // ok little endian
+            {
+                let value_le = value.to_le_bytes();
+                let data = [
+                    value_le[0], value_le[1], value_le[2], value_le[3], value_le[4], value_le[5], value_le[6], value_le[7], 1, 2, 3, 4, 5, 6, 7, 8
+                ];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_i64(false),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 8);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4,5,6,7,8][..slice_len - 8]);
+            }
+
+            // length error
+            {
+                let expected = Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError{
+                        layer: Layer::VerboseValue,
+                        actual_size: offset + bad_len,
+                        minimum_size: offset + 8,
+                    }
+                ));
+                let data = value.to_le_bytes();
+                let mut slicer = FieldSlicer::new(&data[..bad_len], offset);
+
+                // little endian
+                prop_assert_eq!(slicer.read_i64(false), expected.clone());
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+
+                // big endian
+                prop_assert_eq!(slicer.read_i64(true), expected);
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_u128(
+            value in any::<u128>(),
+            slice_len in 16usize..32,
+            offset in 0usize..usize::MAX-15,
+            bad_len in 0usize..16
+        ) {
+
+            // ok big endian
+            {
+                let value_be = value.to_be_bytes();
+                let data = [value_be[0], value_be[1], value_be[2], value_be[3], value_be[4], value_be[5], value_be[6], value_be[7], value_be[8], value_be[9], value_be[10], value_be[11], value_be[12], value_be[13], value_be[14], value_be[15], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_u128(true),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 16);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15][..slice_len - 16]);
+            }
+            // ok little endian
+            {
+                let value_le = value.to_le_bytes();
+                let data = [
+                    value_le[0], value_le[1], value_le[2], value_le[3], value_le[4], value_le[5], value_le[6], value_le[7], value_le[8], value_le[9], value_le[10], value_le[11], value_le[12], value_le[13], value_le[14], value_le[15], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+                ];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_u128(false),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 16);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15][..slice_len - 16]);
+            }
+
+            // length error
+            {
+                let expected = Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError{
+                        layer: Layer::VerboseValue,
+                        actual_size: offset + bad_len,
+                        minimum_size: offset + 16,
+                    }
+                ));
+                let data = value.to_le_bytes();
+                let mut slicer = FieldSlicer::new(&data[..bad_len], offset);
+
+                // little endian
+                prop_assert_eq!(slicer.read_u128(false), expected.clone());
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+
+                // big endian
+                prop_assert_eq!(slicer.read_u128(true), expected);
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_i128(
+            value in any::<i128>(),
+            slice_len in 16usize..32,
+            offset in 0usize..usize::MAX-15,
+            bad_len in 0usize..16
+        ) {
+
+            // ok big endian
+            {
+                let value_be = value.to_be_bytes();
+                let data = [value_be[0], value_be[1], value_be[2], value_be[3], value_be[4], value_be[5], value_be[6], value_be[7], value_be[8], value_be[9], value_be[10], value_be[11], value_be[12], value_be[13], value_be[14], value_be[15], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_i128(true),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 16);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15][..slice_len - 16]);
+            }
+            // ok little endian
+            {
+                let value_le = value.to_le_bytes();
+                let data = [
+                    value_le[0], value_le[1], value_le[2], value_le[3], value_le[4], value_le[5], value_le[6], value_le[7], value_le[8], value_le[9], value_le[10], value_le[11], value_le[12], value_le[13], value_le[14], value_le[15], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+                ];
+                let mut slicer = FieldSlicer::new(&data[..slice_len], offset);
+                prop_assert_eq!(
+                    slicer.read_i128(false),
+                    Ok(value)
+                );
+                prop_assert_eq!(slicer.offset, offset + 16);
+                prop_assert_eq!(slicer.rest, &[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15][..slice_len - 16]);
+            }
+
+            // length error
+            {
+                let expected = Err(VerboseDecodeError::UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError{
+                        layer: Layer::VerboseValue,
+                        actual_size: offset + bad_len,
+                        minimum_size: offset + 16,
+                    }
+                ));
+                let data = value.to_le_bytes();
+                let mut slicer = FieldSlicer::new(&data[..bad_len], offset);
+
+                // little endian
+                prop_assert_eq!(slicer.read_i128(false), expected.clone());
+                prop_assert_eq!(slicer.offset, offset);
+                prop_assert_eq!(slicer.rest, &data[..bad_len]);
+
+                // big endian
+                prop_assert_eq!(slicer.read_i128(true), expected);
                 prop_assert_eq!(slicer.offset, offset);
                 prop_assert_eq!(slicer.rest, &data[..bad_len]);
             }
