@@ -440,13 +440,14 @@ pub enum VerboseDecodeError {
     /// Error if a variable unit string is not zero terminated.
     VariableUnitStringMissingNullTermination,
 
+    /// Error if the total len calculated from the array dimensions overflows.
+    ArrayDimensionsOverflow,
+
+    StructDataLengthOverflow,
+
     /// Error when decoding an string (can also occur for variable names or unit names).
     Utf8(Utf8Error),
 
-    /// Error in case value decoding is not yet supported.
-    ///
-    /// TODO: Remove this value
-    Unsupported(u8, u8),
 }
 
 impl fmt::Display for VerboseDecodeError {
@@ -467,9 +468,8 @@ impl fmt::Display for VerboseDecodeError {
                 f, "DLT Verbose Message Field: Encountered a variable unit string missing the terminating zero value"
             ),
             Utf8(err) => err.fmt(f),
-            Unsupported(t0, t1) => write!(
-                f, "DLT Verbose Message Field: Unsupported field type {t0} {t1}"
-            ),
+            ArrayDimensionsOverflow => write!(f, "DLT Verbose Message Field: Array dimension sizes too big. Calculating the overall array size would cause an integer overflow."),
+            StructDataLengthOverflow => write!(f, "DLT Verbose Message Field: Struct data length too big. Would cause an integer overflow."),
         }
     }
 }
@@ -485,7 +485,8 @@ impl std::error::Error for VerboseDecodeError {
             VariableNameStringMissingNullTermination => None,
             VariableUnitStringMissingNullTermination => None,
             Utf8(err) => Some(err),
-            Unsupported(_, _) => None,
+            ArrayDimensionsOverflow => None,
+            StructDataLengthOverflow => None,
         }
     }
 }
@@ -551,10 +552,6 @@ mod verbose_decode_error_tests {
             let v = std::str::from_utf8(&[0, 159, 146, 150]).unwrap_err();
             assert_eq!(format!("{}", v), format!("{}", Utf8(v)));
         }
-        assert_eq!(
-            format!("DLT Verbose Message Field: Unsupported field type"),
-            format!("{}", Unsupported)
-        );
     }
 
     #[cfg(feature = "std")]
@@ -576,7 +573,6 @@ mod verbose_decode_error_tests {
         assert!(Utf8(std::str::from_utf8(&[0, 159, 146, 150]).unwrap_err())
             .source()
             .is_some());
-        assert!(Unsupported.source().is_none());
     }
 
     #[test]
