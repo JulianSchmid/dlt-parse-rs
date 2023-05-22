@@ -1,6 +1,9 @@
 mod field_slicer;
 use field_slicer::*;
 
+mod values;
+pub use values::*;
+
 mod verbose_value;
 pub use verbose_value::*;
 
@@ -14,285 +17,61 @@ pub struct Scaling<T: Sized> {
     offset: T,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct BoolValue<'a> {
-    pub name: Option<&'a str>,
-    pub value: bool,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct StringValue<'a> {
-    pub name: Option<&'a str>,
-    pub value: &'a str,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct TraceInfoValue<'a> {
-    pub value: &'a str,
-}
-
-/// Verbose 8 bit signed integer.
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct I8Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<i32>>,
-    pub value: i8,
-}
-
-/// Verbose 16 bit signed integer.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct I16Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<i32>>,
-    pub value: i16,
-}
-
-/// Verbose 32 bit signed integer.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct I32Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<i32>>,
-    pub value: i32,
-}
-
-/// Verbose 32 bit signed integer.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct I64Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<i64>>,
-    pub value: i64,
-}
-
-/// Verbose 32 bit signed integer.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct I128Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<i128>>,
-    pub value: i128,
-}
-
-/// Verbose 8 bit unsigned integer.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct U8Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<u32>>,
-    pub value: u8,
-}
-
-/// Verbose 16 bit unsigned integer.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct U16Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<u32>>,
-    pub value: u16,
-}
-
-/// Verbose 32 bit unsigned integer.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct U32Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<u32>>,
-    pub value: u32,
-}
-
-/// Verbose 32 bit unsigned integer.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct U64Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<u64>>,
-    pub value: u64,
-}
-
-/// Verbose 32 bit unsigned integer.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct U128Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub scaling: Option<Scaling<u128>>,
-    pub value: u128,
-}
-
-/// Verbose 16 bit float number.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct F16Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub value: [u8; 2],
-}
-
-/// Verbose 32 bit float number.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct F32Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub value: f32,
-}
-
-/// Verbose 64 bit float number.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct F64Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub value: f64,
-}
-
-/// Verbose 128 bit float number.
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct F128Value<'a> {
-    pub name: Option<&'a str>,
-    pub unit: Option<&'a str>,
-    pub value: [u8; 16],
+pub struct VariableInfoUnit<'a> {
+    name: &'a str,
+    unit: &'a str,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ArrayDimensions<'a> {
+    /// If true the dimesions u16 are encoded in big endian.
+    is_big_endian: bool,
     /// Pointer to the raw dimensions data.
     dimensions: &'a [u8],
 }
 
-// TODO implement custom debug for "ArrayDimensions"
-
-// Q: Should I just add array types for all int & bool types?
-//
-//   pro:
-//      - explicit types, easy
-//
-//   negative:
-//      - creates more types
-//
-//   open questions:
-//      - does this conflict with dlt v2? (e.g. does v2 support more
-//        array types)
-//
-//   alternative:
-//      - some kind of generic?
-//         -> this only
-
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayValue<'a> {
-    // TODO
-    // temp until actually implemented
-    pub dummy: core::marker::PhantomData<&'a u8>,
-
-    pub dimensions: ArrayDimensions<'a>,
+impl<'a> ArrayDimensions<'a> {
+    pub fn iter(&'a self) -> ArrayDimensionIterator<'a> {
+        ArrayDimensionIterator {
+            is_big_endian: self.is_big_endian,
+            rest: self.dimensions,
+        }
+    }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayBool<'a> {
-    pub dimensions: ArrayDimensions<'a>,
-    pub data: &'a [u8],
+impl<'a> IntoIterator for &'a ArrayDimensions<'a> {
+    type Item = u16;
+    type IntoIter = ArrayDimensionIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayU8<'a> {
-    pub dimensions: ArrayDimensions<'a>,
-    pub data: &'a [u8],
+#[derive(Debug)]
+pub struct ArrayDimensionIterator<'a> {
+    is_big_endian: bool,
+    rest: &'a [u8],
 }
 
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayU16<'a> {
-    dimensions: ArrayDimensions<'a>,
-    data: &'a [u8],
+impl<'a> Iterator for ArrayDimensionIterator<'a> {
+    type Item = u16;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.rest.len() < 2 {
+            None
+        } else {
+            let result = if self.is_big_endian {
+                u16::from_be_bytes([self.rest[0], self.rest[1]])
+            } else {
+                u16::from_le_bytes([self.rest[0], self.rest[1]])
+            };
+            self.rest = &self.rest[2..];
+            Some(result)
+        }
+    }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayU32<'a> {
-    dimensions: ArrayDimensions<'a>,
-    data: &'a [u8],
-}
-
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayU64<'a> {
-    dimensions: ArrayDimensions<'a>,
-    data: &'a [u8],
-}
-
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayU128<'a> {
-    dimensions: ArrayDimensions<'a>,
-    data: &'a [u8],
-}
-
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayI8<'a> {
-    dimensions: ArrayDimensions<'a>,
-    data: &'a [u8],
-}
-
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayI16<'a> {
-    dimensions: ArrayDimensions<'a>,
-    data: &'a [u8],
-}
-
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayI32<'a> {
-    dimensions: ArrayDimensions<'a>,
-    data: &'a [u8],
-}
-
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayI64<'a> {
-    dimensions: ArrayDimensions<'a>,
-    data: &'a [u8],
-}
-
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct ArrayI128<'a> {
-    dimensions: ArrayDimensions<'a>,
-    data: &'a [u8],
-}
-
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct StructValue<'a> {
-    // TODO
-    // temp until actually implemented
-    pub dummy: core::marker::PhantomData<&'a u8>,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-pub struct RawValue<'a> {
-    pub name: Option<&'a str>,
-    pub data: &'a [u8],
-}

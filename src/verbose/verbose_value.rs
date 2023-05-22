@@ -1,12 +1,9 @@
-extern crate alloc;
-
 use crate::error::VerboseDecodeError;
 
 use super::*;
 
 use core::slice;
 use core::str;
-use std::println;
 
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -28,7 +25,21 @@ pub enum VerboseValue<'a> {
     F32(F32Value<'a>),
     F64(F64Value<'a>),
     F128(F128Value<'a>),
-    Array(ArrayValue<'a>),
+    ArrBool(ArrayBool<'a>),
+    ArrI8(ArrayI8<'a>),
+    ArrI16(ArrayI16<'a>),
+    ArrI32(ArrayI32<'a>),
+    ArrI64(ArrayI64<'a>),
+    ArrI128(ArrayI128<'a>),
+    ArrU8(ArrayU8<'a>),
+    ArrU16(ArrayU16<'a>),
+    ArrU32(ArrayU32<'a>),
+    ArrU64(ArrayU64<'a>),
+    ArrU128(ArrayU128<'a>),
+    ArrF16(ArrayF16<'a>),
+    ArrF32(ArrayF32<'a>),
+    ArrF64(ArrayF64<'a>),
+    ArrF128(ArrayF128<'a>),
     Struct(StructValue<'a>),
     Raw(RawValue<'a>),
 }
@@ -43,7 +54,6 @@ impl<'a> VerboseValue<'a> {
 
         // check that enough data for the type info is present
         if slice.len() < 4 {
-            println!("No type info present!");
             return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
                 layer: error::Layer::VerboseTypeInfo,
                 minimum_size: 4,
@@ -72,7 +82,6 @@ impl<'a> VerboseValue<'a> {
         const STRING_FLAG_1: u8 = 0b0000_0010;
         const RAW_FLAG_1: u8 = 0b0000_0100;
         const VARINFO_FLAG_1: u8 = 0b0000_1000;
-        const FIXED_POINT_FLAG_1: u8 = 0b0001_0000;
         const TRACE_INFO_FLAG_1: u8 = 0b0010_0000;
         const STRUCT_FLAG_1: u8 = 0b0100_0000;
 
@@ -82,7 +91,289 @@ impl<'a> VerboseValue<'a> {
             4,
         );
 
-        if 0 != type_info[0] & BOOL_FLAG_0 {
+        if 0 != type_info[1] & ARRAY_FLAG_1 {
+            let type_len: usize = usize::from(type_info[0] & TYPE_LEN_MASK_0);
+
+            // read array dimensions
+            let dimensions = slicer.read_array_dimesions(is_big_endian)?;
+
+            // check for varinfo
+            let name_and_unit = if 0 != type_info[1] & VARINFO_FLAG_1 {
+                Some(slicer.read_var_name_and_unit(is_big_endian)?)
+            } else {
+                None
+            };
+
+            let variable_info = match name_and_unit {
+                Some((name, unit)) => Some(VariableInfoUnit { name, unit }),
+                None => None,
+            };
+
+            if 0 != type_info[0] & BOOL_FLAG_0 {
+                const CONTRADICTING_MASK_0: u8 = 0b1110_0000;
+                const CONTRADICTING_MASK_1: u8 = 0b1111_0110;
+                if // check type length (must be 1 for bool)
+                    (1 != type_info[0] & TYPE_LEN_MASK_0) || 
+                    // check none of the other type flags other then varinfo
+                    // flag is set
+                    (0 != type_info[0] & CONTRADICTING_MASK_0) ||
+                    (0 != type_info[1] & CONTRADICTING_MASK_1)
+                {
+                    return Err(InvalidTypeInfo(type_info));
+                }
+
+                // determine data size of array
+                let mut data_len = 0;
+                for dim in &dimensions {
+                    if let Some(sum) = (usize::from(dim)).checked_add(data_len) {
+                        data_len = sum;
+                    } else {
+                        return Err(VerboseDecodeError::ArrayDimensionsOverflow);
+                    }
+                }
+
+                // take the data area of the bool array
+                Ok((
+                    ArrBool(ArrayBool {
+                        dimensions,
+                        variable_info,
+                        data: slicer.read_raw(data_len)?,
+                    }),
+                    slicer.rest(),
+                ))
+            } else if 0 != type_info[0] & SIGNED_FLAG_0 {
+                const CONTRADICTING_MASK_0: u8 = 0b1101_0000;
+                const CONTRADICTING_MASK_1: u8 = 0b1110_0110;
+
+                // check that no contradicting type info is present
+                if (0 != type_info[0] & CONTRADICTING_MASK_0)
+                    || (0 != type_info[1] & CONTRADICTING_MASK_1)
+                {
+                    return Err(InvalidTypeInfo(type_info));
+                }
+
+                match type_len {
+                    1 | 2 | 3 | 4 | 5 => {}
+                    _ => return Err(InvalidTypeInfo(type_info)), //Look
+                }
+
+                let real_type_len = 0b0000_0001 << type_len-1;
+
+                // determine data size of array
+                let mut data_len = 0;
+                for dim in &dimensions {
+                    if let Some(sum) = (usize::from(dim) * real_type_len).checked_add(data_len) {
+                        data_len = sum;
+                    } else {
+                        return Err(VerboseDecodeError::ArrayDimensionsOverflow);
+                    }
+                }
+
+                match type_len {
+                    1 => Ok((
+                        ArrI8(ArrayI8 {
+                            dimensions,
+                            variable_info,
+                            scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    2 => Ok((
+                        ArrI16(ArrayI16 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    3 => Ok((
+                        ArrI32(ArrayI32 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    4 => Ok((
+                        ArrI64(ArrayI64 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            scaling: slicer.read_i64_scaling(is_big_endian, type_info)?,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    5 => Ok((
+                        ArrI128(ArrayI128 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            scaling: slicer.read_i128_scaling(is_big_endian, type_info)?,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    _ => unreachable!(),
+                }
+            } else if 0 != type_info[0] & UNSIGNED_FLAG_0 {
+                const CONTRADICTING_MASK_0: u8 = 0b1011_0000;
+                const CONTRADICTING_MASK_1: u8 = 0b1110_0110;
+
+                // check that no contradicting type info is present
+                if (0 != type_info[0] & CONTRADICTING_MASK_0)
+                    || (0 != type_info[1] & CONTRADICTING_MASK_1)
+                {
+                    return Err(InvalidTypeInfo(type_info));
+                }
+
+                let type_len = type_info[0] & TYPE_LEN_MASK_0;
+                match type_len {
+                    1 | 2 | 3 | 4 | 5 => {}
+                    _ => return Err(InvalidTypeInfo(type_info)),
+                }
+
+                let real_type_len = 0b0000_0001 << type_len-1;
+
+                // determine data size of array
+                let mut data_len = 0;
+                for dim in &dimensions {
+                    if let Some(sum) = (usize::from(dim) * real_type_len).checked_add(data_len) {
+                        data_len = sum;
+                    } else {
+                        return Err(VerboseDecodeError::ArrayDimensionsOverflow);
+                    }
+                }
+
+                match type_len {
+                    1 => Ok((
+                        ArrU8(ArrayU8 {
+                            dimensions,
+                            variable_info,
+                            scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    2 => Ok((
+                        ArrU16(ArrayU16 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    3 => Ok((
+                        ArrU32(ArrayU32 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    4 => Ok((
+                        ArrU64(ArrayU64 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            scaling: slicer.read_i64_scaling(is_big_endian, type_info)?,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    5 => Ok((
+                        ArrU128(ArrayU128 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            scaling: slicer.read_i128_scaling(is_big_endian, type_info)?,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    _ => unreachable!(),
+                }
+            } else if 0 != type_info[0] & FLOAT_FLAG_0 {
+                const CONTRADICTING_MASK_0: u8 = 0b0111_0000;
+                const CONTRADICTING_MASK_1: u8 = 0b1111_0110;
+
+                // check that no contradicting type info is present
+                if (0 != type_info[0] & CONTRADICTING_MASK_0)
+                    || (0 != type_info[1] & CONTRADICTING_MASK_1)
+                {
+                    return Err(InvalidTypeInfo(type_info));
+                }
+
+                let type_len = type_info[0] & TYPE_LEN_MASK_0;
+                match type_len {
+                    2 | 3 | 4 | 5 => {}
+                    _ => return Err(InvalidTypeInfo(type_info)),
+                }
+
+                let real_type_len = 0b0000_0001 << type_len-1;
+
+                // determine data size of array
+                let mut data_len = 0;
+                for dim in &dimensions {
+                    if let Some(sum) = (usize::from(dim) * real_type_len).checked_add(data_len) {
+                        data_len = sum;
+                    } else {
+                        return Err(VerboseDecodeError::ArrayDimensionsOverflow);
+                    }
+                }
+
+                match type_len {
+                    2 => Ok((
+                        ArrF16(ArrayF16 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    3 => Ok((
+                        ArrF32(ArrayF32 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    4 => Ok((
+                        ArrF64(ArrayF64 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    5 => Ok((
+                        ArrF128(ArrayF128 {
+                            is_big_endian,
+                            dimensions,
+                            variable_info,
+                            data: slicer.read_raw(data_len)?,
+                        }),
+                        slicer.rest(),
+                    )),
+                    _ => unreachable!(),
+                }
+            } else {
+                Err(VerboseDecodeError::InvalidTypeInfo(type_info))
+            }
+        } else if 0 != type_info[0] & BOOL_FLAG_0 {
             const CONTRADICTING_MASK_0: u8 = 0b1110_0000;
             const CONTRADICTING_MASK_1: u8 = 0b1111_0111;
             if
@@ -113,7 +404,6 @@ impl<'a> VerboseValue<'a> {
             };
             Ok((Bool(BoolValue { name, value }), slicer.rest()))
         } else if 0 != type_info[0] & SIGNED_FLAG_0 {
-            // todo: handle arrays (currently set as contradicting)
             const CONTRADICTING_MASK_0: u8 = 0b1101_0000;
             const CONTRADICTING_MASK_1: u8 = 0b1110_0111;
 
@@ -124,7 +414,7 @@ impl<'a> VerboseValue<'a> {
                 return Err(InvalidTypeInfo(type_info));
             }
 
-            let type_len = type_info[0] & 0b1111;
+            let type_len = type_info[0] & TYPE_LEN_MASK_0;
             match type_len {
                 1 | 2 | 3 | 4 | 5 => {}
                 _ => return Err(InvalidTypeInfo(type_info)),
@@ -137,84 +427,48 @@ impl<'a> VerboseValue<'a> {
                 None
             };
 
-            let read_i32_scaling =
-                |slicer: &mut FieldSlicer| -> Result<Option<Scaling<i32>>, VerboseDecodeError> {
-                    if 0 != type_info[1] & FIXED_POINT_FLAG_1 {
-                        Ok(Some(Scaling {
-                            quantization: slicer.read_f32(is_big_endian)?,
-                            offset: slicer.read_i32(is_big_endian)?,
-                        }))
-                    } else {
-                        Ok(None)
-                    }
-                };
-
-            let read_i64_scaling =
-                |slicer: &mut FieldSlicer| -> Result<Option<Scaling<i64>>, VerboseDecodeError> {
-                    if 0 != type_info[1] & FIXED_POINT_FLAG_1 {
-                        Ok(Some(Scaling {
-                            quantization: slicer.read_f32(is_big_endian)?,
-                            offset: slicer.read_i64(is_big_endian)?,
-                        }))
-                    } else {
-                        Ok(None)
-                    }
-                };
-
-            let read_i128_scaling =
-                |slicer: &mut FieldSlicer| -> Result<Option<Scaling<i128>>, VerboseDecodeError> {
-                    if 0 != type_info[1] & FIXED_POINT_FLAG_1 {
-                        Ok(Some(Scaling {
-                            quantization: slicer.read_f32(is_big_endian)?,
-                            offset: slicer.read_i128(is_big_endian)?,
-                        }))
-                    } else {
-                        Ok(None)
-                    }
-                };
+            let var_info = match name_and_unit {
+                Some((name, unit)) => Some(VariableInfoUnit { name, unit }),
+                None => None,
+            };
 
             match type_len {
                 1 => Ok((
                     I8(I8Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
-                        scaling: read_i32_scaling(&mut slicer)?,
+                        variable_info: var_info,
+                        scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
                         value: slicer.read_i8()?,
                     }),
                     slicer.rest(),
                 )),
                 2 => Ok((
                     I16(I16Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
-                        scaling: read_i32_scaling(&mut slicer)?,
+                        variable_info: var_info,
+                        scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
                         value: slicer.read_i16(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 3 => Ok((
                     I32(I32Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
-                        scaling: read_i32_scaling(&mut slicer)?,
+                        variable_info: var_info,
+                        scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
                         value: slicer.read_i32(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 4 => Ok((
                     I64(I64Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
-                        scaling: read_i64_scaling(&mut slicer)?,
+                        variable_info: var_info,
+                        scaling: slicer.read_i64_scaling(is_big_endian, type_info)?,
                         value: slicer.read_i64(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 5 => Ok((
                     I128(I128Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
-                        scaling: read_i128_scaling(&mut slicer)?,
+                        variable_info: var_info,
+                        scaling: slicer.read_i128_scaling(is_big_endian, type_info)?,
                         value: slicer.read_i128(is_big_endian)?,
                     }),
                     slicer.rest(),
@@ -223,7 +477,6 @@ impl<'a> VerboseValue<'a> {
             }
         } else if 0 != type_info[0] & UNSIGNED_FLAG_0 {
             // verify no conflicting information is present
-            // todo: handle arrays (currently set as contradicting)
             const CONTRADICTING_MASK_0: u8 = 0b1011_0000;
             const CONTRADICTING_MASK_1: u8 = 0b1110_0111;
 
@@ -234,7 +487,7 @@ impl<'a> VerboseValue<'a> {
                 return Err(InvalidTypeInfo(type_info));
             }
 
-            let type_len = type_info[0] & 0b1111;
+            let type_len = type_info[0] & TYPE_LEN_MASK_0;
             match type_len {
                 1 | 2 | 3 | 4 | 5 => {}
                 _ => return Err(InvalidTypeInfo(type_info)),
@@ -247,95 +500,56 @@ impl<'a> VerboseValue<'a> {
                 None
             };
 
-            let read_u32_scaling =
-                |slicer: &mut FieldSlicer| -> Result<Option<Scaling<u32>>, VerboseDecodeError> {
-                    if 0 != type_info[1] & FIXED_POINT_FLAG_1 {
-                        Ok(Some(Scaling {
-                            quantization: slicer.read_f32(is_big_endian)?,
-                            offset: slicer.read_u32(is_big_endian)?,
-                        }))
-                    } else {
-                        Ok(None)
-                    }
-                };
-
-            let read_u64_scaling =
-                |slicer: &mut FieldSlicer| -> Result<Option<Scaling<u64>>, VerboseDecodeError> {
-                    if 0 != type_info[1] & FIXED_POINT_FLAG_1 {
-                        Ok(Some(Scaling {
-                            quantization: slicer.read_f32(is_big_endian)?,
-                            offset: slicer.read_u64(is_big_endian)?,
-                        }))
-                    } else {
-                        Ok(None)
-                    }
-                };
-
-            let read_u128_scaling =
-                |slicer: &mut FieldSlicer| -> Result<Option<Scaling<u128>>, VerboseDecodeError> {
-                    if 0 != type_info[1] & FIXED_POINT_FLAG_1 {
-                        Ok(Some(Scaling {
-                            quantization: slicer.read_f32(is_big_endian)?,
-                            offset: slicer.read_u128(is_big_endian)?,
-                        }))
-                    } else {
-                        Ok(None)
-                    }
-                };
+            let var_info = match name_and_unit {
+                Some((name, unit)) => Some(VariableInfoUnit { name, unit }),
+                None => None,
+            };
 
             match type_len {
                 1 => Ok((
                     U8(U8Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
-                        scaling: read_u32_scaling(&mut slicer)?,
+                        variable_info: var_info,
+                        scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
                         value: slicer.read_u8()?,
                     }),
                     slicer.rest(),
                 )),
                 2 => Ok((
                     U16(U16Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
-                        scaling: read_u32_scaling(&mut slicer)?,
+                        variable_info: var_info,
+                        scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
                         value: slicer.read_u16(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 3 => Ok((
                     U32(U32Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
-                        scaling: read_u32_scaling(&mut slicer)?,
+                        variable_info: var_info,
+                        scaling: slicer.read_i32_scaling(is_big_endian, type_info)?,
                         value: slicer.read_u32(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 4 => Ok((
                     U64(U64Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
-                        scaling: read_u64_scaling(&mut slicer)?,
+                        variable_info: var_info,
+                        scaling: slicer.read_i64_scaling(is_big_endian, type_info)?,
                         value: slicer.read_u64(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 5 => Ok((
                     U128(U128Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
-                        scaling: read_u128_scaling(&mut slicer)?,
+                        variable_info: var_info,
+                        scaling: slicer.read_i128_scaling(is_big_endian, type_info)?,
                         value: slicer.read_u128(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 _ => unreachable!(),
             }
-
-            // TODO implement
         } else if 0 != type_info[0] & FLOAT_FLAG_0 {
             // verify no conflicting information is present
-            // todo: handle arrays (currently set as contradicting)
 
             const CONTRADICTING_MASK_0: u8 = 0b0111_0000;
             const CONTRADICTING_MASK_1: u8 = 0b1111_0111;
@@ -347,7 +561,7 @@ impl<'a> VerboseValue<'a> {
                 return Err(InvalidTypeInfo(type_info));
             }
 
-            let type_len = type_info[0] & 0b1111;
+            let type_len = type_info[0] & TYPE_LEN_MASK_0;
             match type_len {
                 2 | 3 | 4 | 5 => {}
                 _ => return Err(InvalidTypeInfo(type_info)),
@@ -360,62 +574,44 @@ impl<'a> VerboseValue<'a> {
                 None
             };
 
+            let variable_info = match name_and_unit {
+                Some((name, unit)) => Some(VariableInfoUnit { name, unit }),
+                None => None,
+            };
+
             match type_len {
                 2 => Ok((
                     F16(F16Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
+                        variable_info,
                         value: slicer.read_f16(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 3 => Ok((
                     F32(F32Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
+                        variable_info,
                         value: slicer.read_f32(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 4 => Ok((
                     F64(F64Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
+                        variable_info,
                         value: slicer.read_f64(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 5 => Ok((
                     F128(F128Value {
-                        name: name_and_unit.map(|v| v.0),
-                        unit: name_and_unit.map(|v| v.1),
+                        variable_info,
                         value: slicer.read_f128(is_big_endian)?,
                     }),
                     slicer.rest(),
                 )),
                 _ => unreachable!(),
             }
-
-            // TODO implement
-            //Err(Unsupported(type_info[0], type_info[1]))
-        } else if 0 != type_info[1] & ARRAY_FLAG_1 {
-            // verify no conflicting information is present
-            // TODO implement
-            const CONTRADICTING_MASK_0: u8 = 0b1111_0000;
-            const CONTRADICTING_MASK_1: u8 = 0b1111_0110;
-
-            if
-            // check none of the other type flags other then varinfo
-            // flag is set
-            (0 != type_info[0] & CONTRADICTING_MASK_0)
-                || (0 != type_info[1] & CONTRADICTING_MASK_1)
-            {
-                return Err(InvalidTypeInfo(type_info));
-            }
-
-            Err(Unsupported(type_info[0], type_info[1]))
         } else if 0 != type_info[1] & STRING_FLAG_1 {
-            const CONTRADICTING_MASK_0: u8 = 0b1111_0000;
+            const CONTRADICTING_MASK_0: u8 = 0b1111_1111;
             const CONTRADICTING_MASK_1: u8 = 0b0111_0101;
 
             if
@@ -437,23 +633,18 @@ impl<'a> VerboseValue<'a> {
             let parse: Result<&str, str::Utf8Error> = match slicer.read_raw(len) {
                 Ok(valid_parse) => {
                     if len > 0 {
-                        str::from_utf8(&valid_parse[..valid_parse.len() - 1])
+                        core::str::from_utf8(&valid_parse[..valid_parse.len() - 1])
                     } else {
                         Ok("")
                     }
                 }
-                Err(_) => return Err(Unsupported(type_info[0], type_info[1])),
+                Err(_) => return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { layer: error::Layer::VerboseValue, minimum_size: len, actual_size: slicer.rest().len() })),
             };
 
             match parse {
                 Ok(value) => Ok((Str(StringValue { name, value }), slicer.rest())),
-                Err(_) => Err(Unsupported(type_info[0], type_info[1])),
+                Err(_) => Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { layer: error::Layer::VerboseValue, minimum_size: len, actual_size: slicer.rest().len() })),
             }
-
-            // println!("Result is {str_to_prt}");
-            // verify no conflicting information is present
-            // TODO implement
-            //Err(Unsupported(type_info[0], type_info[1]))
         } else if 0 != type_info[1] & RAW_FLAG_1 {
             // verify no conflicting information is present+
             const CONTRADICTING_MASK_0: u8 = 0b1111_0000;
@@ -508,13 +699,11 @@ impl<'a> VerboseValue<'a> {
                         Ok("")
                     }
                 }
-                Err(_) => return Err(Unsupported(type_info[0], type_info[1])),
+                Err(_) => return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { layer: error::Layer::VerboseValue, minimum_size: len, actual_size: slicer.rest().len() })),
             };
+            Ok((TraceInfo(TraceInfoValue { value: parse? }), slicer.rest()))
 
-            match parse {
-                Ok(value) => Ok((TraceInfo(TraceInfoValue { value }), slicer.rest())),
-                Err(_) => Err(Unsupported(type_info[0], type_info[1])),
-            }
+            
         } else if 0 != type_info[1] & STRUCT_FLAG_1 {
             // verify no conflicting information is present
             const CONTRADICTING_MASK_0: u8 = 0b1111_1111;
@@ -528,7 +717,7 @@ impl<'a> VerboseValue<'a> {
             }
 
             // read number of struct entries
-            let len = usize::from(slicer.read_u16(is_big_endian)?);
+            let number_of_entries = slicer.read_u16(is_big_endian)?;
 
             let name = if 0 != type_info[1] & VARINFO_FLAG_1 {
                 Some(slicer.read_var_name(is_big_endian)?)
@@ -536,8 +725,25 @@ impl<'a> VerboseValue<'a> {
                 None
             };
 
-            // TODO implement
-            Err(Unsupported(type_info[0], type_info[1]))
+            let mut rest = slicer.rest();
+
+            // While this reduces the amount of duplicated code to a minimum, I am not quite sure if this safe as too nested structs could possibly lead to "infinite" recursion
+            for _ in 0..number_of_entries {
+                (_, rest) = VerboseValue::from_slice(rest, is_big_endian)?;
+            }
+            let slice_begin = slicer.rest().as_ptr();
+            // Rust allocations are ensured to always be smaller than isize::MAX, hence the distance can't result overflow
+            // This operation is therefore safe
+            let data_len = unsafe { rest.as_ptr().offset_from(slice_begin) as usize };
+
+            Ok((
+                Struct(StructValue {
+                    number_of_entries,
+                    name,
+                    data: slicer.read_raw(data_len)?,
+                }),
+                slicer.rest(),
+            ))
         } else {
             // nothing matches type info uninterpretable
             Err(InvalidTypeInfo(type_info))
