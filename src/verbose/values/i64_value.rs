@@ -271,31 +271,31 @@ mod test {
                 let mut msg_buff: ArrayVec<u8, BUFFER_SIZE_NO_FIXED_POINT> = ArrayVec::new();
                 let slice_len = name.len() + unit.len() + BYTES_NEEDED_WITH_NAME;
                 let is_big_endian = false;
-    
+
                 let variable_info = Some(VariableInfoUnit { name , unit });
                 let scaling = None;
-    
+
                 let i64_value = I64Value {variable_info, scaling, value};
                 let mut content_buff = Vec::with_capacity(slice_len);
-    
+
                 let len_name_le = (name.len() as u16 + 1).to_le_bytes();
                 let len_unit_le = (unit.len() as u16 + 1).to_le_bytes();
-    
+
                 prop_assert_eq!(i64_value.add_to_msg(&mut msg_buff, is_big_endian), Ok(()));
-    
+
                 content_buff.extend_from_slice(&[0b0010_0100, 0b0000_1000, 0b0000_0000, 0b0000_0000, len_name_le[0], len_name_le[1], len_unit_le[0], len_unit_le[1]]);
                 content_buff.extend_from_slice(name.as_bytes());
                 content_buff.push(0);
                 content_buff.extend_from_slice(unit.as_bytes());
                 content_buff.push(0);
                 content_buff.extend_from_slice(&value.to_le_bytes());
-    
+
                 prop_assert_eq!(&msg_buff[..slice_len], &content_buff[..]);
-    
+
                 // Now wrap back
                 let parsed_back = VerboseValue::from_slice(&msg_buff, is_big_endian);
                 prop_assert_eq!(parsed_back, Ok((I64(i64_value),&[] as &[u8])));
-    
+
              }
 
 
@@ -687,7 +687,7 @@ mod test {
                         format!("{:?}", value_struct)
                     );
                 }
-        
+
            { // Test with scaling, but without name & unit
             let value_struct: I64Value = I64Value {variable_info: None, scaling: Some(Scaling { quantization, offset }), value};
             assert_eq!(

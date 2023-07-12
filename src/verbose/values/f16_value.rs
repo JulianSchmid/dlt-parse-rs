@@ -1,5 +1,5 @@
-use arrayvec::{ArrayVec, CapacityError};
 use crate::verbose::VariableInfoUnit;
+use arrayvec::{ArrayVec, CapacityError};
 
 /// Verbose 16 bit float number.
 #[derive(Debug, PartialEq, Clone)]
@@ -16,7 +16,6 @@ impl<'a> F16Value<'a> {
         buf: &mut ArrayVec<u8, CAP>,
         is_big_endian: bool,
     ) -> Result<(), CapacityError> {
-
         if let Some(var_info) = &self.variable_info {
             let type_info = [0b1000_0010, 0b0000_1000, 0b0000_0000, 0b0000_0000];
             let name_len;
@@ -44,13 +43,11 @@ impl<'a> F16Value<'a> {
             buf.try_extend_from_slice(&type_info)?;
         }
 
-            if is_big_endian {
-                buf.try_extend_from_slice(&self.value.to_be_bytes())
-            }
-         else {
+        if is_big_endian {
+            buf.try_extend_from_slice(&self.value.to_be_bytes())
+        } else {
             buf.try_extend_from_slice(&self.value.to_le_bytes())
         }
-    
     }
 }
 
@@ -243,7 +240,7 @@ mod test {
                 prop_assert_eq!(f16_value.add_to_msg(&mut msg_buff, is_big_endian), Err(CapacityError::new(())));
 
             }
-            
+
         }
     }
 }

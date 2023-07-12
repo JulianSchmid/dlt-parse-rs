@@ -70,7 +70,7 @@ mod test {
             const MAX_SYMBOL_LENGTH_UNIT: usize = 20;
             const BYTES_NEEDED: usize = 12;
             const BYTES_NEEDED_WITH_NAME: usize = 6 + BYTES_NEEDED;
-            
+
             const BUFFER_SIZE: usize = MAX_SYMBOL_LENGTH_NAME * 4 + MAX_SYMBOL_LENGTH_UNIT * 4 + BYTES_NEEDED_WITH_NAME;
 
             // test big endian with name

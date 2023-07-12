@@ -109,8 +109,9 @@ impl<'a> VerboseValue<'a> {
             if 0 != type_info[0] & BOOL_FLAG_0 {
                 const CONTRADICTING_MASK_0: u8 = 0b1110_0000;
                 const CONTRADICTING_MASK_1: u8 = 0b1111_0110;
-                if // check type length (must be 1 for bool)
-                    (1 != type_info[0] & TYPE_LEN_MASK_0) || 
+                if
+                // check type length (must be 1 for bool)
+                (1 != type_info[0] & TYPE_LEN_MASK_0) ||
                     // check none of the other type flags other then varinfo
                     // flag is set
                     (0 != type_info[0] & CONTRADICTING_MASK_0) ||
@@ -154,7 +155,7 @@ impl<'a> VerboseValue<'a> {
                     _ => return Err(InvalidTypeInfo(type_info)), //Look
                 }
 
-                let real_type_len = 0b0000_0001 << (type_len-1);
+                let real_type_len = 0b0000_0001 << (type_len - 1);
 
                 // determine data size of array
                 let mut data_len = 0;
@@ -235,7 +236,7 @@ impl<'a> VerboseValue<'a> {
                     _ => return Err(InvalidTypeInfo(type_info)),
                 }
 
-                let real_type_len = 0b0000_0001 << (type_len-1);
+                let real_type_len = 0b0000_0001 << (type_len - 1);
 
                 // determine data size of array
                 let mut data_len = 0;
@@ -316,7 +317,7 @@ impl<'a> VerboseValue<'a> {
                     _ => return Err(InvalidTypeInfo(type_info)),
                 }
 
-                let real_type_len = 0b0000_0001 << (type_len-1);
+                let real_type_len = 0b0000_0001 << (type_len - 1);
 
                 // determine data size of array
                 let mut data_len = 0;
@@ -626,12 +627,22 @@ impl<'a> VerboseValue<'a> {
                         Ok("")
                     }
                 }
-                Err(_) => return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { layer: error::Layer::VerboseValue, minimum_size: len, actual_size: slicer.rest().len() })),
+                Err(_) => {
+                    return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                        layer: error::Layer::VerboseValue,
+                        minimum_size: len,
+                        actual_size: slicer.rest().len(),
+                    }))
+                }
             };
 
             match parse {
                 Ok(value) => Ok((Str(StringValue { name, value }), slicer.rest())),
-                Err(_) => Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { layer: error::Layer::VerboseValue, minimum_size: len, actual_size: slicer.rest().len() })),
+                Err(_) => Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                    layer: error::Layer::VerboseValue,
+                    minimum_size: len,
+                    actual_size: slicer.rest().len(),
+                })),
             }
         } else if 0 != type_info[1] & RAW_FLAG_1 {
             // verify no conflicting information is present+
@@ -687,11 +698,15 @@ impl<'a> VerboseValue<'a> {
                         Ok("")
                     }
                 }
-                Err(_) => return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { layer: error::Layer::VerboseValue, minimum_size: len, actual_size: slicer.rest().len() })),
+                Err(_) => {
+                    return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                        layer: error::Layer::VerboseValue,
+                        minimum_size: len,
+                        actual_size: slicer.rest().len(),
+                    }))
+                }
             };
             Ok((TraceInfo(TraceInfoValue { value: parse? }), slicer.rest()))
-
-            
         } else if 0 != type_info[1] & STRUCT_FLAG_1 {
             // verify no conflicting information is present
             const CONTRADICTING_MASK_0: u8 = 0b1111_1111;

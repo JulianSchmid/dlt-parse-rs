@@ -6,7 +6,7 @@ use crate::verbose::{Scaling, VariableInfoUnit};
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct U8Value<'a> {
-    pub variable_info: Option<VariableInfoUnit<'a>>, 
+    pub variable_info: Option<VariableInfoUnit<'a>>,
     pub scaling: Option<Scaling<i32>>,
     pub value: u8,
 }
@@ -119,7 +119,6 @@ impl<'a> U8Value<'a> {
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -667,7 +666,7 @@ mod test {
                         format!("{:?}", value_struct)
                     );
                 }
-        
+
            { // Test with scaling, but without name & unit
             let value_struct: U8Value = U8Value {variable_info: None, scaling: Some(Scaling { quantization, offset }), value};
             assert_eq!(

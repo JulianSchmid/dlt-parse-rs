@@ -74,4 +74,3 @@ impl<'a> Iterator for ArrayDimensionIterator<'a> {
         }
     }
 }
-
