@@ -140,7 +140,7 @@ impl<'a> IntoIterator for &'a ArrayBool<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    #[cfg(feature = "serde")]
+    #[cfg(feature = "serde_json")]
     use crate::alloc::string::ToString;
     use crate::error::UnexpectedEndOfSliceError;
     use crate::error::VerboseDecodeError::UnexpectedEndOfSlice;
