@@ -26,7 +26,7 @@ impl<'a> FieldSlicer<'a> {
         use VerboseDecodeError::*;
 
         // check length
-        if self.rest.len() < 1 {
+        if self.rest.is_empty() {
             return Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
                 layer: Layer::VerboseValue,
                 minimum_size: self.offset + 1,

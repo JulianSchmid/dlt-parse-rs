@@ -28,11 +28,11 @@ impl<'a> BoolValue<'a> {
             buf.try_extend_from_slice(name.as_bytes())?;
             if buf.remaining_capacity() > 1 {
                 // Safe as capacity is checked earlier
-                unsafe { buf.push_unchecked(u8::from(0)) };
+                unsafe { buf.push_unchecked(0) };
                 unsafe { buf.push_unchecked(u8::from(self.value)) }
                 Ok(())
             } else {
-                return Err(CapacityError::new(()));
+                Err(CapacityError::new(()))
             }
         } else {
             let type_info: [u8; 4] = [0b0001_0001, 0b0000_0000, 0b0000_0000, 0b0000_0000];
