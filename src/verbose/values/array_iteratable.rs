@@ -25,50 +25,49 @@ impl<'a, T: ArrayIteratable + Sized> Serialize for ArrayItDimension<'a, T> {
     where
         S: Serializer,
     {
-        if self.dimensions.len() > 2 {
-            // calculate memory step size
-            let mut stepsize: usize = 1;
-            for i in (2..self.dimensions.len()).step_by(2) {
-                let bytes = [self.dimensions[i], self.dimensions[i + 1]];
-                stepsize *= usize::from(if self.is_big_endian {
-                    u16::from_be_bytes(bytes)
-                } else {
-                    u16::from_le_bytes(bytes)
-                });
-            }
-
-            // determine own dim size & the subdimensions
-            let sub_dimensions = &self.dimensions[2..];
-            let dim_count: usize = {
-                let bytes = [self.dimensions[0], self.dimensions[1]];
-                if self.is_big_endian {
-                    u16::from_be_bytes(bytes)
-                } else {
-                    u16::from_le_bytes(bytes)
+        match self.dimensions.len() {
+            0 | 1 => serializer.serialize_seq(Some(0))?.end(),
+            2 => T::serialize_elements(self.is_big_endian, self.data, serializer),
+            _ => {
+                // calculate memory step size
+                let mut stepsize: usize = 1;
+                for i in (2..self.dimensions.len()).step_by(2) {
+                    let bytes = [self.dimensions[i], self.dimensions[i + 1]];
+                    stepsize *= usize::from(if self.is_big_endian {
+                        u16::from_be_bytes(bytes)
+                    } else {
+                        u16::from_le_bytes(bytes)
+                    });
                 }
-            }
-            .into();
-            // iterate over blocks
-            let mut seq = serializer.serialize_seq(Some(dim_count))?;
-            for i in 0..dim_count {
-                // serialize subdimensions
-                let block_start = i * stepsize * size_of::<T>();
-                let block_end = (i + 1) * stepsize * size_of::<T>();
 
-                let subit = ArrayItDimension::<'a, T> {
-                    is_big_endian: self.is_big_endian,
-                    dimensions: sub_dimensions,
-                    data: &self.data[block_start..block_end],
-                    phantom: Default::default(),
-                };
-                seq.serialize_element(&subit)?;
+                // determine own dim size & the subdimensions
+                let sub_dimensions = &self.dimensions[2..];
+                let dim_count: usize = {
+                    let bytes = [self.dimensions[0], self.dimensions[1]];
+                    if self.is_big_endian {
+                        u16::from_be_bytes(bytes)
+                    } else {
+                        u16::from_le_bytes(bytes)
+                    }
+                }
+                .into();
+                // iterate over blocks
+                let mut seq = serializer.serialize_seq(Some(dim_count))?;
+                for i in 0..dim_count {
+                    // serialize subdimensions
+                    let block_start = i * stepsize * size_of::<T>();
+                    let block_end = (i + 1) * stepsize * size_of::<T>();
+
+                    let subit = ArrayItDimension::<'a, T> {
+                        is_big_endian: self.is_big_endian,
+                        dimensions: sub_dimensions,
+                        data: &self.data[block_start..block_end],
+                        phantom: Default::default(),
+                    };
+                    seq.serialize_element(&subit)?;
+                }
+                seq.end()
             }
-            seq.end()
-        } else if self.dimensions.len() == 2 {
-            T::serialize_elements(self.is_big_endian, self.data, serializer)
-        } else {
-            let seq = serializer.serialize_seq(Some(0))?;
-            seq.end()
         }
     }
 }
