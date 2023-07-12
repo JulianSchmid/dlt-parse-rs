@@ -1,10 +1,10 @@
 use crate::verbose::{ArrayDimensions, Scaling, VariableInfoUnit};
 
+#[cfg(feature = "serde")]
+use super::ArrayItDimension;
 use arrayvec::{ArrayVec, CapacityError};
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, SerializeSeq, SerializeStruct, Serializer};
-#[cfg(feature = "serde")]
-use super::ArrayItDimension;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ArrayI8<'a> {
@@ -19,9 +19,7 @@ impl<'a> ArrayI8<'a> {
         self.data
     }
     pub fn iter(&'a self) -> ArrayI8Iterator<'a> {
-        ArrayI8Iterator {
-            rest: self.data,
-        }
+        ArrayI8Iterator { rest: self.data }
     }
     /// Adds the verbose value to the given dlt mesage buffer.
     pub fn add_to_msg<const CAP: usize>(
@@ -132,7 +130,6 @@ impl<'a> ArrayI8<'a> {
     }
 }
 
-
 #[cfg(feature = "serde")]
 impl<'a> Serialize for ArrayI8<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -154,8 +151,6 @@ impl<'a> Serialize for ArrayI8<'a> {
     }
 }
 
-
-
 #[derive(Debug, Clone)]
 pub struct ArrayI8Iterator<'a> {
     pub(crate) rest: &'a [u8],
@@ -174,7 +169,6 @@ impl Iterator for ArrayI8Iterator<'_> {
         }
     }
 }
-
 
 impl<'a> IntoIterator for &'a ArrayI8<'a> {
     type Item = i8;
@@ -198,7 +192,6 @@ impl<'a> Serialize for ArrayI8Iterator<'a> {
         seq.end()
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -1062,11 +1055,10 @@ mod test {
 
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
-                content.push((-1 * x as i8) as u8);
-                }
-                else {
+                    content.push((-1 * x as i8) as u8);
+                } else {
                     content.push(x);
-                }  
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -1086,7 +1078,8 @@ mod test {
                 cnt += 1;
             }
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr_i8).unwrap());
         }
@@ -1111,10 +1104,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.push((-1 * x as i8) as u8);
-                    }
-                else {
+                } else {
                     content.push(x);
-                }    
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -1134,7 +1126,8 @@ mod test {
                 cnt += 1;
             }
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[0]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[0]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr_i8).unwrap());
         }
@@ -1159,9 +1152,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.push((-1 * x as i8) as u8);
-                    }else {
-                        content.push(x);
-                    } 
+                } else {
+                    content.push(x);
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -1181,7 +1174,8 @@ mod test {
                 cnt += 1;
             }
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[[0,-1]]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[[0,-1]]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr_i8).unwrap());
         }
@@ -1206,9 +1200,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.push((-1 * x as i8) as u8);
-                    }else {
-                        content.push(x);
-                    } 
+                } else {
+                    content.push(x);
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -1254,9 +1248,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.push((-1 * x as i8) as u8);
-                    }else {
-                        content.push(x);
-                    } 
+                } else {
+                    content.push(x);
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -1300,10 +1294,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.push((-1 * x as i8) as u8);
-                    }
-                    else {
-                        content.push(x);
-                    } 
+                } else {
+                    content.push(x);
+                }
             }
 
             let arr_dim = ArrayDimensions {

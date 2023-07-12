@@ -170,9 +170,43 @@ impl Iterator for ArrayU128Iterator<'_> {
             None
         } else {
             let result = if self.is_big_endian {
-                u128::from_be_bytes([self.rest[0], self.rest[1], self.rest[2], self.rest[3], self.rest[4], self.rest[5], self.rest[6], self.rest[7], self.rest[8], self.rest[9], self.rest[10], self.rest[11], self.rest[12], self.rest[13], self.rest[14], self.rest[15]])
+                u128::from_be_bytes([
+                    self.rest[0],
+                    self.rest[1],
+                    self.rest[2],
+                    self.rest[3],
+                    self.rest[4],
+                    self.rest[5],
+                    self.rest[6],
+                    self.rest[7],
+                    self.rest[8],
+                    self.rest[9],
+                    self.rest[10],
+                    self.rest[11],
+                    self.rest[12],
+                    self.rest[13],
+                    self.rest[14],
+                    self.rest[15],
+                ])
             } else {
-                u128::from_le_bytes([self.rest[0], self.rest[1], self.rest[2], self.rest[3], self.rest[4], self.rest[5], self.rest[6], self.rest[7], self.rest[8], self.rest[9], self.rest[10], self.rest[11], self.rest[12], self.rest[13], self.rest[14], self.rest[15]])
+                u128::from_le_bytes([
+                    self.rest[0],
+                    self.rest[1],
+                    self.rest[2],
+                    self.rest[3],
+                    self.rest[4],
+                    self.rest[5],
+                    self.rest[6],
+                    self.rest[7],
+                    self.rest[8],
+                    self.rest[9],
+                    self.rest[10],
+                    self.rest[11],
+                    self.rest[12],
+                    self.rest[13],
+                    self.rest[14],
+                    self.rest[15],
+                ])
             };
             self.rest = &self.rest[16..];
             Some(result)
@@ -195,7 +229,7 @@ impl<'a> Serialize for ArrayU128Iterator<'a> {
     where
         S: Serializer,
     {
-        let mut seq = serializer.serialize_seq(Some(self.rest.len()/16))?;
+        let mut seq = serializer.serialize_seq(Some(self.rest.len() / 16))?;
         for e in self.clone() {
             seq.serialize_element(&e)?;
         }
@@ -223,7 +257,7 @@ mod test {
         fn write_read(ref name in "\\pc{0,20}", ref unit in "\\pc{0,20}", quantization in any::<f32>(), offset in any::<i128>(), dim_count in 0u16..5) {
             const TYPE_INFO_RAW: [u8; 4] = [0b0100_0101, 0b0000_0001, 0b0000_0000, 0b0000_0000];
             const VAR_INFO_FLAG: u8 = 0b0000_1000;
-            const FIXED_POINT_FLAG: u8 = 0b0001_0000; 
+            const FIXED_POINT_FLAG: u8 = 0b0001_0000;
 
             const BUFFER_SIZE: usize = 400;
 
@@ -689,7 +723,7 @@ mod test {
                 let arr = TestType { is_big_endian, variable_info, dimensions:arr_dim,data: &content, scaling };
                 arr.add_to_msg(&mut msg_buff, is_big_endian)?;
 
-                
+
                 // Now wrap back
                 let parsed_back = VerboseValue::from_slice(&msg_buff, is_big_endian);
                 prop_assert_eq!(parsed_back, Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { layer: crate::error::Layer::VerboseValue, minimum_size: msg_buff.len() + size_of::<InternalTypes>() * dim_count as usize, actual_size: msg_buff.len() })));
@@ -952,7 +986,6 @@ mod test {
         }
     }
 
-
     #[cfg(feature = "serde")]
     #[cfg(feature = "serde_json")]
     #[test]
@@ -992,7 +1025,8 @@ mod test {
                 is_big_endian,
             };
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr).unwrap());
         }
@@ -1030,7 +1064,8 @@ mod test {
                 is_big_endian,
             };
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[0]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[0]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr).unwrap());
         }
@@ -1054,8 +1089,7 @@ mod test {
 
             for x in 0u8..elems as u8 {
                 content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                        
-                        }
+            }
 
             let arr_dim = ArrayDimensions {
                 is_big_endian,
@@ -1069,7 +1103,8 @@ mod test {
                 is_big_endian,
             };
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[[0,1]]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[[0,1]]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr).unwrap());
         }
@@ -1092,7 +1127,8 @@ mod test {
             }
 
             for x in 0u8..elems as u8 {
-                content.extend_from_slice(&(x as InternalTypes).to_be_bytes());            }
+                content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
+            }
 
             let arr_dim = ArrayDimensions {
                 is_big_endian,

@@ -1,10 +1,10 @@
 use crate::verbose::{ArrayDimensions, Scaling, VariableInfoUnit};
 
+#[cfg(feature = "serde")]
+use super::ArrayItDimension;
 use arrayvec::{ArrayVec, CapacityError};
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, SerializeSeq, SerializeStruct, Serializer};
-#[cfg(feature = "serde")]
-use super::ArrayItDimension;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ArrayI16<'a> {
@@ -195,7 +195,7 @@ impl<'a> Serialize for ArrayI16Iterator<'a> {
     where
         S: Serializer,
     {
-        let mut seq = serializer.serialize_seq(Some(self.rest.len()/2))?;
+        let mut seq = serializer.serialize_seq(Some(self.rest.len() / 2))?;
         for e in self.clone() {
             seq.serialize_element(&e)?;
         }
@@ -1063,11 +1063,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-1 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }    
-                
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -1082,7 +1080,8 @@ mod test {
                 is_big_endian,
             };
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr).unwrap());
         }
@@ -1107,10 +1106,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-1 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }  
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -1125,7 +1123,8 @@ mod test {
                 is_big_endian,
             };
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[0]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[0]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr).unwrap());
         }
@@ -1150,12 +1149,10 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-1 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }  
-                        
-                        }
+                }
+            }
 
             let arr_dim = ArrayDimensions {
                 is_big_endian,
@@ -1169,7 +1166,8 @@ mod test {
                 is_big_endian,
             };
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[[0,-1]]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[[0,-1]]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr).unwrap());
         }
@@ -1194,10 +1192,10 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-1 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }              }
+                }
+            }
 
             let arr_dim = ArrayDimensions {
                 is_big_endian,
@@ -1237,10 +1235,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-1 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }  
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -1279,10 +1276,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-1 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }  
+                }
             }
 
             let arr_dim = ArrayDimensions {
