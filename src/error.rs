@@ -447,7 +447,6 @@ pub enum VerboseDecodeError {
 
     /// Error when decoding an string (can also occur for variable names or unit names).
     Utf8(Utf8Error),
-
 }
 
 impl fmt::Display for VerboseDecodeError {

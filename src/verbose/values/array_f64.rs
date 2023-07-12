@@ -45,38 +45,36 @@ impl<'a> ArrayF64<'a> {
                     (self.dimensions.dimensions.len() as u16 / 2).to_le_bytes(),
                 )
             };
-            
-                let type_info: [u8; 4] = [0b1000_0100, 0b0000_1001, 0b0000_0000, 0b0000_0000];
-                buf.try_extend_from_slice(&type_info)?;
 
-                buf.try_extend_from_slice(&number_of_dimensions)?;
-                buf.try_extend_from_slice(self.dimensions.dimensions)?;
-                buf.try_extend_from_slice(&[name_len[0], name_len[1], unit_len[0], unit_len[1]])?;
-                buf.try_extend_from_slice(var_info.name.as_bytes())?;
-                if buf.remaining_capacity() > var_info.unit.len() + 2 {
-                    // Safe as capacity is checked earlier
-                    unsafe { buf.push_unchecked(0) };
-                    let _ = buf.try_extend_from_slice(var_info.unit.as_bytes());
-                    unsafe { buf.push_unchecked(0) };
-                } else {
-                    return Err(CapacityError::new(()));
-                }
-                buf.try_extend_from_slice(self.data)?;
-            
+            let type_info: [u8; 4] = [0b1000_0100, 0b0000_1001, 0b0000_0000, 0b0000_0000];
+            buf.try_extend_from_slice(&type_info)?;
+
+            buf.try_extend_from_slice(&number_of_dimensions)?;
+            buf.try_extend_from_slice(self.dimensions.dimensions)?;
+            buf.try_extend_from_slice(&[name_len[0], name_len[1], unit_len[0], unit_len[1]])?;
+            buf.try_extend_from_slice(var_info.name.as_bytes())?;
+            if buf.remaining_capacity() > var_info.unit.len() + 2 {
+                // Safe as capacity is checked earlier
+                unsafe { buf.push_unchecked(0) };
+                let _ = buf.try_extend_from_slice(var_info.unit.as_bytes());
+                unsafe { buf.push_unchecked(0) };
+            } else {
+                return Err(CapacityError::new(()));
+            }
+            buf.try_extend_from_slice(self.data)?;
         } else {
             let number_of_dimensions = match is_big_endian {
                 true => (self.dimensions.dimensions.len() as u16 / 2).to_be_bytes(),
                 false => (self.dimensions.dimensions.len() as u16 / 2).to_le_bytes(),
             };
-                let type_info: [u8; 4] = [0b1000_0100, 0b0000_0001, 0b0000_0000, 0b0000_0000];
-                buf.try_extend_from_slice(&type_info)?;
-                buf.try_extend_from_slice(&number_of_dimensions)?;
-                buf.try_extend_from_slice(self.dimensions.dimensions)?;
-                buf.try_extend_from_slice(self.data)?;
-            }
-            Ok(())
+            let type_info: [u8; 4] = [0b1000_0100, 0b0000_0001, 0b0000_0000, 0b0000_0000];
+            buf.try_extend_from_slice(&type_info)?;
+            buf.try_extend_from_slice(&number_of_dimensions)?;
+            buf.try_extend_from_slice(self.dimensions.dimensions)?;
+            buf.try_extend_from_slice(self.data)?;
         }
-    
+        Ok(())
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -114,9 +112,27 @@ impl Iterator for ArrayF64Iterator<'_> {
             None
         } else {
             let result = if self.is_big_endian {
-                f64::from_be_bytes([self.rest[0], self.rest[1], self.rest[2], self.rest[3], self.rest[4], self.rest[5], self.rest[6], self.rest[7]])
+                f64::from_be_bytes([
+                    self.rest[0],
+                    self.rest[1],
+                    self.rest[2],
+                    self.rest[3],
+                    self.rest[4],
+                    self.rest[5],
+                    self.rest[6],
+                    self.rest[7],
+                ])
             } else {
-                f64::from_le_bytes([self.rest[0], self.rest[1], self.rest[2], self.rest[3], self.rest[4], self.rest[5], self.rest[6], self.rest[7]])
+                f64::from_le_bytes([
+                    self.rest[0],
+                    self.rest[1],
+                    self.rest[2],
+                    self.rest[3],
+                    self.rest[4],
+                    self.rest[5],
+                    self.rest[6],
+                    self.rest[7],
+                ])
             };
             self.rest = &self.rest[8..];
             Some(result)
@@ -139,7 +155,7 @@ impl<'a> Serialize for ArrayF64Iterator<'a> {
     where
         S: Serializer,
     {
-        let mut seq = serializer.serialize_seq(Some(self.rest.len()/8))?;
+        let mut seq = serializer.serialize_seq(Some(self.rest.len() / 8))?;
         for e in self.clone() {
             seq.serialize_element(&e)?;
         }
@@ -167,11 +183,11 @@ mod test {
         fn write_read(ref name in "\\pc{0,20}", ref unit in "\\pc{0,20}", dim_count in 0u16..5) {
             const TYPE_INFO_RAW: [u8; 4] = [0b1000_0100, 0b0000_0001, 0b0000_0000, 0b0000_0000];
             const VAR_INFO_FLAG: u8 = 0b0000_1000;
-            const FIXED_POINT_FLAG: u8 = 0b0001_0000; 
+            const FIXED_POINT_FLAG: u8 = 0b0001_0000;
 
             const BUFFER_SIZE: usize = 400;
 
-               
+
             // test big endian with name
             {
                 let mut msg_buff: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
@@ -186,10 +202,10 @@ mod test {
                         dimensions.extend_from_slice(&(i+1).to_be_bytes());
                     for x in 0..=i as i16 {
                         if x % 2 == 1 {
-                            content.extend_from_slice(&(InternalTypes::from(x)).to_be_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(x)).to_be_bytes());
                         }
                         else {
-                            content.extend_from_slice(&(InternalTypes::from(-1* x)).to_be_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(-1* x)).to_be_bytes());
                         }
                     }
                 }
@@ -236,10 +252,10 @@ mod test {
                         dimensions.extend_from_slice(&(i+1).to_le_bytes());
                     for x in 0..=i as i16 {
                         if x % 2 == 1 {
-                            content.extend_from_slice(&(InternalTypes::from(x)).to_le_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(x)).to_le_bytes());
                         }
                         else {
-                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_le_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_le_bytes());
                         }
                     }
                 }
@@ -285,10 +301,10 @@ mod test {
                         dimensions.extend_from_slice(&(i+1).to_be_bytes());
                     for x in 0..=i as i16 {
                         if x % 2 == 1 {
-                            content.extend_from_slice(&(InternalTypes::from(x)).to_be_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(x)).to_be_bytes());
                         }
                         else {
-                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_be_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_be_bytes());
                         }
                     }
                 }
@@ -325,10 +341,10 @@ mod test {
                         dimensions.extend_from_slice(&(i+1).to_le_bytes());
                     for x in 0..=i as i16 {
                         if x % 2 == 1 {
-                            content.extend_from_slice(&(InternalTypes::from(x)).to_le_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(x)).to_le_bytes());
                         }
                         else {
-                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_le_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_le_bytes());
                         }
                     }
                 }
@@ -351,7 +367,7 @@ mod test {
 
                 }
 
-        
+
              // Capacity error big endian with name
              {
                 let dim_count = dim_count + 1;
@@ -368,10 +384,10 @@ mod test {
 
                     for x in 0..(i-1) as i16 {
                         if x % 2 == 1 {
-                            content.extend_from_slice(&(InternalTypes::from(x)).to_be_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(x)).to_be_bytes());
                         }
                         else {
-                            content.extend_from_slice(&(InternalTypes::from(-1* x)).to_be_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(-1* x)).to_be_bytes());
                         }
                     }
                 }
@@ -380,7 +396,7 @@ mod test {
                 let arr = TestType {is_big_endian, variable_info,dimensions:arr_dim,data: &content };
                 arr.add_to_msg(&mut msg_buff, is_big_endian)?;
 
-                
+
                 // Now wrap back
                 let parsed_back = VerboseValue::from_slice(&msg_buff, is_big_endian);
                 prop_assert_eq!(parsed_back, Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { layer: crate::error::Layer::VerboseValue, minimum_size: msg_buff.len() + size_of::<InternalTypes>() * dim_count as usize, actual_size: msg_buff.len() })));
@@ -403,10 +419,10 @@ mod test {
 
                     for x in 0..(i-1) as i16 {
                         if x % 2 == 1 {
-                            content.extend_from_slice(&(InternalTypes::from(x)).to_le_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(x)).to_le_bytes());
                         }
                         else {
-                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_le_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_le_bytes());
                         }
                     }
                 }
@@ -420,7 +436,7 @@ mod test {
                 prop_assert_eq!(parsed_back, Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { layer: crate::error::Layer::VerboseValue, minimum_size: msg_buff.len() + size_of::<InternalTypes>() * dim_count as usize, actual_size: msg_buff.len() })));
             }
 
-   
+
              // Capacity error big endian without name
              {
                 let dim_count = dim_count + 1;
@@ -437,10 +453,10 @@ mod test {
 
                     for x in 0..(i-1) as i16 {
                         if x % 2 == 1 {
-                            content.extend_from_slice(&(InternalTypes::from(x)).to_be_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(x)).to_be_bytes());
                         }
                         else {
-                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_be_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_be_bytes());
                         }
                     }
                 }
@@ -471,10 +487,10 @@ mod test {
 
                     for x in 0..(i-1) as i16 {
                         if x % 2 == 1 {
-                            content.extend_from_slice(&(InternalTypes::from(x)).to_le_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(x)).to_le_bytes());
                         }
                         else {
-                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_le_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(-1 * x)).to_le_bytes());
                         }
                     }
                 }
@@ -505,10 +521,10 @@ mod test {
                 for i in 0..DIM_COUNT as i16 {
                         dimensions.extend_from_slice(&(1 as InternalTypes).to_be_bytes());
                         if i % 2 == 1 {
-                            content.extend_from_slice(&i.to_be_bytes()); 
+                            content.extend_from_slice(&i.to_be_bytes());
                         }
                         else {
-                            content.extend_from_slice(&(-1* i).to_be_bytes()); 
+                            content.extend_from_slice(&(-1* i).to_be_bytes());
                         }
 
                 }
@@ -540,10 +556,10 @@ mod test {
                 for i in 0..DIM_COUNT as i16 {
                         dimensions.extend_from_slice(&(1 as u16).to_le_bytes());
                         if i % 2 == 1 {
-                            content.extend_from_slice(&(InternalTypes::from(i)).to_le_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(i)).to_le_bytes());
                         }
                         else {
-                            content.extend_from_slice(&(InternalTypes::from(-1 * i)).to_le_bytes()); 
+                            content.extend_from_slice(&(InternalTypes::from(-1 * i)).to_le_bytes());
                         }
 
                 }
@@ -595,11 +611,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-0.5 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }    
-                
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -638,10 +652,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-0.5 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }  
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -680,12 +693,10 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-0.5 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }  
-                        
-                        }
+                }
+            }
 
             let arr_dim = ArrayDimensions {
                 is_big_endian,
@@ -723,10 +734,10 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-0.5 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }              }
+                }
+            }
 
             let arr_dim = ArrayDimensions {
                 is_big_endian,
@@ -740,8 +751,7 @@ mod test {
             };
 
             let convert_content =
-                "{\"variable_info\":null,\"data\":[[[0.0,-0.5,2.0],[-1.5,4.0,-2.5]]]}"
-                    .to_string();
+                "{\"variable_info\":null,\"data\":[[[0.0,-0.5,2.0],[-1.5,4.0,-2.5]]]}".to_string();
             assert_eq!(convert_content, serde_json::to_string(&arr).unwrap());
         }
 
@@ -765,10 +775,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-0.5 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }  
+                }
             }
 
             let arr_dim = ArrayDimensions {
@@ -806,10 +815,9 @@ mod test {
             for x in 0u8..elems as u8 {
                 if x % 2 == 1 {
                     content.extend_from_slice(&(-0.5 * x as InternalTypes).to_be_bytes());
-                    }
-                else {
+                } else {
                     content.extend_from_slice(&(x as InternalTypes).to_be_bytes());
-                }  
+                }
             }
 
             let arr_dim = ArrayDimensions {

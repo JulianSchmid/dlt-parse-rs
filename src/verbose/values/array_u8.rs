@@ -1,10 +1,10 @@
 use crate::verbose::{ArrayDimensions, Scaling, VariableInfoUnit};
 
+#[cfg(feature = "serde")]
+use super::ArrayItDimension;
 use arrayvec::{ArrayVec, CapacityError};
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, SerializeSeq, SerializeStruct, Serializer};
-#[cfg(feature = "serde")]
-use super::ArrayItDimension;
 #[derive(Debug, PartialEq, Clone)]
 pub struct ArrayU8<'a> {
     pub dimensions: ArrayDimensions<'a>,
@@ -155,7 +155,6 @@ impl<'a> Serialize for ArrayU8<'a> {
     }
 }
 
-
 impl Iterator for ArrayU8Iterator<'_> {
     type Item = u8;
 
@@ -192,7 +191,6 @@ impl<'a> Serialize for ArrayU8Iterator<'a> {
         seq.end()
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -978,7 +976,8 @@ mod test {
                 cnt += 1;
             }
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr_u8).unwrap());
         }
@@ -1021,7 +1020,8 @@ mod test {
                 cnt += 1;
             }
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[0]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[0]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr_u8).unwrap());
         }
@@ -1064,7 +1064,8 @@ mod test {
                 cnt += 1;
             }
 
-            let convert_content = "{\"variable_info\":null,\"scaling\":null,\"data\":[[0,1]]}".to_string();
+            let convert_content =
+                "{\"variable_info\":null,\"scaling\":null,\"data\":[[0,1]]}".to_string();
 
             assert_eq!(convert_content, serde_json::to_string(&arr_u8).unwrap());
         }
@@ -1197,6 +1198,4 @@ mod test {
             assert_eq!(convert_content, serde_json::to_string(&arr_u8).unwrap());
         }
     }
-
-
 }

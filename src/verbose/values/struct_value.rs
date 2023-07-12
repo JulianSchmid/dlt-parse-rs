@@ -823,7 +823,7 @@ mod test {
         {
             const MAX_CONTENT_LEN: usize = 182;
             const BUFFER_SIZE: usize = STRUCT_INIT_LEN_WITH_NAME + 3 * MAX_CONTENT_LEN;
-            
+
             let is_big_endian = false;
             let mut deparsed_stuff: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
 
@@ -878,7 +878,7 @@ mod test {
             let err = struct_value.add_to_msg(&mut off_by_one_buff, is_big_endian);
             prop_assert_eq!(err, Err(CapacityError::new(())));
 
-   
+
         }
 
         // test capacity error little endian
@@ -910,7 +910,7 @@ mod test {
             let err = struct_value.add_to_msg(&mut off_by_one_buff, is_big_endian);
             prop_assert_eq!(err, Err(CapacityError::new(())));
 
-   
+
         }
 
 
