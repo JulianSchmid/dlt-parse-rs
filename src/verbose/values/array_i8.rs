@@ -65,9 +65,9 @@ impl<'a> ArrayI8<'a> {
                 buf.try_extend_from_slice(var_info.name.as_bytes())?;
                 if buf.remaining_capacity() > var_info.unit.len() + 2 {
                     // Safe as capacity is checked earlier
-                    unsafe { buf.push_unchecked(u8::from(0)) };
+                    unsafe { buf.push_unchecked(0) };
                     let _ = buf.try_extend_from_slice(var_info.unit.as_bytes());
-                    unsafe { buf.push_unchecked(u8::from(0)) };
+                    unsafe { buf.push_unchecked(0) };
                 } else {
                     return Err(CapacityError::new(()));
                 }
@@ -85,9 +85,9 @@ impl<'a> ArrayI8<'a> {
                 buf.try_extend_from_slice(var_info.name.as_bytes())?;
                 if buf.remaining_capacity() > var_info.unit.len() + 2 {
                     // Safe as capacity is checked earlier
-                    unsafe { buf.push_unchecked(u8::from(0)) };
+                    unsafe { buf.push_unchecked(0) };
                     let _ = buf.try_extend_from_slice(var_info.unit.as_bytes());
-                    unsafe { buf.push_unchecked(u8::from(0)) };
+                    unsafe { buf.push_unchecked(0) };
                 } else {
                     return Err(CapacityError::new(()));
                 }
@@ -165,7 +165,7 @@ impl Iterator for ArrayI8Iterator<'_> {
     type Item = i8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.rest.len() == 0 {
+        if self.rest.is_empty() {
             None
         } else {
             let result = self.rest[0] as i8;

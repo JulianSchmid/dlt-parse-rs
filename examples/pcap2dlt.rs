@@ -59,7 +59,7 @@ fn main() -> Result<(), Error> {
 
     while let Some(packet) = reader.next()? {
         // decode from ethernet to udp layer
-        let sliced = match SlicedPacket::from_ethernet(&packet.data) {
+        let sliced = match SlicedPacket::from_ethernet(packet.data) {
             Ok(value) => value,
             Err(err) => {
                 eprintln!("Error parsing packet: {}", err);

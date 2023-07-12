@@ -49,7 +49,7 @@ impl<'a, T: ArrayIteratable + Sized> Serialize for ArrayItDimension<'a, T> {
             }
             .into();
             // iterate over blocks
-            let mut seq = serializer.serialize_seq(Some(dim_count.into()))?;
+            let mut seq = serializer.serialize_seq(Some(dim_count))?;
             for i in 0..dim_count {
                 // serialize subdimensions
                 let block_start = i * stepsize * size_of::<T>();

@@ -46,9 +46,9 @@ impl<'a> I8Value<'a> {
                 buf.try_extend_from_slice(var_info.name.as_bytes())?;
                 if buf.remaining_capacity() > var_info.unit.len() + 2 {
                     // Safe as capacity is checked earlier
-                    unsafe { buf.push_unchecked(u8::from(0)) };
+                    unsafe { buf.push_unchecked(0) };
                     let _ = buf.try_extend_from_slice(var_info.unit.as_bytes());
-                    unsafe { buf.push_unchecked(u8::from(0)) };
+                    unsafe { buf.push_unchecked(0) };
                 } else {
                     return Err(CapacityError::new(()));
                 }
@@ -63,9 +63,9 @@ impl<'a> I8Value<'a> {
                 buf.try_extend_from_slice(var_info.name.as_bytes())?;
                 if buf.remaining_capacity() > var_info.unit.len() + 2 {
                     // Safe as capacity is checked earlier
-                    unsafe { buf.push_unchecked(u8::from(0)) };
+                    unsafe { buf.push_unchecked(0) };
                     let _ = buf.try_extend_from_slice(var_info.unit.as_bytes());
-                    unsafe { buf.push_unchecked(u8::from(0)) };
+                    unsafe { buf.push_unchecked(0) };
                 } else {
                     return Err(CapacityError::new(()));
                 }
@@ -81,42 +81,40 @@ impl<'a> I8Value<'a> {
             }
         }
         // No name & unit
-        else {
-            if let Some(scaler) = &self.scaling {
-                let type_info: [u8; 4] = [0b0010_0001, 0b0001_0000, 0b0000_0000, 0b0000_0000];
+        else if let Some(scaler) = &self.scaling {
+            let type_info: [u8; 4] = [0b0010_0001, 0b0001_0000, 0b0000_0000, 0b0000_0000];
 
-                let quantization;
-                let offset: [u8; 4];
-                if is_big_endian {
-                    quantization = scaler.quantization.to_be_bytes();
-                    offset = scaler.offset.to_be_bytes();
-                } else {
-                    quantization = scaler.quantization.to_le_bytes();
-                    offset = scaler.offset.to_le_bytes();
-                }
-                buf.try_extend_from_slice(&type_info)?;
-                buf.try_extend_from_slice(&quantization)?;
-                buf.try_extend_from_slice(&offset)?;
-
-                if buf.remaining_capacity() > 0 {
-                    unsafe {
-                        buf.push_unchecked(self.value as u8);
-                    }
-                    Ok(())
-                } else {
-                    Err(CapacityError::new(()))
-                }
+            let quantization;
+            let offset: [u8; 4];
+            if is_big_endian {
+                quantization = scaler.quantization.to_be_bytes();
+                offset = scaler.offset.to_be_bytes();
             } else {
-                let type_info: [u8; 4] = [0b0010_0001, 0b0000_0000, 0b0000_0000, 0b0000_0000];
-                buf.try_extend_from_slice(&type_info)?;
-                if buf.remaining_capacity() > 0 {
-                    unsafe {
-                        buf.push_unchecked(self.value as u8);
-                    }
-                    Ok(())
-                } else {
-                    Err(CapacityError::new(()))
+                quantization = scaler.quantization.to_le_bytes();
+                offset = scaler.offset.to_le_bytes();
+            }
+            buf.try_extend_from_slice(&type_info)?;
+            buf.try_extend_from_slice(&quantization)?;
+            buf.try_extend_from_slice(&offset)?;
+
+            if buf.remaining_capacity() > 0 {
+                unsafe {
+                    buf.push_unchecked(self.value as u8);
                 }
+                Ok(())
+            } else {
+                Err(CapacityError::new(()))
+            }
+        } else {
+            let type_info: [u8; 4] = [0b0010_0001, 0b0000_0000, 0b0000_0000, 0b0000_0000];
+            buf.try_extend_from_slice(&type_info)?;
+            if buf.remaining_capacity() > 0 {
+                unsafe {
+                    buf.push_unchecked(self.value as u8);
+                }
+                Ok(())
+            } else {
+                Err(CapacityError::new(()))
             }
         }
     }
