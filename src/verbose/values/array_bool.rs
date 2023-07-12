@@ -90,13 +90,13 @@ impl<'a> ArrayBool<'a> {
             buf.try_extend_from_slice(var_info.name.as_bytes())?;
             if buf.remaining_capacity() > var_info.unit.len() + 2 {
                 // Safe as capacity is checked earlier
-                unsafe { buf.push_unchecked(u8::from(0)) };
+                unsafe { buf.push_unchecked(0) };
                 let _ = buf.try_extend_from_slice(var_info.unit.as_bytes());
-                unsafe { buf.push_unchecked(u8::from(0)) };
+                unsafe { buf.push_unchecked(0) };
                 buf.try_extend_from_slice(self.data)?;
                 Ok(())
             } else {
-                return Err(CapacityError::new(()));
+                Err(CapacityError::new(()))
             }
         } else {
             let number_of_dimensions = match is_big_endian {
@@ -118,7 +118,7 @@ impl Iterator for ArrayBoolIterator<'_> {
     type Item = bool;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.rest.len() == 0 {
+        if self.rest.is_empty() {
             None
         } else {
             let result = self.rest[0] != 0;

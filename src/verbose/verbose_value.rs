@@ -104,10 +104,7 @@ impl<'a> VerboseValue<'a> {
                 None
             };
 
-            let variable_info = match name_and_unit {
-                Some((name, unit)) => Some(VariableInfoUnit { name, unit }),
-                None => None,
-            };
+            let variable_info = name_and_unit.map(|(name, unit)| VariableInfoUnit { name, unit });
 
             if 0 != type_info[0] & BOOL_FLAG_0 {
                 const CONTRADICTING_MASK_0: u8 = 0b1110_0000;
@@ -157,7 +154,7 @@ impl<'a> VerboseValue<'a> {
                     _ => return Err(InvalidTypeInfo(type_info)), //Look
                 }
 
-                let real_type_len = 0b0000_0001 << type_len-1;
+                let real_type_len = 0b0000_0001 << (type_len-1);
 
                 // determine data size of array
                 let mut data_len = 0;
@@ -238,7 +235,7 @@ impl<'a> VerboseValue<'a> {
                     _ => return Err(InvalidTypeInfo(type_info)),
                 }
 
-                let real_type_len = 0b0000_0001 << type_len-1;
+                let real_type_len = 0b0000_0001 << (type_len-1);
 
                 // determine data size of array
                 let mut data_len = 0;
@@ -319,7 +316,7 @@ impl<'a> VerboseValue<'a> {
                     _ => return Err(InvalidTypeInfo(type_info)),
                 }
 
-                let real_type_len = 0b0000_0001 << type_len-1;
+                let real_type_len = 0b0000_0001 << (type_len-1);
 
                 // determine data size of array
                 let mut data_len = 0;
@@ -427,10 +424,7 @@ impl<'a> VerboseValue<'a> {
                 None
             };
 
-            let var_info = match name_and_unit {
-                Some((name, unit)) => Some(VariableInfoUnit { name, unit }),
-                None => None,
-            };
+            let var_info = name_and_unit.map(|(name, unit)| VariableInfoUnit { name, unit });
 
             match type_len {
                 1 => Ok((
@@ -500,10 +494,7 @@ impl<'a> VerboseValue<'a> {
                 None
             };
 
-            let var_info = match name_and_unit {
-                Some((name, unit)) => Some(VariableInfoUnit { name, unit }),
-                None => None,
-            };
+            let var_info = name_and_unit.map(|(name, unit)| VariableInfoUnit { name, unit });
 
             match type_len {
                 1 => Ok((
@@ -574,10 +565,7 @@ impl<'a> VerboseValue<'a> {
                 None
             };
 
-            let variable_info = match name_and_unit {
-                Some((name, unit)) => Some(VariableInfoUnit { name, unit }),
-                None => None,
-            };
+            let variable_info = name_and_unit.map(|(name, unit)| VariableInfoUnit { name, unit });
 
             match type_len {
                 2 => Ok((

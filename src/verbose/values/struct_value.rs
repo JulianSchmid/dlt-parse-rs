@@ -33,7 +33,7 @@ impl<'a> StructValue<'a> {
             buf.try_extend_from_slice(name.as_bytes())?;
             if buf.remaining_capacity() > 0 {
                 // Safe as capacity is checked earlier
-                unsafe { buf.push_unchecked(u8::from(0)) };
+                unsafe { buf.push_unchecked(0) };
             } else {
                 return Err(CapacityError::new(()));
             }
