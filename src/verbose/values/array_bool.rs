@@ -140,7 +140,7 @@ impl<'a> IntoIterator for &'a ArrayBool<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "serde")]
     use crate::alloc::string::ToString;
     use crate::error::UnexpectedEndOfSliceError;
     use crate::error::VerboseDecodeError::UnexpectedEndOfSlice;
@@ -525,7 +525,6 @@ mod test {
         }
     }
     #[cfg(feature = "serde")]
-    #[cfg(feature = "serde_json")]
     #[test]
     fn serialization() {
         // test dim_count 0

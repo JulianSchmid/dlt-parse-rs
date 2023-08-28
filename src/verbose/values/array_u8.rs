@@ -933,7 +933,6 @@ mod test {
     }
 
     #[cfg(feature = "serde")]
-    #[cfg(feature = "serde_json")]
     #[test]
     fn serialization() {
         // test dim_count 0
