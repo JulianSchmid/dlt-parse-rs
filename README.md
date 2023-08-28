@@ -92,7 +92,7 @@ buffer.extend_from_slice(&header.to_bytes());
 for dlt_message in SliceIterator::new(&buffer) {
     match dlt_message {
         Ok(dlt_slice) => {
-            //check if the message is verbose or non verbose (non verbose messages have message ids)
+            //check if the message is verbose or non verbose
             if let Some(typed_payload) = dlt_slice.typed_payload() {
                 use dlt_parse::DltTypedPayload::*;
                 match typed_payload {
