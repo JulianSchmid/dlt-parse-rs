@@ -65,7 +65,6 @@ mod test {
     proptest! {
             #[test]
             fn write_read(ref data_str in "\\pc{0,80}", ref name in "\\pc{0,20}") {
-                const MAX_ITEMS_IN_STRUCT: usize = 100;
                 const STRUCT_INIT_LEN_WITHOUT_NAME: usize = 6;
                 const STRUCT_INIT_LEN_WITH_NAME: usize = STRUCT_INIT_LEN_WITHOUT_NAME + 3;
 
@@ -851,7 +850,6 @@ mod test {
 
         // test capacity error big endian
         {
-            const MAX_CONTENT_LEN: usize = 182;
             const BUFFER_SIZE: usize = STRUCT_INIT_LEN_WITH_NAME + 15;
 
             let is_big_endian = true;
@@ -883,7 +881,6 @@ mod test {
 
         // test capacity error little endian
         {
-            const MAX_CONTENT_LEN: usize = 182;
             const BUFFER_SIZE: usize = STRUCT_INIT_LEN_WITH_NAME + 15;
 
             let is_big_endian = false;
