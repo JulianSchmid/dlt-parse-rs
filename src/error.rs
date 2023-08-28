@@ -547,6 +547,7 @@ mod verbose_decode_error_tests {
             format!("{}", VariableUnitStringMissingNullTermination)
         );
 
+        #[allow(invalid_from_utf8)]
         {
             let v = std::str::from_utf8(&[0, 159, 146, 150]).unwrap_err();
             assert_eq!(format!("{}", v), format!("{}", Utf8(v)));
@@ -555,6 +556,7 @@ mod verbose_decode_error_tests {
 
     #[cfg(feature = "std")]
     #[test]
+    #[allow(invalid_from_utf8)]
     fn source() {
         use std::error::Error;
         use VerboseDecodeError::*;
@@ -575,6 +577,7 @@ mod verbose_decode_error_tests {
     }
 
     #[test]
+    #[allow(invalid_from_utf8)]
     fn from_utf8_error() {
         let e: VerboseDecodeError = std::str::from_utf8(&[0, 159, 146, 150]).unwrap_err().into();
         assert_matches!(e, VerboseDecodeError::Utf8(_));

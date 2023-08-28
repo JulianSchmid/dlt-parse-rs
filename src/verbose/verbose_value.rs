@@ -151,7 +151,7 @@ impl<'a> VerboseValue<'a> {
                 }
 
                 match type_len {
-                    1 | 2 | 3 | 4 | 5 => {}
+                    1..=5 => {}
                     _ => return Err(InvalidTypeInfo(type_info)), //Look
                 }
 
@@ -232,7 +232,7 @@ impl<'a> VerboseValue<'a> {
 
                 let type_len = type_info[0] & TYPE_LEN_MASK_0;
                 match type_len {
-                    1 | 2 | 3 | 4 | 5 => {}
+                    1..=5 => {}
                     _ => return Err(InvalidTypeInfo(type_info)),
                 }
 
@@ -313,7 +313,7 @@ impl<'a> VerboseValue<'a> {
 
                 let type_len = type_info[0] & TYPE_LEN_MASK_0;
                 match type_len {
-                    2 | 3 | 4 | 5 => {}
+                    2..=5 => {}
                     _ => return Err(InvalidTypeInfo(type_info)),
                 }
 
@@ -414,7 +414,7 @@ impl<'a> VerboseValue<'a> {
 
             let type_len = type_info[0] & TYPE_LEN_MASK_0;
             match type_len {
-                1 | 2 | 3 | 4 | 5 => {}
+                1..=5 => {}
                 _ => return Err(InvalidTypeInfo(type_info)),
             }
 
@@ -484,7 +484,7 @@ impl<'a> VerboseValue<'a> {
 
             let type_len = type_info[0] & TYPE_LEN_MASK_0;
             match type_len {
-                1 | 2 | 3 | 4 | 5 => {}
+                1..=5 => {}
                 _ => return Err(InvalidTypeInfo(type_info)),
             }
 
@@ -555,7 +555,7 @@ impl<'a> VerboseValue<'a> {
 
             let type_len = type_info[0] & TYPE_LEN_MASK_0;
             match type_len {
-                2 | 3 | 4 | 5 => {}
+                2..=5 => {}
                 _ => return Err(InvalidTypeInfo(type_info)),
             }
 
