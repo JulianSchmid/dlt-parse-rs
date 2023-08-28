@@ -164,10 +164,8 @@ mod test {
         fn write_read(ref name in "\\pc{0,20}", ref unit in "\\pc{0,20}", dim_count in 0u16..5) {
             const TYPE_INFO_RAW: [u8; 4] = [0b1000_0011, 0b0000_0001, 0b0000_0000, 0b0000_0000];
             const VAR_INFO_FLAG: u8 = 0b0000_1000;
-            const FIXED_POINT_FLAG: u8 = 0b0001_0000;
 
             const BUFFER_SIZE: usize = 400;
-
 
             // test big endian with name
             {
