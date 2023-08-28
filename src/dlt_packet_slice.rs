@@ -800,6 +800,7 @@ mod tests {
                     assert_eq!(None, slice.message_id_and_payload());
                     assert_eq!(None, slice.non_verbose_payload());
 
+                    assert_eq!(Some(expected_iter.clone()), slice.verbose_value_iter());
                     assert_eq!(
                         Some(DltTypedPayload::Verbose {
                             info: expected_message_info,
@@ -830,16 +831,46 @@ mod tests {
                 // slice
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();
                 if t.1 {
-                    assert_eq!(Some(0x1234_5678), slice.message_id());
+                    let expected_message_id = 0x1234_5678u32;
+                    let expected_payload = &[0x10u8, 0x11][..];
+                    let expected_message_info =
+                        t.0.extended_header.as_ref().map(|v| v.message_info);
+
+                    assert_eq!(Some(expected_message_id), slice.message_id());
                     assert_eq!(
-                        Some((0x1234_5678u32, &[0x10u8, 0x11][..])),
+                        Some((expected_message_id, expected_payload)),
                         slice.message_id_and_payload()
                     );
-                    assert_eq!(Some(&[0x10u8, 0x11][..]), slice.non_verbose_payload());
+                    assert_eq!(Some(expected_payload), slice.non_verbose_payload());
+                    assert_eq!(None, slice.verbose_value_iter());
+
+                    assert_eq!(
+                        Some(DltTypedPayload::NonVerbose {
+                            info: expected_message_info,
+                            msg_id: expected_message_id,
+                            payload: expected_payload
+                        }),
+                        slice.typed_payload()
+                    );
                 } else {
+                    let ext = t.0.extended_header.clone().unwrap();
+                    let p_start = 0x1234_5678u32.to_le_bytes();
+                    let payload = [p_start[0], p_start[1], p_start[2], p_start[3], 0x10, 0x11];
+                    let expected_iter = VerboseIter::new(false, ext.number_of_arguments, &payload);
+                    let expected_message_info = ext.message_info;
+
                     assert_eq!(None, slice.message_id());
                     assert_eq!(None, slice.message_id_and_payload());
                     assert_eq!(None, slice.non_verbose_payload());
+
+                    assert_eq!(Some(expected_iter.clone()), slice.verbose_value_iter());
+                    assert_eq!(
+                        Some(DltTypedPayload::Verbose {
+                            info: expected_message_info,
+                            iter: expected_iter
+                        }),
+                        slice.typed_payload()
+                    );
                 }
             }
 
