@@ -49,7 +49,7 @@
 //!
 //! let header = {
 //!     let mut header = DltHeader {
-//!         is_big_endian: true, //payload & message id are encoded with big endian
+//!         is_big_endian: true, // payload & message id are encoded with big endian
 //!         message_counter: 0,
 //!         length: 0,
 //!         ecu_id: None,
@@ -57,8 +57,8 @@
 //!         timestamp: None,
 //!         extended_header: Some(DltExtendedHeader::new_non_verbose_log(
 //!             DltLogLevel::Debug,
-//!             [b'a', b'p', b'p', b'i'],//application id
-//!             [b'c', b't', b'x', b'i'],//context id
+//!             [b'a', b'p', b'p', b'i'],// application id
+//!             [b'c', b't', b'x', b'i'],// context id
 //!         ))
 //!     };
 //!     header.length = header.header_len() + 4 + 4; //header + message id + payload
@@ -66,34 +66,53 @@
 //!     header
 //! };
 //!
-//! //buffer to store serialized header & payload
+//! // buffer to store serialized header & payload
 //! let mut buffer = Vec::<u8>::with_capacity(usize::from(header.length));
 //! buffer.extend_from_slice(&header.to_bytes());
 //!
-//! //write payload (message id 1234 & non verbose payload)
+//! // write payload (message id 1234 & non verbose payload)
 //! {
 //!     //for write_all
 //!     use std::io::Write;
 //!
 //!     //write the message id & payload
-//!     buffer.write_all(&1234u32.to_be_bytes()).unwrap(); //message id
-//!     buffer.write_all(&[5,6,7,9]); //payload
+//!     buffer.write_all(&1234u32.to_be_bytes()).unwrap(); // message id
+//!     buffer.write_all(&[5,6,7,9]); // payload
 //! }
 //!
-//! //packets can contain multiple dlt messages, iterate through them
+//! // packets can contain multiple dlt messages, iterate through them
 //! for dlt_message in SliceIterator::new(&buffer) {
 //!     match dlt_message {
 //!         Ok(dlt_slice) => {
-//!             //check if the message is verbose or non verbose (non verbose messages have message ids)
-//!             if let Some((message_id, non_verbose_payload)) = dlt_slice.message_id_and_payload() {
-//!                 println!("non verbose message {:x}", message_id);
-//!                 println!("  with payload {:?}", non_verbose_payload);
-//!             } else {
-//!                 println!("verbose message (parsing not yet supported)");
-//!             }
+//!             // check if the message is verbose or non verbose (non verbose messages have message ids)
+//!             if let Some(typed_payload) = dlt_slice.typed_payload() {
+//!                 use dlt_parse::DltTypedPayload::*;
+//!                 match typed_payload {
+//!                     Verbose { info, iter } => {
+//!                         println!("verbose message of type {:?} with values:", info.into_message_type());
+//!                         for value in iter {
+//!                             println!("  {:?}", value);
+//!                         }
+//!                     }
+//!                     NonVerbose {
+//!                         info,
+//!                         msg_id,
+//!                         payload,
+//!                     } => {
+//!                         println!(
+//!                             "non verbose message 0x{:x} of type {:?} and {} bytes of payload",
+//!                             msg_id,
+//!                             info.map(|v| v.into_message_type()),
+//!                             payload.len()
+//!                        );
+//!                    }
+//!                }
+//!            } else {
+//!                println!("non verbose message with incomplete message id");
+//!            }
 //!         },
 //!         Err(err) => {
-//!             //error parsing the dlt packet
+//!             // error parsing the dlt packet
 //!             println!("ERROR: {:?}", err);
 //!         }
 //!     }

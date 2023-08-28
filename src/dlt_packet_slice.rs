@@ -339,10 +339,10 @@ impl<'a> DltPacketSlice<'a> {
                 // Safe as the ext_slice is at 10.
                 let number_of_arguments = unsafe { *ext_slice.get_unchecked(1) };
 
-                return Some(DltTypedPayload::Verbose(
-                    message_info,
-                    VerboseIter::new(is_big_endian, number_of_arguments, self.payload()),
-                ));
+                return Some(DltTypedPayload::Verbose {
+                    info: message_info,
+                    iter: VerboseIter::new(is_big_endian, number_of_arguments, self.payload()),
+                });
             } else {
                 Some(message_info)
             }
@@ -376,11 +376,11 @@ impl<'a> DltPacketSlice<'a> {
                     self.slice.len() - self.header_len - 4,
                 )
             };
-            Some(DltTypedPayload::NonVerbose(
-                message_info,
-                message_id,
-                non_verbose_payload,
-            ))
+            Some(DltTypedPayload::NonVerbose {
+                info: message_info,
+                msg_id: message_id,
+                payload: non_verbose_payload,
+            })
         } else {
             None
         }
@@ -782,11 +782,11 @@ mod tests {
                     assert_eq!(None, slice.verbose_value_iter());
 
                     assert_eq!(
-                        Some(DltTypedPayload::NonVerbose(
-                            expected_message_info,
-                            expected_message_id,
-                            expected_payload
-                        )),
+                        Some(DltTypedPayload::NonVerbose {
+                            info: expected_message_info,
+                            msg_id: expected_message_id,
+                            payload: expected_payload
+                        }),
                         slice.typed_payload()
                     );
                 } else {
@@ -801,10 +801,10 @@ mod tests {
                     assert_eq!(None, slice.non_verbose_payload());
 
                     assert_eq!(
-                        Some(DltTypedPayload::Verbose(
-                            expected_message_info,
-                            expected_iter
-                        )),
+                        Some(DltTypedPayload::Verbose {
+                            info: expected_message_info,
+                            iter: expected_iter
+                        }),
                         slice.typed_payload()
                     );
                 }

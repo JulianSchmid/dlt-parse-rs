@@ -79,33 +79,45 @@ fn read(arguments: CommandLineArguments) -> Result<(), Error> {
                     }
                 };
 
-                //check if the message is verbose or non verbose (non verbose messages have message ids)
-                if let Some(message_id) = dlt_slice.message_id() {
-                    if let Some(extended_header) = dlt_slice.extended_header() {
-                        use core::str::from_utf8;
+                // print application id & context id if available
+                if let Some(extended_header) = dlt_slice.extended_header() {
+                    use core::str::from_utf8;
 
-                        if let Some(message_type) = extended_header.message_type() {
+                    println!(
+                        "application_id: {:?}, context_id: {:?}",
+                        from_utf8(&extended_header.application_id),
+                        from_utf8(&extended_header.context_id)
+                    );
+                }
+
+                // check if the message is verbose or non verbose (non verbose messages have message ids)
+                if let Some(typed_payload) = dlt_slice.typed_payload() {
+                    use dlt_parse::DltTypedPayload::*;
+                    match typed_payload {
+                        Verbose { info, iter } => {
                             println!(
-                                "non verbose message 0x{:x} (type: {:?}, application_id: {:?}, context_id: {:?})", 
-                                message_id,
-                                message_type,
-                                from_utf8(&extended_header.application_id),
-                                from_utf8(&extended_header.context_id)
+                                "verbose message of type {:?} with values:",
+                                info.into_message_type()
                             );
-                        } else {
+                            for value in iter {
+                                println!("  {:?}", value);
+                            }
+                        }
+                        NonVerbose {
+                            info,
+                            msg_id,
+                            payload,
+                        } => {
                             println!(
-                                "non verbose message 0x{:x} (application_id: {:?}, context_id: {:?})",
-                                message_id,
-                                from_utf8(&extended_header.application_id),
-                                from_utf8(&extended_header.context_id)
+                                "non verbose message 0x{:x} of type {:?} and {} bytes of payload",
+                                msg_id,
+                                info.map(|v| v.into_message_type()),
+                                payload.len()
                             );
                         }
-                    } else {
-                        println!("non verbose message 0x{:x}", message_id);
                     }
-                    println!("  with payload {:?}", dlt_slice.non_verbose_payload());
                 } else {
-                    println!("verbose message (parsing not yet supported)");
+                    println!("non verbose message with incomplete message id");
                 }
             }
         }
