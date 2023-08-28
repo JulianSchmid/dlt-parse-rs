@@ -3,7 +3,7 @@ use crate::error::{Layer, UnexpectedEndOfSliceError, VerboseDecodeError};
 use super::{ArrayDimensions, Scaling};
 
 /// Helper for parsing verbose messages.
-pub struct FieldSlicer<'a> {
+pub(crate) struct FieldSlicer<'a> {
     /// Unparsed part of the verbose message.
     rest: &'a [u8],
 

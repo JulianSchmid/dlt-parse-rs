@@ -12,7 +12,7 @@ prop_compose! {
                                  context_id in any::<[u8;4]>()) -> DltExtendedHeader
     {
         DltExtendedHeader {
-            message_info: message_info,
+            message_info: DltMessageInfo(message_info),
             number_of_arguments: number_of_arguments,
             application_id: application_id,
             context_id: context_id

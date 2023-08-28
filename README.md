@@ -11,24 +11,25 @@ packets. Currently only the parsing and writing of the header is supported & par
 
 ## Usage:
 
-First, add the following to your `Cargo.toml`:
+To use `dlt_parse` as dependency add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
 dlt_parse = "0.8.0"
 ```
 
-Next, add this to your crate:
-
-```rust
-use dlt_parse;
-```
-
-If you want to have `serde` support you can add the serde feature to your `Cargo.toml`:
+If you additionally want `serde` support you have to activate the serde feature in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dlt_parse = { version = "0.8.0"
+dlt_parse = { version = "0.8.0", features = ["serde"] }
+```
+
+If you want to use the crate in `no_std` mode you will have to disable the default features:
+
+```toml
+[dependencies]
+dlt_parse = { version = "0.8.0", default-features = false }
 ```
 
 ## What is dlt_parse?

@@ -1,3 +1,5 @@
+use crate::verbose::VerboseIter;
+
 use super::*;
 
 ///A slice containing an dlt header & payload.
@@ -141,7 +143,7 @@ impl<'a> DltPacketSlice<'a> {
             unsafe {
                 let ext_slice = from_raw_parts(self.slice.as_ptr().add(self.header_len - 10), 10);
                 Some(DltExtendedHeader {
-                    message_info: *ext_slice.get_unchecked(0),
+                    message_info: DltMessageInfo(*ext_slice.get_unchecked(0)),
                     number_of_arguments: *ext_slice.get_unchecked(1),
                     application_id: [
                         *ext_slice.get_unchecked(2),
@@ -279,6 +281,111 @@ impl<'a> DltPacketSlice<'a> {
         }
     }
 
+    /// Returns a iterator over the verbose values (if the dlt message is a verbose message).
+    pub fn verbose_value_iter(&self) -> Option<VerboseIter<'a>> {
+        // verbose messages are required to have an extended header
+        if self.has_extended_header() {
+            // SAFETY:
+            // Safe as if the extended header is present the
+            // header_len is set in from_slice to be at least
+            // 10 bytes and also checked against the slice length.
+            let ext_slice =
+                unsafe { from_raw_parts(self.slice.as_ptr().add(self.header_len - 10), 10) };
+
+            // check if the verbose flag is set (aka check that this is a verbose dlt message)
+            // SAFETY:
+            // Safe as the ext_slice is at 10.
+            if 0 != unsafe { ext_slice.get_unchecked(0) } & 0b1 {
+                // SAFETY:
+                // Safe as the ext_slice is at 10.
+                let number_of_arguments = unsafe { *ext_slice.get_unchecked(1) };
+
+                Some(VerboseIter::new(
+                    self.is_big_endian(),
+                    number_of_arguments,
+                    self.payload(),
+                ))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Returns the verbose or non verbose payload of the given dlt message (if it has one).
+    #[inline]
+    pub fn typed_payload(&self) -> Option<DltTypedPayload<'a>> {
+        // verbose messages are required to have an extended header
+        let message_info = if self.has_extended_header() {
+            // SAFETY:
+            // Safe as if the extended header is present the
+            // header_len is set in from_slice to be at least
+            // 10 bytes and also checked against the slice length.
+            let ext_slice =
+                unsafe { from_raw_parts(self.slice.as_ptr().add(self.header_len - 10), 10) };
+
+            // check if the verbose flag is set (aka check that this is a verbose dlt message)
+            // SAFETY:
+            let message_info = DltMessageInfo(unsafe { *ext_slice.get_unchecked(0) });
+            // Safe as the ext_slice is at 10.
+            if message_info.is_verbose() {
+                // SAFETY:
+                // Safe as it is checked in from_slice that the slice
+                // has at least a length of 4 bytes.
+                let header_type = unsafe { *self.slice.get_unchecked(0) };
+                let is_big_endian = 0 != header_type & BIG_ENDIAN_FLAG;
+                // SAFETY:
+                // Safe as the ext_slice is at 10.
+                let number_of_arguments = unsafe { *ext_slice.get_unchecked(1) };
+
+                return Some(DltTypedPayload::Verbose(
+                    message_info,
+                    VerboseIter::new(is_big_endian, number_of_arguments, self.payload()),
+                ));
+            } else {
+                Some(message_info)
+            }
+        } else {
+            None
+        };
+
+        if self.header_len + 4 <= self.slice.len() {
+            // SAFETY:
+            // Safe as the slice len is checked to be at least
+            // header_len + 4 in the if branch above.
+            let id_bytes = unsafe {
+                [
+                    *self.slice.get_unchecked(self.header_len),
+                    *self.slice.get_unchecked(self.header_len + 1),
+                    *self.slice.get_unchecked(self.header_len + 2),
+                    *self.slice.get_unchecked(self.header_len + 3),
+                ]
+            };
+            let message_id = if self.is_big_endian() {
+                u32::from_be_bytes(id_bytes)
+            } else {
+                u32::from_le_bytes(id_bytes)
+            };
+            // SAFETY:
+            // Safe as the slice len is checked to be at least
+            // header_len + 4 in the if check above.
+            let non_verbose_payload = unsafe {
+                from_raw_parts(
+                    self.slice.as_ptr().add(self.header_len + 4),
+                    self.slice.len() - self.header_len - 4,
+                )
+            };
+            Some(DltTypedPayload::NonVerbose(
+                message_info,
+                message_id,
+                non_verbose_payload,
+            ))
+        } else {
+            None
+        }
+    }
+
     ///Deserialize the dlt header
     pub fn header(&self) -> DltHeader {
         // SAFETY:
@@ -391,7 +498,7 @@ impl<'a> DltPacketSlice<'a> {
                 // Safe as it is checked in from_slice that the slice
                 // has the length to contain the standard & extended header
                 // based on the flags contained in the standard header.
-                message_info: unsafe { *slice.get_unchecked(0) },
+                message_info: DltMessageInfo(unsafe { *slice.get_unchecked(0) }),
                 number_of_arguments: unsafe { *slice.get_unchecked(1) },
                 application_id: unsafe {
                     [
@@ -428,7 +535,7 @@ impl<'a> DltPacketSlice<'a> {
 
 /// Tests for `DltPacketSlice` methods
 #[cfg(test)]
-mod dlt_packet_slice_tests {
+mod tests {
 
     use super::*;
     use crate::proptest_generators::*;
@@ -600,8 +707,8 @@ mod dlt_packet_slice_tests {
     }
 
     #[test]
-    fn message_id_and_payload() {
-        //pairs of (header, expected_some)
+    fn payload_methods() {
+        //pairs of (header, expected_non_verbose)
         let tests = [
             //verbose (does not have message id)
             (
@@ -661,16 +768,45 @@ mod dlt_packet_slice_tests {
                 // slice
                 let slice = DltPacketSlice::from_slice(&buffer).unwrap();
                 if t.1 {
-                    assert_eq!(Some(0x1234_5678), slice.message_id());
+                    let expected_message_id = 0x1234_5678u32;
+                    let expected_payload = &[0x10u8, 0x11][..];
+                    let expected_message_info =
+                        t.0.extended_header.as_ref().map(|v| v.message_info);
+
+                    assert_eq!(Some(expected_message_id), slice.message_id());
                     assert_eq!(
-                        Some((0x1234_5678u32, &[0x10u8, 0x11][..])),
+                        Some((expected_message_id, expected_payload)),
                         slice.message_id_and_payload()
                     );
-                    assert_eq!(Some(&[0x10u8, 0x11][..]), slice.non_verbose_payload());
+                    assert_eq!(Some(expected_payload), slice.non_verbose_payload());
+                    assert_eq!(None, slice.verbose_value_iter());
+
+                    assert_eq!(
+                        Some(DltTypedPayload::NonVerbose(
+                            expected_message_info,
+                            expected_message_id,
+                            expected_payload
+                        )),
+                        slice.typed_payload()
+                    );
                 } else {
+                    let ext = t.0.extended_header.clone().unwrap();
+                    let p_start = 0x1234_5678u32.to_be_bytes();
+                    let payload = [p_start[0], p_start[1], p_start[2], p_start[3], 0x10, 0x11];
+                    let expected_iter = VerboseIter::new(true, ext.number_of_arguments, &payload);
+                    let expected_message_info = ext.message_info;
+
                     assert_eq!(None, slice.message_id());
                     assert_eq!(None, slice.message_id_and_payload());
                     assert_eq!(None, slice.non_verbose_payload());
+
+                    assert_eq!(
+                        Some(DltTypedPayload::Verbose(
+                            expected_message_info,
+                            expected_iter
+                        )),
+                        slice.typed_payload()
+                    );
                 }
             }
 
@@ -729,6 +865,9 @@ mod dlt_packet_slice_tests {
                 assert_eq!(None, slice.message_id());
                 assert_eq!(None, slice.message_id_and_payload());
                 assert_eq!(None, slice.non_verbose_payload());
+                if t.1 {
+                    assert_eq!(None, slice.typed_payload());
+                }
             }
         }
     }

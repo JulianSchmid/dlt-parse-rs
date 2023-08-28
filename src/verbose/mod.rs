@@ -4,6 +4,12 @@ use field_slicer::*;
 mod values;
 pub use values::*;
 
+mod verbose_iter;
+pub use verbose_iter::*;
+
+mod pre_checked_verbose_iter;
+pub use pre_checked_verbose_iter::*;
+
 mod verbose_value;
 pub use verbose_value::*;
 

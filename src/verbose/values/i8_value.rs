@@ -6,7 +6,7 @@ use crate::verbose::{Scaling, VariableInfoUnit};
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct I8Value<'a> {
-    pub variable_info: Option<VariableInfoUnit<'a>>, // TODO: Wrap name & unit to one struct, as name and unit can only occur together
+    pub variable_info: Option<VariableInfoUnit<'a>>,
     pub scaling: Option<Scaling<i32>>,
     pub value: i8,
 }
