@@ -1,15 +1,13 @@
 [![Crates.io](https://img.shields.io/crates/v/dlt_parse.svg)](https://crates.io/crates/dlt_parse)
 [![docs.rs](https://docs.rs/dlt_parse/badge.svg)](https://docs.rs/dlt_parse)
 [![build status github](https://github.com/JulianSchmid/dlt-parse-rs/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/JulianSchmid/dlt-parse-rs/actions/workflows/main.yml)
-[![build status appveyor](https://ci.appveyor.com/api/projects/status/3tba6q6as9kqr1wa/branch/main?svg=true)](https://ci.appveyor.com/project/JulianSchmid/dlt-parse-rs/branch/main)
 [![build status gitlab](https://gitlab.com/julian.schmid/dlt-parse-rs/badges/main/pipeline.svg)](https://gitlab.com/julian.schmid/dlt-parse-rs/-/commits/main)
 [![codecov](https://codecov.io/gh/JulianSchmid/dlt-parse-rs/branch/main/graph/badge.svg?token=D1LANr6nox)](https://codecov.io/gh/JulianSchmid/dlt-parse-rs)
 
 # dlt_parse
 
 A zero allocation rust library for basic parsing & writing DLT (Diagnostic Log and Trace)
-packets. Currently only the parsing and writing of the header is supported (excluding the
-verbose packet definitions).
+packets. Currently only the parsing and writing of the header is supported & parsing of verbose messages.
 
 ## Usage:
 
@@ -17,13 +15,20 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-dlt_parse = "0.7.2"
+dlt_parse = "0.8.0"
 ```
 
 Next, add this to your crate:
 
 ```rust
 use dlt_parse;
+```
+
+If you want to have `serde` support you can add the serde feature to your `Cargo.toml`:
+
+```toml
+[dependencies]
+dlt_parse = { version = "0.8.0"
 ```
 
 ## What is dlt_parse?
