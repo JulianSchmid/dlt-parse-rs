@@ -3,7 +3,7 @@ use super::*;
 ///Extended dlt header (optional header in the dlt header)
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct DltExtendedHeader {
-    pub message_info: u8,
+    pub message_info: DltMessageInfo,
     pub number_of_arguments: u8,
     pub application_id: [u8; 4],
     pub context_id: [u8; 4],
@@ -17,7 +17,7 @@ impl DltExtendedHeader {
         context_id: [u8; 4],
     ) -> DltExtendedHeader {
         DltExtendedHeader {
-            message_info: DltMessageType::Log(log_level).to_byte().unwrap(),
+            message_info: DltMessageInfo(DltMessageType::Log(log_level).to_byte().unwrap()),
             number_of_arguments: 0,
             application_id,
             context_id,
@@ -31,7 +31,7 @@ impl DltExtendedHeader {
         context_id: [u8; 4],
     ) -> Result<DltExtendedHeader, error::RangeError> {
         Ok(DltExtendedHeader {
-            message_info: message_type.to_byte()?,
+            message_info: DltMessageInfo(message_type.to_byte()?),
             number_of_arguments: 0,
             application_id,
             context_id,
@@ -41,23 +41,23 @@ impl DltExtendedHeader {
     ///Returns true if the extended header flags the message as a verbose message.
     #[inline]
     pub fn is_verbose(&self) -> bool {
-        0 != self.message_info & 0b1
+        self.message_info.is_verbose()
     }
 
     ///Sets or unsets the is_verbose bit in the DltExtendedHeader.
     #[inline]
     pub fn set_is_verbose(&mut self, is_verbose: bool) {
         if is_verbose {
-            self.message_info |= 0b1;
+            self.message_info.0 |= 0b1;
         } else {
-            self.message_info &= 0b1111_1110;
+            self.message_info.0 &= 0b1111_1110;
         }
     }
 
     ///Returns message type info or `Option::None` for reserved values.
     #[inline]
     pub fn message_type(&self) -> Option<DltMessageType> {
-        DltMessageType::from_byte(self.message_info)
+        self.message_info.into_message_type()
     }
 
     ///Set message type info and based on that the message type.
@@ -66,8 +66,8 @@ impl DltExtendedHeader {
         let encoded = value.to_byte()?;
 
         //unset old message type & set the new one
-        self.message_info &= 0b0000_0001;
-        self.message_info |= encoded;
+        self.message_info.0 &= 0b0000_0001;
+        self.message_info.0 |= encoded;
 
         //all good
         Ok(())
@@ -106,7 +106,7 @@ mod dlt_extended_header_tests {
     #[test]
     fn default() {
         let header: DltExtendedHeader = Default::default();
-        assert_eq!(header.message_info, 0);
+        assert_eq!(header.message_info.0, 0);
         assert_eq!(header.number_of_arguments, 0);
         assert_eq!(header.application_id, [0, 0, 0, 0]);
         assert_eq!(header.context_id, [0, 0, 0, 0]);
@@ -121,7 +121,7 @@ mod dlt_extended_header_tests {
         {
             use DltMessageType::Log;
             let header = DltExtendedHeader::new_non_verbose_log(log_level.clone(), application_id, context_id);
-            assert_eq!(Log(log_level).to_byte().unwrap(), header.message_info);
+            assert_eq!(Log(log_level).to_byte().unwrap(), header.message_info.0);
             assert_eq!(0, header.number_of_arguments);
             assert_eq!(application_id, header.application_id);
             assert_eq!(context_id, header.context_id);
@@ -143,7 +143,7 @@ mod dlt_extended_header_tests {
                     application_id,
                     context_id
                 ).unwrap();
-                assert_eq!(message_type.to_byte().unwrap(), header.message_info);
+                assert_eq!(message_type.to_byte().unwrap(), header.message_info.0);
                 assert_eq!(0, header.number_of_arguments);
                 assert_eq!(application_id, header.application_id);
                 assert_eq!(context_id, header.context_id);
@@ -234,7 +234,7 @@ mod dlt_extended_header_tests {
                 Default::default(),
                 Default::default(),
             );
-            header.message_info = message_type_id << 1;
+            header.message_info = DltMessageInfo(message_type_id << 1);
             assert_eq!(None, header.message_type());
         }
 
@@ -256,8 +256,8 @@ mod dlt_extended_header_tests {
                     Default::default(),
                 )
                 .unwrap();
-                header.message_info &= 0b0000_1111;
-                header.message_info |= value << 4;
+                header.message_info.0 &= 0b0000_1111;
+                header.message_info.0 |= value << 4;
                 assert_eq!(None, header.message_type());
             }
         }

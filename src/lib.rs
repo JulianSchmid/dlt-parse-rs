@@ -1,20 +1,27 @@
 //! A zero allocation rust library for basic parsing & writing DLT (Diagnostic Log and Trace)
-//! packets. Currently only the parsing and writing of the header is supported (excluding the
-//! verbose packet definitions).
+//! packets. Currently only the parsing and writing of the header is supported & parsing of verbose messages.
 //!
 //! # Usage:
 //!
-//! First, add the following to your `Cargo.toml`:
+//! By default `serde` is disabled and `std` is enabled if you add `dlt_parse` as dependency to your `Cargo.toml`:
 //!
 //! ```toml
 //! [dependencies]
-//! dlt_parse = "0.7.2"
+//! dlt_parse = "0.8.0"
 //! ```
 //!
-//! Next, add this to your crate:
+//! If you additionally want `serde` support you will have to activate the `serde` feature in your `Cargo.toml`:
 //!
+//! ```toml
+//! [dependencies]
+//! dlt_parse = { version = "0.8.0", features = ["serde"] }
 //! ```
-//! use dlt_parse;
+//!
+//! If you want to use the crate in `no_std` mode you will have to disable the default features:
+//!
+//! ```toml
+//! [dependencies]
+//! dlt_parse = { version = "0.8.0", default-features = false }
 //! ```
 //!
 //! # What is dlt_parse?
@@ -93,7 +100,7 @@
 //! }
 //! ```
 //!
-//! An complete example which includes the parsing of the ethernet & udp headers can be found in [examples/print_messages_ids.rs](https://github.com/JulianSchmid/dlt-parse-rs/blob/0.1.0/examples/print_messages_ids.rs)
+//! An complete example which includes the parsing of the ethernet & udp headers can be found in [examples/print_messages_ids.rs](https://github.com/JulianSchmid/dlt-parse-rs/blob/v0.8.0/examples/print_messages_ids.rs)
 //!
 //! # References
 //! * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
@@ -112,13 +119,26 @@ extern crate assert_matches;
 
 mod dlt_extended_header;
 pub use dlt_extended_header::*;
+
 mod dlt_header;
 pub use dlt_header::*;
+
+mod dlt_typed_payload;
+pub use dlt_typed_payload::*;
+
+mod dlt_message_info;
+pub use dlt_message_info::*;
+
 mod dlt_packet_slice;
 pub use dlt_packet_slice::*;
+
 mod dlt_slice_iterator;
 pub use dlt_slice_iterator::*;
+
+/// Errors that can be returned by functions in dlt_parse.
 pub mod error;
+
+/// Module containing "verbose DLT" encoding & decoding structs & functions.
 pub mod verbose;
 
 /// Module for decoding .dlt files or other formats that use the DLT storage header.
@@ -152,7 +172,7 @@ const EXT_MSIN_MSTP_TYPE_NW_TRACE: u8 = 0x2 << 1;
 const EXT_MSIN_MSTP_TYPE_CONTROL: u8 = 0x3 << 1;
 
 ///Log level for dlt log messages.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum DltLogLevel {
     ///Fatal system error.
     Fatal = 0x1,
@@ -170,7 +190,7 @@ pub enum DltLogLevel {
 
 ///Types of application trace messages that can be sent via dlt if the message type
 ///is specified as "trace".
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum DltTraceType {
     ///Value of variable.
     Variable = 0x1,
@@ -185,7 +205,7 @@ pub enum DltTraceType {
 }
 
 ///Network type specified in a network trace dlt message.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum DltNetworkType {
     ///Inter-Process-Communication.
     Ipc,
@@ -203,7 +223,7 @@ pub enum DltNetworkType {
     UserDefined(u8),
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum DltControlMessageType {
     ///Request control message.
     Request = 0x1,
@@ -212,7 +232,7 @@ pub enum DltControlMessageType {
 }
 
 ///Message type info field (contains the the information of the message type & message type info field)
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum DltMessageType {
     ///Dlt log message with a log level
     Log(DltLogLevel),

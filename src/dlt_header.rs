@@ -154,7 +154,7 @@ impl DltHeader {
                 // SAFETY: Safe as header_len was extended by 4 if the EXTDENDED_HEADER_FLAG
                 // is set & the slice len is verfied to be at least as long as
                 // the header_len.
-                message_info: unsafe { *next_option_ptr },
+                message_info: DltMessageInfo(unsafe { *next_option_ptr }),
                 number_of_arguments: unsafe { *next_option_ptr.add(1) },
                 application_id: unsafe {
                     [
@@ -285,7 +285,7 @@ impl DltHeader {
             // SAFETY: 10 bytes are guranteed to be left over.
             unsafe {
                 let ptr = bytes.as_mut_slice().as_mut_ptr().add(offset);
-                *ptr = value.message_info;
+                *ptr = value.message_info.0;
                 *ptr.add(1) = value.number_of_arguments;
                 *ptr.add(2) = value.application_id[0];
                 *ptr.add(3) = value.application_id[1];
@@ -368,7 +368,7 @@ impl DltHeader {
                     reader.read_exact(&mut buffer)?;
 
                     DltExtendedHeader {
-                        message_info: buffer[0],
+                        message_info: DltMessageInfo(buffer[0]),
                         number_of_arguments: buffer[1],
                         application_id: [buffer[2], buffer[3], buffer[4], buffer[5]],
                         context_id: [buffer[6], buffer[7], buffer[8], buffer[9]],
@@ -431,7 +431,7 @@ impl DltHeader {
         match &self.extended_header {
             Some(value) => {
                 let bytes: [u8; 10] = [
-                    value.message_info,
+                    value.message_info.0,
                     value.number_of_arguments,
                     value.application_id[0],
                     value.application_id[1],
