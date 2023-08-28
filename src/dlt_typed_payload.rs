@@ -4,7 +4,14 @@ use crate::{verbose::VerboseIter, DltMessageInfo};
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum DltTypedPayload<'a> {
     /// Verbose DLT message payload.
-    Verbose(DltMessageInfo, VerboseIter<'a>),
+    Verbose {
+        info: DltMessageInfo,
+        iter: VerboseIter<'a>,
+    },
     /// Non-verbose DLT message info, message id and payload.
-    NonVerbose(Option<DltMessageInfo>, u32, &'a [u8]),
+    NonVerbose {
+        info: Option<DltMessageInfo>,
+        msg_id: u32,
+        payload: &'a [u8],
+    },
 }
