@@ -7,21 +7,21 @@
 //!
 //! ```toml
 //! [dependencies]
-//! dlt_parse = "0.8.0"
+//! dlt_parse = "0.8.2"
 //! ```
 //!
 //! If you additionally want `serde` support you will have to activate the `serde` feature in your `Cargo.toml`:
 //!
 //! ```toml
 //! [dependencies]
-//! dlt_parse = { version = "0.8.0", features = ["serde"] }
+//! dlt_parse = { version = "0.8.2", features = ["serde"] }
 //! ```
 //!
 //! If you want to use the crate in `no_std` mode you will have to disable the default features:
 //!
 //! ```toml
 //! [dependencies]
-//! dlt_parse = { version = "0.8.0", default-features = false }
+//! dlt_parse = { version = "0.8.2", default-features = false }
 //! ```
 //!
 //! # What is dlt_parse?
@@ -118,7 +118,7 @@
 //! }
 //! ```
 //!
-//! An complete example which includes the parsing of the ethernet & udp headers can be found in [examples/print_messages_ids.rs](https://github.com/JulianSchmid/dlt-parse-rs/blob/v0.8.0/examples/print_messages_ids.rs)
+//! An complete example which includes the parsing of the ethernet & udp headers can be found in [examples/print_messages_ids.rs](https://github.com/JulianSchmid/dlt-parse-rs/blob/v0.8.2/examples/print_messages_ids.rs)
 //!
 //! # References
 //! * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
