@@ -172,7 +172,7 @@ impl Iterator for ArrayU8Iterator<'_> {
                 core::slice::from_raw_parts(
                     // SAFETY: Safe as has at least one element.
                     self.rest.as_ptr().add(1),
-                    self.rest.len() - 1
+                    self.rest.len() - 1,
                 )
             };
             Some(result)
@@ -203,19 +203,13 @@ impl Iterator for ArrayU8Iterator<'_> {
             };
             self.rest = unsafe {
                 // SAFETY: Safe as the length is checked beforehand to be at least n + 1
-                core::slice::from_raw_parts(
-                    self.rest.as_ptr().add(n + 1),
-                    self.rest.len() - n - 1
-                )
+                core::slice::from_raw_parts(self.rest.as_ptr().add(n + 1), self.rest.len() - n - 1)
             };
             Some(result)
         } else {
             self.rest = unsafe {
                 // SAFETY: Safe as the length is checked beforehand to be at least n + 1
-                core::slice::from_raw_parts(
-                    self.rest.as_ptr().add(self.rest.len()),
-                    0
-                )
+                core::slice::from_raw_parts(self.rest.as_ptr().add(self.rest.len()), 0)
             };
             None
         }
@@ -990,7 +984,7 @@ mod test {
 
             // test last
             assert_eq!(arr.into_iter().last(), content.last().map(|v| *v));
-            
+
             // test nth
             for i in 0..content.len() {
                 let mut it = arr.into_iter();
