@@ -160,13 +160,58 @@ pub struct ArrayI8Iterator<'a> {
 impl Iterator for ArrayI8Iterator<'_> {
     type Item = i8;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.rest.is_empty() {
             None
         } else {
-            let result = self.rest[0] as i8;
+            let result = i8::from_ne_bytes([self.rest[0]]);
             self.rest = &self.rest[1..];
             Some(result)
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.rest.len(), Some(self.rest.len()))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.rest.len()
+    }
+
+    #[inline]
+    fn last(self) -> Option<Self::Item> {
+        self.rest.last().map(|v| i8::from_ne_bytes([*v]))
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if n < self.rest.len() {
+            let result = i8::from_ne_bytes([
+                unsafe {
+                    // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                    *self.rest.get_unchecked(n)
+                }
+            ]);
+            self.rest = unsafe {
+                // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                core::slice::from_raw_parts(
+                    self.rest.as_ptr().add(n + 1),
+                    self.rest.len() - n - 1
+                )
+            };
+            Some(result)
+        } else {
+            self.rest = unsafe {
+                // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                core::slice::from_raw_parts(
+                    self.rest.as_ptr().add(self.rest.len()),
+                    0
+                )
+            };
+            None
         }
     }
 }
