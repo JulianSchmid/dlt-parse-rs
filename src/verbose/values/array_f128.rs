@@ -75,9 +75,10 @@ impl<'a> ArrayF128<'a> {
             }
             buf.try_extend_from_slice(self.data)?;
         } else {
-            let number_of_dimensions = match is_big_endian {
-                true => (self.dimensions.dimensions.len() as u16 / 2).to_be_bytes(),
-                false => (self.dimensions.dimensions.len() as u16 / 2).to_le_bytes(),
+            let number_of_dimensions = if is_big_endian {
+                (self.dimensions.dimensions.len() as u16 / 2).to_be_bytes()
+            } else {
+                (self.dimensions.dimensions.len() as u16 / 2).to_le_bytes()
             };
             let type_info: [u8; 4] = [0b1000_0101, 0b0000_0001, 0b0000_0000, 0b0000_0000];
             buf.try_extend_from_slice(&type_info)?;

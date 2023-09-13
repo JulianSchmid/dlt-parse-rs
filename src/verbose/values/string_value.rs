@@ -16,15 +16,16 @@ impl<'a> StringValue<'a> {
     ) -> Result<(), CapacityError> {
         if let Some(name) = self.name {
             let type_info = [0b0000_0000, 0b0000_1010, 0b0000_0000, 0b0000_0000];
-            let (value_len, name_len) = match is_big_endian {
-                true => (
+            let (value_len, name_len) = if is_big_endian {
+                (
                     (self.value.len() as u16 + 1).to_be_bytes(),
                     (name.len() as u16 + 1).to_be_bytes(),
-                ),
-                false => (
+                )
+            } else {
+                (
                     (self.value.len() as u16 + 1).to_le_bytes(),
                     (name.len() as u16 + 1).to_le_bytes(),
-                ),
+                )
             };
             buf.try_extend_from_slice(&type_info)?;
             buf.try_extend_from_slice(&[value_len[0], value_len[1], name_len[0], name_len[1]])?;
@@ -37,9 +38,10 @@ impl<'a> StringValue<'a> {
             }
         } else {
             let type_info = [0b0000_0000, 0b0000_0010, 0b0000_0000, 0b0000_0000];
-            let value_len = match is_big_endian {
-                true => (self.value.len() as u16 + 1).to_be_bytes(),
-                false => (self.value.len() as u16 + 1).to_le_bytes(),
+            let value_len = if is_big_endian {
+                (self.value.len() as u16 + 1).to_be_bytes()
+            } else {
+                (self.value.len() as u16 + 1).to_le_bytes()
             };
             buf.try_extend_from_slice(&type_info)?;
             buf.try_extend_from_slice(&[value_len[0], value_len[1]])?;

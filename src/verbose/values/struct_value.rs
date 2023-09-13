@@ -17,15 +17,16 @@ impl<'a> StructValue<'a> {
     ) -> Result<(), CapacityError> {
         if let Some(name) = self.name {
             let type_info = [0b0000_0000, 0b0100_1000, 0b0000_0000, 0b0000_0000];
-            let (number_of_entries, name_len) = match is_big_endian {
-                true => (
+            let (number_of_entries, name_len) = if is_big_endian {
+                (
                     self.number_of_entries.to_be_bytes(),
                     (name.len() as u16 + 1).to_be_bytes(),
-                ),
-                false => (
+                )
+            } else {
+                (
                     self.number_of_entries.to_le_bytes(),
                     (name.len() as u16 + 1).to_le_bytes(),
-                ),
+                )
             };
             buf.try_extend_from_slice(&type_info)?;
             buf.try_extend_from_slice(&number_of_entries)?;
@@ -39,9 +40,10 @@ impl<'a> StructValue<'a> {
             }
         } else {
             let type_info = [0b0000_0000, 0b0100_0000, 0b0000_0000, 0b0000_0000];
-            let number_of_entries = match is_big_endian {
-                true => self.number_of_entries.to_be_bytes(),
-                false => self.number_of_entries.to_le_bytes(),
+            let number_of_entries = if is_big_endian {
+                self.number_of_entries.to_be_bytes()
+            } else {
+                self.number_of_entries.to_le_bytes()
             };
             buf.try_extend_from_slice(&type_info)?;
             buf.try_extend_from_slice(&[number_of_entries[0], number_of_entries[1]])?;
