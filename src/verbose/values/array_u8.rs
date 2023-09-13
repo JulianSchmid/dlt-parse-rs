@@ -159,13 +159,65 @@ impl<'a> Serialize for ArrayU8<'a> {
 impl Iterator for ArrayU8Iterator<'_> {
     type Item = u8;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.rest.is_empty() {
             None
         } else {
-            let result = self.rest[0];
-            self.rest = &self.rest[1..];
+            let result = unsafe {
+                // SAFETY: Safe as has at least one element.
+                *self.rest.get_unchecked(0)
+            };
+            self.rest = unsafe {
+                core::slice::from_raw_parts(
+                    // SAFETY: Safe as has at least one element.
+                    self.rest.as_ptr().add(1),
+                    self.rest.len() - 1
+                )
+            };
             Some(result)
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.rest.len(), Some(self.rest.len()))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.rest.len()
+    }
+
+    #[inline]
+    fn last(self) -> Option<Self::Item> {
+        self.rest.last().map(|v| *v)
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if n < self.rest.len() {
+            let result = unsafe {
+                // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                *self.rest.get_unchecked(n)
+            };
+            self.rest = unsafe {
+                // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                core::slice::from_raw_parts(
+                    self.rest.as_ptr().add(n + 1),
+                    self.rest.len() - n - 1
+                )
+            };
+            Some(result)
+        } else {
+            self.rest = unsafe {
+                // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                core::slice::from_raw_parts(
+                    self.rest.as_ptr().add(self.rest.len()),
+                    0
+                )
+            };
+            None
         }
     }
 }
@@ -903,33 +955,49 @@ mod test {
         #[test]
         fn iterator(dim_count in 0u16..5) {
 
-            // test big endian without name & scaling
-            {
-                let is_big_endian = true;
+            let is_big_endian = true;
 
-                let variable_info = None;
-                let scaling = None;
+            let variable_info = None;
+            let scaling = None;
 
-                let mut dimensions = Vec::with_capacity(dim_count as usize);
-                let mut content = Vec::with_capacity(dim_count as usize);
+            let mut dimensions = Vec::with_capacity(dim_count as usize);
+            let mut content = Vec::with_capacity(dim_count as usize);
 
-                for i in 0..dim_count {
-                        dimensions.extend_from_slice(&(i+1).to_be_bytes());
-                    for x in 0u8..=i as u8 {
-                        content.push(x);       // Sample U8s
-                    }
+            for i in 0..dim_count {
+                    dimensions.extend_from_slice(&(i+1).to_be_bytes());
+                for x in 0u8..=i as u8 {
+                    content.push(x);       // Sample U8s
                 }
+            }
 
-                let arr_dim = ArrayDimensions { is_big_endian, dimensions: &dimensions };
-                let arr_u8 = ArrayU8 {variable_info, dimensions:arr_dim,data: &content, scaling };
+            let arr_dim = ArrayDimensions { is_big_endian, dimensions: &dimensions };
+            let arr = ArrayU8 {variable_info, dimensions:arr_dim,data: &content, scaling };
 
+            // normal iteration
+            {
                 let mut cnt = 0;
-                for item in arr_u8.iter() {
+                for item in arr.iter() {
                     prop_assert_eq!(item, content[cnt]);
                     cnt += 1;
                 }
+            }
 
-                }
+            // size_hint
+            assert_eq!(arr.into_iter().size_hint(), (content.len(), Some(content.len())));
+
+            // count
+            assert_eq!(arr.into_iter().count(), content.len());
+
+            // test last
+            assert_eq!(arr.into_iter().last(), content.last().map(|v| *v));
+            
+            // test nth
+            for i in 0..content.len() {
+                let mut it = arr.into_iter();
+                assert_eq!(it.nth(i), Some(content[i]));
+                assert_eq!(it.rest.len(), content.len() - i - 1);
+            }
+            assert_eq!(arr.into_iter().nth(content.len()), None);
         }
     }
 
