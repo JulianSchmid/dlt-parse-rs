@@ -70,11 +70,6 @@ impl<'a> U128Value<'a> {
                     return Err(CapacityError::new(()));
                 }
             }
-
-            match is_big_endian {
-                true => buf.try_extend_from_slice(&self.value.to_be_bytes()),
-                false => buf.try_extend_from_slice(&self.value.to_le_bytes()),
-            }
         }
         // No name & unit
         else if let Some(scaler) = &self.scaling {
@@ -92,19 +87,16 @@ impl<'a> U128Value<'a> {
             buf.try_extend_from_slice(&type_info)?;
             buf.try_extend_from_slice(&quantization)?;
             buf.try_extend_from_slice(&offset)?;
-
-            match is_big_endian {
-                true => buf.try_extend_from_slice(&self.value.to_be_bytes()),
-                false => buf.try_extend_from_slice(&self.value.to_le_bytes()),
-            }
         } else {
             let type_info: [u8; 4] = [0b0100_0101, 0b0000_0000, 0b0000_0000, 0b0000_0000];
             buf.try_extend_from_slice(&type_info)?;
+        }
 
-            match is_big_endian {
-                true => buf.try_extend_from_slice(&self.value.to_be_bytes()),
-                false => buf.try_extend_from_slice(&self.value.to_le_bytes()),
-            }
+        // value
+        if is_big_endian {
+            buf.try_extend_from_slice(&self.value.to_be_bytes())
+        } else {
+            buf.try_extend_from_slice(&self.value.to_le_bytes())
         }
     }
 }

@@ -44,12 +44,11 @@ impl<'a> F32Value<'a> {
             buf.try_extend_from_slice(&type_info)?;
         }
 
-        match is_big_endian {
-            true => buf.try_extend_from_slice(&self.value.to_be_bytes())?,
-            false => buf.try_extend_from_slice(&self.value.to_le_bytes())?,
+        if is_big_endian {
+            buf.try_extend_from_slice(&self.value.to_be_bytes())
+        } else {
+            buf.try_extend_from_slice(&self.value.to_le_bytes())
         }
-
-        Ok(())
     }
 }
 

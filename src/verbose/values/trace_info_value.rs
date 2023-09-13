@@ -14,9 +14,10 @@ impl<'a> TraceInfoValue<'a> {
         is_big_endian: bool,
     ) -> Result<(), CapacityError> {
         let type_info = [0b0000_0000, 0b0010_0000, 0b0000_0000, 0b0000_0000];
-        let value_len = match is_big_endian {
-            true => (self.value.len() as u16 + 1).to_be_bytes(),
-            false => (self.value.len() as u16 + 1).to_le_bytes(),
+        let value_len = if is_big_endian {
+            (self.value.len() as u16 + 1).to_be_bytes()
+        } else {
+            (self.value.len() as u16 + 1).to_le_bytes()
         };
         buf.try_extend_from_slice(&type_info)?;
         buf.try_extend_from_slice(&[value_len[0], value_len[1]])?;

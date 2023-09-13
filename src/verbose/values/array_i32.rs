@@ -97,9 +97,10 @@ impl<'a> ArrayI32<'a> {
                 Ok(())
             }
         } else {
-            let number_of_dimensions = match is_big_endian {
-                true => (self.dimensions.dimensions.len() as u16 / 2).to_be_bytes(),
-                false => (self.dimensions.dimensions.len() as u16 / 2).to_le_bytes(),
+            let number_of_dimensions = if is_big_endian {
+                (self.dimensions.dimensions.len() as u16 / 2).to_be_bytes()
+            } else {
+                (self.dimensions.dimensions.len() as u16 / 2).to_le_bytes()
             };
 
             if let Some(scaler) = &self.scaling {
