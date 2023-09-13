@@ -4,7 +4,7 @@ use arrayvec::{ArrayVec, CapacityError};
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct RawValue<'a> {
     pub name: Option<&'a str>,
-    pub(crate) data: &'a [u8],
+    pub data: &'a [u8],
 }
 
 impl<'a> RawValue<'a> {
