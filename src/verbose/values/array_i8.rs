@@ -189,27 +189,19 @@ impl Iterator for ArrayI8Iterator<'_> {
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
         if n < self.rest.len() {
-            let result = i8::from_ne_bytes([
-                unsafe {
-                    // SAFETY: Safe as the length is checked beforehand to be at least n + 1
-                    *self.rest.get_unchecked(n)
-                }
-            ]);
+            let result = i8::from_ne_bytes([unsafe {
+                // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                *self.rest.get_unchecked(n)
+            }]);
             self.rest = unsafe {
                 // SAFETY: Safe as the length is checked beforehand to be at least n + 1
-                core::slice::from_raw_parts(
-                    self.rest.as_ptr().add(n + 1),
-                    self.rest.len() - n - 1
-                )
+                core::slice::from_raw_parts(self.rest.as_ptr().add(n + 1), self.rest.len() - n - 1)
             };
             Some(result)
         } else {
             self.rest = unsafe {
                 // SAFETY: Safe as the length is checked beforehand to be at least n + 1
-                core::slice::from_raw_parts(
-                    self.rest.as_ptr().add(self.rest.len()),
-                    0
-                )
+                core::slice::from_raw_parts(self.rest.as_ptr().add(self.rest.len()), 0)
             };
             None
         }

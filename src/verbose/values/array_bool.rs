@@ -129,10 +129,7 @@ impl Iterator for ArrayBoolIterator<'_> {
             };
             self.rest = unsafe {
                 // SAFETY: Safe as len at least 1.
-                core::slice::from_raw_parts(
-                    self.rest.as_ptr().add(1),
-                    self.rest.len() - 1
-                )
+                core::slice::from_raw_parts(self.rest.as_ptr().add(1), self.rest.len() - 1)
             };
             Some(result)
         }
@@ -162,19 +159,13 @@ impl Iterator for ArrayBoolIterator<'_> {
             };
             self.rest = unsafe {
                 // SAFETY: Safe as len at least n + 1.
-                core::slice::from_raw_parts(
-                    self.rest.as_ptr().add(n + 1),
-                    self.rest.len() - n - 1
-                )
+                core::slice::from_raw_parts(self.rest.as_ptr().add(n + 1), self.rest.len() - n - 1)
             };
             Some(result)
         } else {
             self.rest = unsafe {
                 // SAFETY: Safe as reduced to len 0.
-                core::slice::from_raw_parts(
-                    self.rest.as_ptr().add(self.rest.len()),
-                    0
-                )
+                core::slice::from_raw_parts(self.rest.as_ptr().add(self.rest.len()), 0)
             };
             None
         }
@@ -582,7 +573,7 @@ mod test {
 
             // test last
             assert_eq!(arr.into_iter().last(), content.last().map(|v| *v != 0));
-            
+
             // test nth
             for i in 0..content.len() {
                 let mut it = arr.into_iter();
