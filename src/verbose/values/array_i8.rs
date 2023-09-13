@@ -1041,38 +1041,54 @@ mod test {
         #[test]
         fn iterator(dim_count in 0u16..5) {
 
-            // test big endian without name & scaling
-            {
-                let is_big_endian = true;
+            let is_big_endian = true;
 
-                let variable_info = None;
-                let scaling = None;
+            let variable_info = None;
+            let scaling = None;
 
-                let mut dimensions = Vec::with_capacity(dim_count as usize);
-                let mut content = Vec::with_capacity(dim_count as usize);
+            let mut dimensions = Vec::with_capacity(dim_count as usize);
+            let mut content = Vec::with_capacity(dim_count as usize);
 
-                for i in 0..dim_count {
-                        dimensions.extend_from_slice(&(i+1).to_be_bytes());
-                    for x in 0..=i as i8 {
-                        if x % 2 == 0 {
-                            content.push(x as u8);       // Sample I8s
-                        }
-                        else {
-                            content.push((-1 * x) as u8);       // Sample I8s
-                        }
+            for i in 0..dim_count {
+                    dimensions.extend_from_slice(&(i+1).to_be_bytes());
+                for x in 0..=i as i8 {
+                    if x % 2 == 0 {
+                        content.push(x as u8);       // Sample I8s
+                    }
+                    else {
+                        content.push((-1 * x) as u8);       // Sample I8s
                     }
                 }
+            }
 
-                let arr_dim = ArrayDimensions { is_big_endian, dimensions: &dimensions };
-                let arr = ArrayI8 {variable_info, dimensions:arr_dim,data: &content, scaling };
+            let arr_dim = ArrayDimensions { is_big_endian, dimensions: &dimensions };
+            let arr = ArrayI8 {variable_info, dimensions:arr_dim,data: &content, scaling };
 
+            // normal iteration
+            {
                 let mut cnt = 0;
                 for item in arr.iter() {
                     prop_assert_eq!(item, content[cnt] as i8);
                     cnt += 1;
                 }
+            }
 
-                }
+            // size_hint
+            assert_eq!(arr.into_iter().size_hint(), (content.len(), Some(content.len())));
+
+            // count
+            assert_eq!(arr.into_iter().count(), content.len());
+
+            // test last
+            assert_eq!(arr.into_iter().last(), content.last().map(|v| i8::from_ne_bytes([*v])));
+
+            // test nth
+            for i in 0..content.len() {
+                let mut it = arr.into_iter();
+                assert_eq!(it.nth(i), Some(i8::from_ne_bytes([content[i]])));
+                assert_eq!(it.rest.len(), content.len() - i - 1);
+            }
+            assert_eq!(arr.into_iter().nth(content.len()), None);
         }
     }
 
