@@ -127,6 +127,29 @@ impl Iterator for ArrayBoolIterator<'_> {
             Some(result)
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.rest.len(), Some(self.rest.len()))
+    }
+
+    fn count(self) -> usize {
+        self.rest.len()
+    }
+
+    fn last(self) -> Option<Self::Item> {
+        self.rest.last().map(|v| *v != 0)
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if n < self.rest.len() {
+            let result = self.rest[n] != 0;
+            self.rest = &self.rest[n + 1..];
+            Some(result)
+        } else {
+            self.rest = &self.rest[self.rest.len()..];
+            None
+        }
+    }
 }
 
 impl<'a> IntoIterator for &'a ArrayBool<'a> {
@@ -497,32 +520,47 @@ mod test {
         #[test]
         fn iterator(dim_count in 0u16..5) {
 
-            // test big endian without name
-            {
-                let is_big_endian = true;
+            let is_big_endian = true;
+            let variable_info = None;
 
-                let variable_info = None;
+            let mut dimensions = Vec::with_capacity(dim_count as usize);
+            let mut content = Vec::with_capacity(dim_count as usize);
 
-                let mut dimensions = Vec::with_capacity(dim_count as usize);
-                let mut content = Vec::with_capacity(dim_count as usize);
-
-                for i in 0..dim_count {
-                        dimensions.extend_from_slice(&(i+1).to_be_bytes());
-                    for x in 0u8..=i as u8 {
-                        content.push(x % 2);
-                    }
+            for i in 0..dim_count {
+                dimensions.extend_from_slice(&(i+1).to_be_bytes());
+                for x in 0..=i {
+                    content.push((x as u8) % 2);
                 }
+            }
 
-                let arr_dim = ArrayDimensions { is_big_endian, dimensions: &dimensions };
-                let arr_u8 = ArrayBool {variable_info, dimensions:arr_dim,data: &content };
+            let arr_dim = ArrayDimensions { is_big_endian, dimensions: &dimensions };
+            let arr = ArrayBool {variable_info, dimensions: arr_dim,data: &content };
 
+            // normal iteration
+            {
                 let mut cnt = 0;
-                for item in arr_u8.iter() {
+                for item in arr.iter() {
                     prop_assert_eq!(item, content[cnt] != 0);
                     cnt += 1;
                 }
+            }
 
-                }
+            // size_hint
+            assert_eq!(arr.into_iter().size_hint(), (content.len(), Some(content.len())));
+
+            // count
+            assert_eq!(arr.into_iter().count(), content.len());
+
+            // test last
+            assert_eq!(arr.into_iter().last(), content.last().map(|v| *v != 0));
+            
+            // test nth
+            for i in 0..content.len() {
+                let mut it = arr.into_iter();
+                assert_eq!(it.nth(i), Some(content[i] != 0));
+                assert_eq!(it.rest.len(), content.len() - i - 1);
+            }
+            assert_eq!(arr.into_iter().nth(content.len()), None);
         }
     }
     #[cfg(feature = "serde")]
