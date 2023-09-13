@@ -31,12 +31,14 @@ impl<'a> ArrayF16<'a> {
     pub fn data(&self) -> &'a [u8] {
         self.data
     }
+
     pub fn iter(&'a self) -> ArrayF16Iterator<'a> {
         ArrayF16Iterator {
             is_big_endian: self.is_big_endian,
             rest: self.data,
         }
     }
+
     /// Adds the verbose value to the given dlt mesage buffer.
     pub fn add_to_msg<const CAP: usize>(
         &self,
@@ -134,17 +136,80 @@ impl<'a> Serialize for ArrayF16Iterator<'a> {
 impl Iterator for ArrayF16Iterator<'_> {
     type Item = F16;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.rest.len() < 2 {
             None
         } else {
-            let result = if self.is_big_endian {
-                u16::from_be_bytes([self.rest[0], self.rest[1]])
-            } else {
-                u16::from_le_bytes([self.rest[0], self.rest[1]])
+            let bytes = unsafe {
+                // SAFETY: Safe as len checked to be at least 2.
+                [*self.rest.get_unchecked(0), *self.rest.get_unchecked(1)]
             };
-            self.rest = &self.rest[2..];
+            let result = if self.is_big_endian {
+                u16::from_be_bytes(bytes)
+            } else {
+                u16::from_le_bytes(bytes)
+            };
+            self.rest = unsafe{
+                // SAFETY: Safe as len checked to be at least 2.
+                core::slice::from_raw_parts(self.rest.as_ptr().add(2), self.rest.len() - 2)
+            };
             Some(F16(result))
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.rest.len()/2, Some(self.rest.len()/2))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.rest.len()/2
+    }
+
+    #[inline]
+    fn last(self) -> Option<Self::Item> {
+        if self.rest.len() < 2 {
+            None
+        } else {
+            let last_index = ((self.rest.len() / 2) - 1)*2;
+            let bytes = unsafe {
+                // SAFETY: Safe as len checked to be at least 2.
+                [*self.rest.get_unchecked(last_index), *self.rest.get_unchecked(last_index + 1)]
+            };
+            Some(F16(if self.is_big_endian {
+                u16::from_be_bytes(bytes)
+            } else {
+                u16::from_le_bytes(bytes)
+            }))
+        }
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        // Formula converted to ensure no overflow occurs:
+        //    n*2 + 1 < self.rest.len()
+        //    n*2 < self.rest.len() - 1
+        //    n < (self.rest.len() - 1) / 2
+        if self.rest.len() > 0 && n < (self.rest.len() - 1)/2 {
+            let index = n*2;
+            let result = u16::from_ne_bytes(unsafe {[
+                // SAFETY: Safe as the length is checked beforehand to be at least n*2 + 2
+                *self.rest.get_unchecked(index),
+                *self.rest.get_unchecked(index + 1)
+            ]});
+            self.rest = unsafe {
+                // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                core::slice::from_raw_parts(self.rest.as_ptr().add(index + 2), self.rest.len() - index - 2)
+            };
+            Some(F16(result))
+        } else {
+            self.rest = unsafe {
+                // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                core::slice::from_raw_parts(self.rest.as_ptr().add(self.rest.len()), 0)
+            };
+            None
         }
     }
 }
@@ -269,8 +334,7 @@ mod test {
                 // Now wrap back
                 let parsed_back = VerboseValue::from_slice(&msg_buff, is_big_endian);
                 prop_assert_eq!(parsed_back, Ok((ArrF16(arr),&[] as &[u8])));
-
-                }
+            }
 
             // test big endian without name
             {
@@ -305,8 +369,7 @@ mod test {
                 // Now wrap back
                 let parsed_back = VerboseValue::from_slice(&msg_buff, is_big_endian);
                 prop_assert_eq!(parsed_back, Ok((ArrF16(arr),&[] as &[u8])));
-
-                }
+            }
 
             // test little endian without name
             {
@@ -341,8 +404,7 @@ mod test {
                 // Now wrap back
                 let parsed_back = VerboseValue::from_slice(&msg_buff, is_big_endian);
                 prop_assert_eq!(parsed_back, Ok((ArrF16(arr),&[] as &[u8])));
-
-                }
+            }
 
 
              // Capacity error big endian with name
@@ -372,8 +434,11 @@ mod test {
 
                 // Now wrap back
                 let parsed_back = VerboseValue::from_slice(&msg_buff, is_big_endian);
-                prop_assert_eq!(parsed_back, Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { layer: crate::error::Layer::VerboseValue, minimum_size: msg_buff.len() + size_of::<InternalTypes>() * dim_count as usize, actual_size: msg_buff.len() })));
-
+                prop_assert_eq!(parsed_back, Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                    layer: crate::error::Layer::VerboseValue,
+                    minimum_size: msg_buff.len() + size_of::<InternalTypes>() * dim_count as usize,
+                    actual_size: msg_buff.len()
+                })));
             }
 
              // Capacity error little endian with name
