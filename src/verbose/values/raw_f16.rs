@@ -10,6 +10,12 @@ impl RawF16 {
     const EXPO_MASK: u16 = 0b0111_1100_0000_0000;
     const FRAC_MASK: u16 = 0b0000_0011_1111_1111;
 
+    pub const ZERO: RawF16 = RawF16::from_bits(0);
+    pub const ONE: RawF16 = RawF16::from_bits(0b0011_1100_0000_0000);
+    pub const NAN: RawF16 = RawF16::from_bits(0b0111_1100_0000_0001);
+    pub const INFINITY: RawF16 = RawF16::from_bits(0b0111_1100_0000_0000);
+    pub const NEGATIVE_INFINITY: RawF16 = RawF16::from_bits(0b1111_1100_0000_0000);
+
     /// Converts the f16 to a f32.
     #[inline]
     pub fn to_f32(self) -> f32 {
@@ -122,6 +128,15 @@ mod tests {
     use proptest::prelude::*;
 
     #[test]
+    fn constant() {
+        assert_eq!(0.0, RawF16::ZERO.to_f32());
+        assert_eq!(1.0, RawF16::ONE.to_f32());
+        assert!(RawF16::NAN.to_f32().is_nan());
+        assert!(RawF16::INFINITY.to_f32().is_infinite());
+        assert!(RawF16::NEGATIVE_INFINITY.to_f32().is_infinite());
+    }
+
+    #[test]
     fn to_f32() {
         // zero
         assert_eq!(0.0, RawF16([0, 0]).to_f32());
@@ -129,10 +144,15 @@ mod tests {
         // one
         assert_eq!(1.0, RawF16::from_bits(0b0_01111_0000000000).to_f32());
 
-        // nan
+        // infinite
         assert!(RawF16::from_bits(0b0111_1100_0000_0000)
             .to_f32()
             .is_infinite());
+
+        // nan
+        assert!(RawF16::from_bits(0b0111_1100_0000_0001)
+            .to_f32()
+            .is_nan());
 
         // largest normal number
         assert_eq!(65504.0, RawF16::from_bits(0b0111_1011_1111_1111).to_f32());
@@ -229,6 +249,18 @@ mod tests {
             } else {
                 assert_eq!(actual, v.to_f32());
             }
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    proptest! {
+        #[test]
+        fn serialize(value in any::<u16>()) {
+            let v = RawF16(value.to_ne_bytes());
+            assert_eq!(
+                serde_json::to_string(&v.to_f32()).unwrap(),
+                serde_json::to_string(&v).unwrap()
+            );
         }
     }
 }
