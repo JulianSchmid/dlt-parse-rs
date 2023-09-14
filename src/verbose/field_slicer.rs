@@ -1,6 +1,6 @@
 use crate::error::{Layer, UnexpectedEndOfSliceError, VerboseDecodeError};
 
-use super::{ArrayDimensions, Scaling, RawF16};
+use super::{ArrayDimensions, RawF16, Scaling};
 
 /// Helper for parsing verbose messages.
 pub(crate) struct FieldSlicer<'a> {
