@@ -138,7 +138,7 @@ impl Iterator for ArrayF16Iterator<'_> {
             } else {
                 RawF16::from_le_bytes(bytes)
             };
-            self.rest = unsafe{
+            self.rest = unsafe {
                 // SAFETY: Safe as len checked to be at least 2.
                 core::slice::from_raw_parts(self.rest.as_ptr().add(2), self.rest.len() - 2)
             };
@@ -148,12 +148,12 @@ impl Iterator for ArrayF16Iterator<'_> {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.rest.len()/2, Some(self.rest.len()/2))
+        (self.rest.len() / 2, Some(self.rest.len() / 2))
     }
 
     #[inline]
     fn count(self) -> usize {
-        self.rest.len()/2
+        self.rest.len() / 2
     }
 
     #[inline]
@@ -161,10 +161,13 @@ impl Iterator for ArrayF16Iterator<'_> {
         if self.rest.len() < 2 {
             None
         } else {
-            let last_index = ((self.rest.len() / 2) - 1)*2;
+            let last_index = ((self.rest.len() / 2) - 1) * 2;
             let bytes = unsafe {
                 // SAFETY: Safe as len checked to be at least 2.
-                [*self.rest.get_unchecked(last_index), *self.rest.get_unchecked(last_index + 1)]
+                [
+                    *self.rest.get_unchecked(last_index),
+                    *self.rest.get_unchecked(last_index + 1),
+                ]
             };
             Some(if self.is_big_endian {
                 RawF16::from_be_bytes(bytes)
@@ -180,13 +183,15 @@ impl Iterator for ArrayF16Iterator<'_> {
         //    n*2 + 2 <= self.rest.len()
         //    n*2 <= self.rest.len() - 2
         //    n <= (self.rest.len() - 2) / 2
-        if self.rest.len() >= 2 && n <= (self.rest.len() - 2)/2 {
-            let index = n*2;
-            let bytes = unsafe {[
-                // SAFETY: Safe as the length is checked beforehand to be at least n*2 + 2
-                *self.rest.get_unchecked(index),
-                *self.rest.get_unchecked(index + 1)
-            ]};
+        if self.rest.len() >= 2 && n <= (self.rest.len() - 2) / 2 {
+            let index = n * 2;
+            let bytes = unsafe {
+                [
+                    // SAFETY: Safe as the length is checked beforehand to be at least n*2 + 2
+                    *self.rest.get_unchecked(index),
+                    *self.rest.get_unchecked(index + 1),
+                ]
+            };
             let result = if self.is_big_endian {
                 RawF16::from_be_bytes(bytes)
             } else {
@@ -194,7 +199,10 @@ impl Iterator for ArrayF16Iterator<'_> {
             };
             self.rest = unsafe {
                 // SAFETY: Safe as the length is checked beforehand to be at least n + 1
-                core::slice::from_raw_parts(self.rest.as_ptr().add(index + 2), self.rest.len() - index - 2)
+                core::slice::from_raw_parts(
+                    self.rest.as_ptr().add(index + 2),
+                    self.rest.len() - index - 2,
+                )
             };
             Some(result)
         } else {
