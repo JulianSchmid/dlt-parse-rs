@@ -2,7 +2,7 @@
 /// 
 /// This is needed as Rust does not support (and most systems)
 /// don't support 16 bit floating point values. 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct RawF16(pub [u8;2]);
 
 impl RawF16 {
@@ -80,7 +80,13 @@ impl RawF16 {
         self.0
     }
 
-    /// Raw transmutation to u16.
+    /// Raw transmutation from `u16`.
+    #[inline]
+    pub const fn from_bits(bits: u16) -> RawF16 {
+        RawF16(bits.to_ne_bytes())
+    }
+
+    /// Raw transmutation to `u16`.
     #[inline]
     pub const fn to_bits(self) -> u16 {
         u16::from_ne_bytes(self.0)
