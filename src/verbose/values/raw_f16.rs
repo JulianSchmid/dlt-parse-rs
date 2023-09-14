@@ -218,4 +218,17 @@ mod tests {
             );
         }
     }
+
+    proptest! {
+        #[test]
+        fn from_f16_to_f32(value in any::<u16>()) {
+            let v = RawF16(value.to_ne_bytes());
+            let actual: f32 = v.into();
+            if actual.is_nan() {
+                assert!(v.to_f32().is_nan());
+            } else {
+                assert_eq!(actual, v.to_f32());
+            }
+        }
+    }
 }
