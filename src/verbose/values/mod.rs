@@ -49,6 +49,9 @@ pub use string_value::*;
 mod raw_f16;
 pub use raw_f16::*;
 
+mod raw_f128;
+pub use raw_f128::*;
+
 mod raw_value;
 pub use raw_value::*;
 
