@@ -4,7 +4,7 @@ use super::{
     ArrayI128Iterator, ArrayI16Iterator, ArrayI32Iterator, ArrayI64Iterator, ArrayI8Iterator,
     ArrayU128Iterator, ArrayU16Iterator, ArrayU32Iterator, ArrayU64Iterator, ArrayU8Iterator,
 };
-use super::{RawF16, F128};
+use super::{RawF16, RawF128};
 #[cfg(feature = "serde")]
 use crate::verbose::std::mem::size_of;
 #[cfg(feature = "serde")]
@@ -310,7 +310,7 @@ impl ArrayIteratable for f64 {
 }
 
 #[cfg(feature = "serde")]
-impl ArrayIteratable for F128 {
+impl ArrayIteratable for RawF128 {
     const ELEMENT_SIZE: usize = 16;
 
     fn serialize_elements<S: Serializer>(

@@ -3,7 +3,7 @@
 /// This is needed as Rust does not support (and most systems)
 /// don't support 16 bit floating point values.
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct RawF16(pub [u8; 2]);
+pub struct RawF16(u16);
 
 impl RawF16 {
     const SIGN_MASK: u16 = 0b1000_0000_0000_0000;
@@ -19,7 +19,7 @@ impl RawF16 {
     /// Converts the f16 to a f32.
     #[inline]
     pub fn to_f32(self) -> f32 {
-        let raw_u16 = u16::from_ne_bytes(self.0);
+        let raw_u16 = self.0;
         // extract elements & re-shift to f32
         //
         // f16
@@ -54,54 +54,54 @@ impl RawF16 {
     /// byte array in big endian.
     #[inline]
     pub const fn from_be_bytes(bytes: [u8; 2]) -> RawF16 {
-        RawF16(u16::from_be_bytes(bytes).to_ne_bytes())
+        RawF16(u16::from_be_bytes(bytes))
     }
 
     /// Create a floating point value from its representation as a
     /// byte array in little endian.
     #[inline]
     pub const fn from_le_bytes(bytes: [u8; 2]) -> RawF16 {
-        RawF16(u16::from_le_bytes(bytes).to_ne_bytes())
+        RawF16(u16::from_le_bytes(bytes))
     }
 
     /// Create a floating point value from its representation as a byte
     /// array in native endian.
     #[inline]
     pub const fn from_ne_bytes(bytes: [u8; 2]) -> RawF16 {
-        RawF16(bytes)
+        RawF16(u16::from_ne_bytes(bytes))
     }
 
     /// Return the memory representation of this floating point number
     /// as a byte array in big-endian (network) byte order.
     #[inline]
     pub const fn to_be_bytes(self) -> [u8; 2] {
-        u16::from_ne_bytes(self.0).to_be_bytes()
+        self.0.to_be_bytes()
     }
 
     /// Return the memory representation of this floating point number
     /// as a byte array in little-endian byte order
     #[inline]
     pub const fn to_le_bytes(self) -> [u8; 2] {
-        u16::from_ne_bytes(self.0).to_le_bytes()
+        self.0.to_le_bytes()
     }
 
     /// Return the memory representation of this floating point number as
     /// a byte array in native byte order.
     #[inline]
     pub const fn to_ne_bytes(self) -> [u8; 2] {
-        self.0
+        self.0.to_ne_bytes()
     }
 
     /// Raw transmutation from `u16`.
     #[inline]
     pub const fn from_bits(bits: u16) -> RawF16 {
-        RawF16(bits.to_ne_bytes())
+        RawF16(bits)
     }
 
     /// Raw transmutation to `u16`.
     #[inline]
     pub const fn to_bits(self) -> u16 {
-        u16::from_ne_bytes(self.0)
+        self.0
     }
 }
 
@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn to_f32() {
         // zero
-        assert_eq!(0.0, RawF16([0, 0]).to_f32());
+        assert_eq!(0.0, RawF16(0).to_f32());
 
         // one
         assert_eq!(1.0, RawF16::from_bits(0b0_01111_0000000000).to_f32());
@@ -163,7 +163,7 @@ mod tests {
         #[test]
         fn from_be_bytes(value in any::<u16>()) {
             assert_eq!(
-                value.to_ne_bytes(),
+                value,
                 RawF16::from_be_bytes(value.to_be_bytes()).0
             );
         }
@@ -173,7 +173,7 @@ mod tests {
         #[test]
         fn from_le_bytes(value in any::<u16>()) {
             assert_eq!(
-                value.to_ne_bytes(),
+                value,
                 RawF16::from_le_bytes(value.to_le_bytes()).0
             );
         }
@@ -183,7 +183,7 @@ mod tests {
         #[test]
         fn from_ne_bytes(value in any::<u16>()) {
             assert_eq!(
-                value.to_ne_bytes(),
+                value,
                 RawF16::from_ne_bytes(value.to_ne_bytes()).0
             );
         }
@@ -194,7 +194,7 @@ mod tests {
         fn to_be_bytes(value in any::<u16>()) {
             assert_eq!(
                 value.to_be_bytes(),
-                RawF16(value.to_ne_bytes()).to_be_bytes()
+                RawF16(value).to_be_bytes()
             );
         }
     }
@@ -204,7 +204,7 @@ mod tests {
         fn to_le_bytes(value in any::<u16>()) {
             assert_eq!(
                 value.to_le_bytes(),
-                RawF16(value.to_ne_bytes()).to_le_bytes()
+                RawF16(value).to_le_bytes()
             );
         }
     }
@@ -214,7 +214,7 @@ mod tests {
         fn to_ne_bytes(value in any::<u16>()) {
             assert_eq!(
                 value.to_ne_bytes(),
-                RawF16(value.to_ne_bytes()).to_ne_bytes()
+                RawF16(value).to_ne_bytes()
             );
         }
     }
@@ -223,7 +223,7 @@ mod tests {
         #[test]
         fn from_bits(value in any::<u16>()) {
             assert_eq!(
-                value.to_ne_bytes(),
+                value,
                 RawF16::from_bits(value).0
             );
         }
@@ -234,7 +234,7 @@ mod tests {
         fn to_bits(value in any::<u16>()) {
             assert_eq!(
                 value,
-                RawF16(value.to_ne_bytes()).to_bits()
+                RawF16(value).to_bits()
             );
         }
     }
@@ -242,7 +242,7 @@ mod tests {
     proptest! {
         #[test]
         fn from_f16_to_f32(value in any::<u16>()) {
-            let v = RawF16(value.to_ne_bytes());
+            let v = RawF16(value);
             let actual: f32 = v.into();
             if actual.is_nan() {
                 assert!(v.to_f32().is_nan());
@@ -256,7 +256,7 @@ mod tests {
     proptest! {
         #[test]
         fn serialize(value in any::<u16>()) {
-            let v = RawF16(value.to_ne_bytes());
+            let v = RawF16(value);
             assert_eq!(
                 serde_json::to_string(&v.to_f32()).unwrap(),
                 serde_json::to_string(&v).unwrap()

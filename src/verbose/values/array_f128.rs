@@ -1,4 +1,4 @@
-use crate::verbose::{ArrayDimensions, VariableInfoUnit};
+use crate::verbose::{ArrayDimensions, VariableInfoUnit, RawF128};
 
 #[cfg(feature = "serde")]
 use super::ArrayItDimension;
@@ -12,19 +12,6 @@ pub struct ArrayF128<'a> {
     pub dimensions: ArrayDimensions<'a>,
     pub variable_info: Option<VariableInfoUnit<'a>>,
     pub(crate) data: &'a [u8],
-}
-
-#[derive(Debug)]
-pub struct F128(u128);
-
-#[cfg(feature = "serde")]
-impl Serialize for F128 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_u128(self.0)
-    }
 }
 
 impl<'a> ArrayF128<'a> {
@@ -104,7 +91,7 @@ impl<'a> Serialize for ArrayF128<'a> {
     {
         let mut state = serializer.serialize_struct("ArrayF128", 2)?;
         state.serialize_field("variable_info", &self.variable_info)?;
-        let iter = ArrayItDimension::<F128> {
+        let iter = ArrayItDimension::<RawF128> {
             is_big_endian: self.is_big_endian,
             dimensions: self.dimensions.dimensions,
             data: self.data,
@@ -116,14 +103,14 @@ impl<'a> Serialize for ArrayF128<'a> {
 }
 
 impl Iterator for ArrayF128Iterator<'_> {
-    type Item = F128;
+    type Item = RawF128;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.rest.len() < 16 {
             None
         } else {
             let result = if self.is_big_endian {
-                u128::from_be_bytes([
+                RawF128::from_be_bytes([
                     self.rest[0],
                     self.rest[1],
                     self.rest[2],
@@ -142,7 +129,7 @@ impl Iterator for ArrayF128Iterator<'_> {
                     self.rest[15],
                 ])
             } else {
-                u128::from_le_bytes([
+                RawF128::from_le_bytes([
                     self.rest[0],
                     self.rest[1],
                     self.rest[2],
@@ -162,7 +149,7 @@ impl Iterator for ArrayF128Iterator<'_> {
                 ])
             };
             self.rest = &self.rest[16..];
-            Some(F128(result))
+            Some(result)
         }
     }
 }
@@ -182,7 +169,7 @@ impl<'a> Serialize for ArrayF128Iterator<'a> {
 }
 
 impl<'a> IntoIterator for &'a ArrayF128<'a> {
-    type Item = F128;
+    type Item = RawF128;
     type IntoIter = ArrayF128Iterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
