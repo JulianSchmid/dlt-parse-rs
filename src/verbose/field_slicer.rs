@@ -1,6 +1,6 @@
 use crate::error::{Layer, UnexpectedEndOfSliceError, VerboseDecodeError};
 
-use super::{ArrayDimensions, RawF16, Scaling};
+use super::{ArrayDimensions, RawF16, Scaling, RawF128};
 
 /// Helper for parsing verbose messages.
 pub(crate) struct FieldSlicer<'a> {
@@ -272,8 +272,8 @@ impl<'a> FieldSlicer<'a> {
         self.read_u16(is_big_endian).map(|v| RawF16::from_bits(v))
     }
 
-    pub fn read_f128(&mut self, is_big_endian: bool) -> Result<u128, VerboseDecodeError> {
-        self.read_u128(is_big_endian)
+    pub fn read_f128(&mut self, is_big_endian: bool) -> Result<RawF128, VerboseDecodeError> {
+        self.read_u128(is_big_endian).map(|v| RawF128::from_bits(v))
     }
 
     pub fn read_f32(&mut self, is_big_endian: bool) -> Result<f32, VerboseDecodeError> {

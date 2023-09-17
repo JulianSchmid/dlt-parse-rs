@@ -198,7 +198,7 @@ impl Iterator for ArrayF16Iterator<'_> {
                 RawF16::from_le_bytes(bytes)
             };
             self.rest = unsafe {
-                // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                // SAFETY: Safe as the length is checked beforehand to be at least n*2 + 2
                 core::slice::from_raw_parts(
                     self.rest.as_ptr().add(index + 2),
                     self.rest.len() - index - 2,
@@ -207,7 +207,7 @@ impl Iterator for ArrayF16Iterator<'_> {
             Some(result)
         } else {
             self.rest = unsafe {
-                // SAFETY: Safe as the length is checked beforehand to be at least n + 1
+                // SAFETY: Safe as the slice gets moved to its end with len 0.
                 core::slice::from_raw_parts(self.rest.as_ptr().add(self.rest.len()), 0)
             };
             None

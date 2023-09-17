@@ -2,7 +2,7 @@
 ///
 /// This is needed as Rust does not support (and most systems)
 /// don't support 128 bit floating point values.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct RawF128(u128);
 
 impl RawF128 {
@@ -71,11 +71,23 @@ impl serde::Serialize for RawF128 {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn debug_clone_eq(value in any::<u128>()) {
+            use alloc::format;
+
+            assert_eq!(
+                format!("{:?}", RawF128(value)),
+                format!("{:?}", RawF128(value))
+            );
+            assert_eq!(RawF128(value), RawF128(value).clone());
+        }
+    }
 
     proptest! {
         #[test]
