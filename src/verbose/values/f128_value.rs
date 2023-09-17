@@ -1,12 +1,13 @@
 use crate::verbose::VariableInfoUnit;
 use arrayvec::{ArrayVec, CapacityError};
+use super::RawF128;
 
 /// Verbose 128 bit float number.
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct F128Value<'a> {
     pub variable_info: Option<VariableInfoUnit<'a>>,
-    pub value: u128,
+    pub value: RawF128,
 }
 
 impl<'a> F128Value<'a> {
@@ -78,7 +79,7 @@ mod test {
 
                 let variable_info = Some(VariableInfoUnit { name , unit });
 
-                let f128_value = F128Value {variable_info, value};
+                let f128_value = F128Value {variable_info, value: RawF128::from_bits(value)};
                 let mut content_buff = Vec::with_capacity(slice_len);
 
                 let len_name_be = (name.len() as u16 + 1).to_be_bytes();
@@ -108,7 +109,7 @@ mod test {
 
                 let variable_info = Some(VariableInfoUnit { name , unit });
 
-                let f128_value = F128Value {variable_info, value};
+                let f128_value = F128Value {variable_info, value: RawF128::from_bits(value)};
                 let mut content_buff = Vec::with_capacity(slice_len);
 
                 let len_name_le = (name.len() as u16 + 1).to_le_bytes();
@@ -138,7 +139,7 @@ mod test {
 
                 let variable_info = None;
 
-                let f128_value = F128Value {variable_info, value};
+                let f128_value = F128Value {variable_info, value: RawF128::from_bits(value)};
                 let mut content_buff = Vec::with_capacity(slice_len);
 
                 prop_assert_eq!(f128_value.add_to_msg(&mut msg_buff, is_big_endian), Ok(()));
@@ -161,7 +162,7 @@ mod test {
 
                 let variable_info = None;
 
-                let f128_value = F128Value {variable_info, value};
+                let f128_value = F128Value {variable_info, value: RawF128::from_bits(value)};
                 let mut content_buff = Vec::with_capacity(slice_len);
 
                 prop_assert_eq!(f128_value.add_to_msg(&mut msg_buff, is_big_endian), Ok(()));
@@ -182,7 +183,7 @@ mod test {
                 const SLICE_LEN: usize = BYTES_NEEDED_WITH_NAME-1;
                 let variable_info = Some(VariableInfoUnit { name , unit });
 
-                let f128_value = F128Value {variable_info, value};
+                let f128_value = F128Value {variable_info, value: RawF128::from_bits(value)};
                 let is_big_endian = true;
 
                 let mut msg_buff: ArrayVec<u8, SLICE_LEN> = ArrayVec::new();
@@ -198,7 +199,7 @@ mod test {
                 const SLICE_LEN: usize = BYTES_NEEDED_WITH_NAME-1;
                 let variable_info = Some(VariableInfoUnit { name , unit });
 
-                let f128_value = F128Value {variable_info, value};
+                let f128_value = F128Value {variable_info, value: RawF128::from_bits(value)};
                 let is_big_endian = false;
 
                 let mut msg_buff: ArrayVec<u8, SLICE_LEN> = ArrayVec::new();
@@ -214,7 +215,7 @@ mod test {
                 const SLICE_LEN: usize = BYTES_NEEDED - 1;
                 let variable_info = None;
 
-                let f128_value = F128Value {variable_info, value};
+                let f128_value = F128Value {variable_info, value: RawF128::from_bits(value)};
                 let is_big_endian = true;
 
                 let mut msg_buff: ArrayVec<u8, SLICE_LEN> = ArrayVec::new();
@@ -230,7 +231,7 @@ mod test {
                 const SLICE_LEN: usize = BYTES_NEEDED - 1;
                 let variable_info = None;
 
-                let f128_value = F128Value {variable_info, value};
+                let f128_value = F128Value {variable_info, value: RawF128::from_bits(value)};
                 let is_big_endian = true;
 
                 let mut msg_buff: ArrayVec<u8, SLICE_LEN> = ArrayVec::new();

@@ -178,7 +178,7 @@ impl DltHeader {
         };
 
         Ok(DltHeader {
-            ///If true the payload is encoded in big endian. This does not influence the fields of the dlt header, which is always encoded in big endian.
+            // If true the payload is encoded in big endian. This does not influence the fields of the dlt header, which is always encoded in big endian.
             is_big_endian: 0 != header_type & BIG_ENDIAN_FLAG,
             // SAFETY:
             // Safe, as the slice length was checked at the start of the function

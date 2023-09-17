@@ -4,7 +4,7 @@ use super::{
     ArrayI128Iterator, ArrayI16Iterator, ArrayI32Iterator, ArrayI64Iterator, ArrayI8Iterator,
     ArrayU128Iterator, ArrayU16Iterator, ArrayU32Iterator, ArrayU64Iterator, ArrayU8Iterator,
 };
-use super::{RawF16, RawF128};
+use super::{RawF128, RawF16};
 #[cfg(feature = "serde")]
 use crate::verbose::std::mem::size_of;
 #[cfg(feature = "serde")]

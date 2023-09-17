@@ -127,6 +127,19 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
+    proptest! {
+        #[test]
+        fn debug_clone_eq(value in any::<u16>()) {
+            use alloc::format;
+
+            assert_eq!(
+                format!("{:?}", RawF16(value)),
+                format!("{:?}", RawF16(value))
+            );
+            assert_eq!(RawF16(value), RawF16(value).clone());
+        }
+    }
+
     #[test]
     fn constant() {
         assert_eq!(0.0, RawF16::ZERO.to_f32());
@@ -150,9 +163,7 @@ mod tests {
             .is_infinite());
 
         // nan
-        assert!(RawF16::from_bits(0b0111_1100_0000_0001)
-            .to_f32()
-            .is_nan());
+        assert!(RawF16::from_bits(0b0111_1100_0000_0001).to_f32().is_nan());
 
         // largest normal number
         assert_eq!(65504.0, RawF16::from_bits(0b0111_1011_1111_1111).to_f32());
