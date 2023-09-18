@@ -7,21 +7,21 @@
 //!
 //! ```toml
 //! [dependencies]
-//! dlt_parse = "0.8.4"
+//! dlt_parse = "0.9.0"
 //! ```
 //!
 //! If you additionally want `serde` support you will have to activate the `serde` feature in your `Cargo.toml`:
 //!
 //! ```toml
 //! [dependencies]
-//! dlt_parse = { version = "0.8.4", features = ["serde"] }
+//! dlt_parse = { version = "0.9.0", features = ["serde"] }
 //! ```
 //!
 //! If you want to use the crate in `no_std` mode you will have to disable the default features:
 //!
 //! ```toml
 //! [dependencies]
-//! dlt_parse = { version = "0.8.4", default-features = false }
+//! dlt_parse = { version = "0.9.0", default-features = false }
 //! ```
 //!
 //! # What is dlt_parse?
