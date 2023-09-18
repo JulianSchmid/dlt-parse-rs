@@ -45,3 +45,7 @@ required-features = ["std"]
 [[example]]
 name = "print_dlt_file"
 required-features = ["std"]
+
+[[example]]
+name = "print_verbose_manual"
+required-features = ["std"]
