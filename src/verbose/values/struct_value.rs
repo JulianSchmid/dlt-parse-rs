@@ -1,11 +1,14 @@
 use arrayvec::{ArrayVec, CapacityError};
 
+use crate::verbose::VerboseIter;
+
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct StructValue<'a> {
+    pub is_big_endian: bool,
     pub number_of_entries: u16,
     pub name: Option<&'a str>,
-    pub(crate) data: &'a [u8],
+    pub(crate) entries_data: &'a [u8],
 }
 
 impl<'a> StructValue<'a> {
@@ -49,9 +52,21 @@ impl<'a> StructValue<'a> {
             buf.try_extend_from_slice(&[number_of_entries[0], number_of_entries[1]])?;
         }
 
-        buf.try_extend_from_slice(self.data)?;
+        buf.try_extend_from_slice(self.entries_data)?;
 
         Ok(())
+    }
+
+    /// Returns an iterator over the entries/fields of the struct
+    #[inline]
+    pub fn entries(&self) -> VerboseIter<'a> {
+        VerboseIter::new(self.is_big_endian, self.number_of_entries, self.entries_data)
+    }
+
+    /// Returns the slice containing the raw entries data.
+    #[inline]
+    pub fn entries_raw_data(&self) -> &'a [u8] {
+        self.entries_data
     }
 }
 
@@ -91,7 +106,7 @@ mod test {
                     let third_entry = I32Value { variable_info: None, scaling: None, value: 3 };
                     third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-                    let struct_value = StructValue { number_of_entries, name: Some(&name[..]), data: &deparsed_stuff[..] };
+                    let struct_value = StructValue { is_big_endian, number_of_entries, name: Some(&name[..]), entries_data: &deparsed_stuff[..] };
                     let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
                     let mut content_msg = Vec::new();
 
@@ -114,7 +129,7 @@ mod test {
                         _ => return Err(TestCaseError::Fail("Expected struct on parsing".into())),
                     };
 
-                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.data, is_big_endian).unwrap();
+                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.entries_data, is_big_endian).unwrap();
                         let entry = match first_read_entry {
                             I8(x) => x,
                             _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -158,7 +173,7 @@ mod test {
                     let third_entry = I32Value { variable_info: None, scaling: None, value: 3 };
                     third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-                    let struct_value = StructValue { number_of_entries, name: Some(&name[..]), data: &deparsed_stuff[..] };
+                    let struct_value = StructValue { is_big_endian, number_of_entries, name: Some(&name[..]), entries_data: &deparsed_stuff[..] };
                     let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
                     let mut content_msg = Vec::new();
 
@@ -181,7 +196,7 @@ mod test {
                         _ => return Err(TestCaseError::Fail("Expected struct on parsing".into())),
                     };
 
-                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.data, is_big_endian).unwrap();
+                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.entries_data, is_big_endian).unwrap();
                         let entry = match first_read_entry {
                             I8(x) => x,
                             _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -222,7 +237,7 @@ mod test {
                     let third_entry = I32Value { variable_info: None, scaling: None, value: 3 };
                     third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-                    let struct_value = StructValue { number_of_entries, name: None, data: &deparsed_stuff[..] };
+                    let struct_value = StructValue { is_big_endian, number_of_entries, name: None, entries_data: &deparsed_stuff[..] };
                     let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
                     let mut content_msg = Vec::new();
 
@@ -243,7 +258,7 @@ mod test {
                         _ => return Err(TestCaseError::Fail("Expected struct on parsing".into())),
                     };
 
-                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.data, is_big_endian).unwrap();
+                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.entries_data, is_big_endian).unwrap();
                         let entry = match first_read_entry {
                             I8(x) => x,
                             _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -300,7 +315,7 @@ mod test {
                     let third_entry = I32Value { variable_info: Some(var_info_3), scaling: None, value: 3 };
                     third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-                    let struct_value = StructValue { number_of_entries, name: None, data: &deparsed_stuff[..] };
+                    let struct_value = StructValue { is_big_endian, number_of_entries, name: None, entries_data: &deparsed_stuff[..] };
                     let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
                     let mut content_msg = Vec::new();
 
@@ -321,7 +336,7 @@ mod test {
                         _ => return Err(TestCaseError::Fail("Expected struct on parsing".into())),
                     };
 
-                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.data, is_big_endian).unwrap();
+                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.entries_data, is_big_endian).unwrap();
                         let entry = match first_read_entry {
                             I8(x) => x,
                             _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -375,7 +390,7 @@ mod test {
                     let third_entry = I32Value { variable_info: Some(var_info_3), scaling: None, value: 3 };
                     third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-                    let struct_value = StructValue { number_of_entries, name: None, data: &deparsed_stuff[..] };
+                    let struct_value = StructValue { is_big_endian, number_of_entries, name: None, entries_data: &deparsed_stuff[..] };
                     let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
                     let mut content_msg = Vec::new();
 
@@ -396,7 +411,7 @@ mod test {
                         _ => return Err(TestCaseError::Fail("Expected struct on parsing".into())),
                     };
 
-                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.data, is_big_endian).unwrap();
+                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.entries_data, is_big_endian).unwrap();
                         let entry = match first_read_entry {
                             I8(x) => x,
                             _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -452,7 +467,7 @@ mod test {
                     let third_entry = I32Value { variable_info: Some(var_info_3), scaling: None, value: 3 };
                     third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-                    let struct_value = StructValue { number_of_entries, name: None, data: &deparsed_stuff[..] };
+                    let struct_value = StructValue { is_big_endian, number_of_entries, name: None, entries_data: &deparsed_stuff[..] };
                     // let raw_value = StructValue {name: Some(name), data, number_of_entries};
                     let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
                     let mut content_msg = Vec::new();
@@ -474,7 +489,7 @@ mod test {
                         _ => return Err(TestCaseError::Fail("Expected struct on parsing".into())),
                     };
 
-                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.data, is_big_endian).unwrap();
+                        let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.entries_data, is_big_endian).unwrap();
                         let entry = match first_read_entry {
                             I8(x) => x,
                             _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -527,7 +542,7 @@ mod test {
                 let third_entry = I32Value { variable_info: Some(var_info_3), scaling: None, value: 3 };
                 third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-                let struct_value = StructValue { number_of_entries, name: None, data: &deparsed_stuff[..] };
+                let struct_value = StructValue { is_big_endian, number_of_entries, name: None, entries_data: &deparsed_stuff[..] };
                 let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
                 let mut content_msg = Vec::new();
 
@@ -548,7 +563,7 @@ mod test {
                     _ => return Err(TestCaseError::Fail("Expected struct on parsing".into())),
                 };
 
-                    let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.data, is_big_endian).unwrap();
+                    let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.entries_data, is_big_endian).unwrap();
                     let entry = match first_read_entry {
                         I8(x) => x,
                         _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -585,23 +600,23 @@ mod test {
                             entry_one_struct.add_to_msg(&mut deparsed_entries, is_big_endian).unwrap();
                             let deparsed_entries_1 = deparsed_entries.clone();
 
-                            let first_entry = StructValue { number_of_entries: 1, name: None, data: &deparsed_entries_1 };
+                            let first_entry = StructValue { is_big_endian, number_of_entries: 1, name: None, entries_data: &deparsed_entries_1 };
                             first_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
                             let entry_two_struct = I16Value { variable_info: None, scaling: None, value: 2 };
                             entry_two_struct.add_to_msg(&mut deparsed_entries, is_big_endian).unwrap();
                             let deparsed_entries_2 = deparsed_entries.clone();
 
-                            let second_entry = StructValue { number_of_entries: 2, name: None, data: &deparsed_entries_2 };
+                            let second_entry = StructValue { is_big_endian, number_of_entries: 2, name: None, entries_data: &deparsed_entries_2 };
                             second_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
                             let entry_three_struct = I32Value { variable_info: None, scaling: None, value: 3 };
                             entry_three_struct.add_to_msg(&mut deparsed_entries, is_big_endian).unwrap();
 
-                            let third_entry = StructValue { number_of_entries: 3, name: None, data: &deparsed_entries };
+                            let third_entry = StructValue { is_big_endian, number_of_entries: 3, name: None, entries_data: &deparsed_entries };
                             third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-                            let struct_value = StructValue { number_of_entries: 3, name: Some(&name[..]), data: &deparsed_stuff[..] };
+                            let struct_value = StructValue { is_big_endian, number_of_entries: 3, name: Some(&name[..]), entries_data: &deparsed_stuff[..] };
                             let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
                             let mut content_msg = Vec::new();
 
@@ -624,10 +639,10 @@ mod test {
                                 _ => return Err(TestCaseError::Fail("Expected struct on parsing".into())),
                             };
 
-                                let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.data, is_big_endian).unwrap();
+                                let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.entries_data, is_big_endian).unwrap();
                                 let entry = match first_read_entry {
                                     Struct(x) => {
-                                        let (first_entry, _) = VerboseValue::from_slice(x.data, is_big_endian).unwrap();
+                                        let (first_entry, _) = VerboseValue::from_slice(x.entries_data, is_big_endian).unwrap();
                                         match first_entry {
                                             I8(x) => x,
                                             _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -640,7 +655,7 @@ mod test {
                                 let (second_read_entry, rest) = VerboseValue::from_slice(rest, is_big_endian).unwrap();
                                 let entry = match second_read_entry {
                                     Struct(x) => {
-                                        let (first_entry, rest) = VerboseValue::from_slice(x.data, is_big_endian).unwrap();
+                                        let (first_entry, rest) = VerboseValue::from_slice(x.entries_data, is_big_endian).unwrap();
                                         match first_entry {
                                             I8(_) => (),
                                             _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -658,7 +673,7 @@ mod test {
                                 let (third_read_entry, _) = VerboseValue::from_slice(rest, is_big_endian).unwrap();
                                 let entry = match third_read_entry {
                                     Struct(x) => {
-                                        let (first_entry, rest) = VerboseValue::from_slice(x.data, is_big_endian).unwrap();
+                                        let (first_entry, rest) = VerboseValue::from_slice(x.entries_data, is_big_endian).unwrap();
                                         match first_entry {
                                             I8(_) => (),
                                             _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -696,23 +711,23 @@ mod test {
                 entry_one_struct.add_to_msg(&mut deparsed_entries, is_big_endian).unwrap();
                 let deparsed_entries_1 = deparsed_entries.clone();
 
-                let first_entry = StructValue { number_of_entries: 1, name: None, data: &deparsed_entries_1 };
+                let first_entry = StructValue { is_big_endian, number_of_entries: 1, name: None, entries_data: &deparsed_entries_1 };
                 first_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
                 let entry_two_struct = I16Value { variable_info: None, scaling: None, value: 2 };
                 entry_two_struct.add_to_msg(&mut deparsed_entries, is_big_endian).unwrap();
                 let deparsed_entries_2 = deparsed_entries.clone();
 
-                let second_entry = StructValue { number_of_entries: 2, name: None, data: &deparsed_entries_2 };
+                let second_entry = StructValue { is_big_endian, number_of_entries: 2, name: None, entries_data: &deparsed_entries_2 };
                 second_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
                 let entry_three_struct = I32Value { variable_info: None, scaling: None, value: 3 };
                 entry_three_struct.add_to_msg(&mut deparsed_entries, is_big_endian).unwrap();
 
-                let third_entry = StructValue { number_of_entries: 3, name: None, data: &deparsed_entries };
+                let third_entry = StructValue { is_big_endian, number_of_entries: 3, name: None, entries_data: &deparsed_entries };
                 third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-                let struct_value = StructValue { number_of_entries: 3, name: Some(&name[..]), data: &deparsed_stuff[..] };
+                let struct_value = StructValue { is_big_endian, number_of_entries: 3, name: Some(&name[..]), entries_data: &deparsed_stuff[..] };
                 let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
                 let mut content_msg = Vec::new();
 
@@ -735,10 +750,10 @@ mod test {
                     _ => return Err(TestCaseError::Fail("Expected struct on parsing".into())),
                 };
 
-                    let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.data, is_big_endian).unwrap();
+                    let (first_read_entry, rest) = VerboseValue::from_slice(parsed_struct.entries_data, is_big_endian).unwrap();
                     let entry = match first_read_entry {
                         Struct(x) => {
-                            let (first_entry, _) = VerboseValue::from_slice(x.data, is_big_endian).unwrap();
+                            let (first_entry, _) = VerboseValue::from_slice(x.entries_data, is_big_endian).unwrap();
                             match first_entry {
                                 I8(x) => x,
                                 _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -751,7 +766,7 @@ mod test {
                     let (second_read_entry, rest) = VerboseValue::from_slice(rest, is_big_endian).unwrap();
                     let entry = match second_read_entry {
                         Struct(x) => {
-                            let (first_entry, rest) = VerboseValue::from_slice(x.data, is_big_endian).unwrap();
+                            let (first_entry, rest) = VerboseValue::from_slice(x.entries_data, is_big_endian).unwrap();
                             match first_entry {
                                 I8(_) => (),
                                 _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -769,7 +784,7 @@ mod test {
                     let (third_read_entry, _) = VerboseValue::from_slice(rest, is_big_endian).unwrap();
                     let entry = match third_read_entry {
                         Struct(x) => {
-                            let (first_entry, rest) = VerboseValue::from_slice(x.data, is_big_endian).unwrap();
+                            let (first_entry, rest) = VerboseValue::from_slice(x.entries_data, is_big_endian).unwrap();
                             match first_entry {
                                 I8(_) => (),
                                 _ => return Err(TestCaseError::Fail("Expected I8 value on parsing struct".into())),
@@ -807,7 +822,7 @@ mod test {
                 deparsed_stuff[0] = 0b1111_1111;  // Make sure that type info is invalid
             }
 
-            let struct_value = StructValue { number_of_entries, name: None, data: &deparsed_stuff[..] };
+            let struct_value = StructValue { is_big_endian, number_of_entries, name: None, entries_data: &deparsed_stuff[..] };
 
             let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
             struct_value.add_to_msg(&mut deparsed_struct, is_big_endian).unwrap();
@@ -835,7 +850,7 @@ mod test {
                 deparsed_stuff[0] = 0b1111_1111;  // Make sure that type info is invalid
             }
 
-            let struct_value = StructValue { number_of_entries, name: None, data: &deparsed_stuff[..] };
+            let struct_value = StructValue { is_big_endian, number_of_entries, name: None, entries_data: &deparsed_stuff[..] };
 
             let mut deparsed_struct: ArrayVec<u8, BUFFER_SIZE> = ArrayVec::new();
             struct_value.add_to_msg(&mut deparsed_struct, is_big_endian).unwrap();
@@ -868,7 +883,7 @@ mod test {
             let third_entry = I32Value { variable_info: None, scaling: None, value: 3 };
             third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-            let struct_value = StructValue { number_of_entries, name: None, data: &deparsed_stuff[..] };
+            let struct_value = StructValue { is_big_endian, number_of_entries, name: None, entries_data: &deparsed_stuff[..] };
 
             let mut zero_buff: ArrayVec<u8, 0> = ArrayVec::new();
             let err = struct_value.add_to_msg(&mut zero_buff, is_big_endian);
@@ -899,7 +914,7 @@ mod test {
             let third_entry = I32Value { variable_info: None, scaling: None, value: 3 };
             third_entry.add_to_msg(&mut deparsed_stuff, is_big_endian).unwrap();
 
-            let struct_value = StructValue { number_of_entries, name: None, data: &deparsed_stuff[..] };
+            let struct_value = StructValue { is_big_endian, number_of_entries, name: None, entries_data: &deparsed_stuff[..] };
 
             let mut zero_buff: ArrayVec<u8, 0> = ArrayVec::new();
             let err = struct_value.add_to_msg(&mut zero_buff, is_big_endian);

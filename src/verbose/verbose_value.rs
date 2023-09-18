@@ -741,15 +741,100 @@ impl<'a> VerboseValue<'a> {
 
             Ok((
                 Struct(StructValue {
+                    is_big_endian,
                     number_of_entries,
                     name,
-                    data: slicer.read_raw(data_len)?,
+                    entries_data: slicer.read_raw(data_len)?,
                 }),
                 slicer.rest(),
             ))
         } else {
             // nothing matches type info uninterpretable
             Err(InvalidTypeInfo(type_info))
+        }
+    }
+
+    /// Returns the name of the value (if it has one).
+    pub fn name(&self) -> Option<&'a str> {
+        use VerboseValue::*;
+
+        match self {
+            Bool(v) => v.name,
+            Str(v) => v.name,
+            TraceInfo(_) => None,
+            I8(v) => v.variable_info.as_ref().map(|v| v.name),
+            I16(v) => v.variable_info.as_ref().map(|v| v.name),
+            I32(v) => v.variable_info.as_ref().map(|v| v.name),
+            I64(v) => v.variable_info.as_ref().map(|v| v.name),
+            I128(v) => v.variable_info.as_ref().map(|v| v.name),
+            U8(v) => v.variable_info.as_ref().map(|v| v.name),
+            U16(v) => v.variable_info.as_ref().map(|v| v.name),
+            U32(v) => v.variable_info.as_ref().map(|v| v.name),
+            U64(v) => v.variable_info.as_ref().map(|v| v.name),
+            U128(v) => v.variable_info.as_ref().map(|v| v.name),
+            F16(v) => v.variable_info.as_ref().map(|v| v.name),
+            F32(v) => v.variable_info.as_ref().map(|v| v.name),
+            F64(v) => v.variable_info.as_ref().map(|v| v.name),
+            F128(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrBool(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrI8(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrI16(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrI32(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrI64(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrI128(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrU8(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrU16(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrU32(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrU64(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrU128(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrF16(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrF32(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrF64(v) => v.variable_info.as_ref().map(|v| v.name),
+            ArrF128(v) => v.variable_info.as_ref().map(|v| v.name),
+            Struct(v) => v.name,
+            Raw(v) => v.name,
+        }
+    }
+
+    /// Returns the unit of the value (if it has one).
+    pub fn unit(&self) -> Option<&'a str> {
+        use VerboseValue::*;
+
+        match self {
+            Bool(_) => None,
+            Str(_) => None,
+            TraceInfo(_) => None,
+            I8(v) => v.variable_info.as_ref().map(|v| v.unit),
+            I16(v) => v.variable_info.as_ref().map(|v| v.unit),
+            I32(v) => v.variable_info.as_ref().map(|v| v.unit),
+            I64(v) => v.variable_info.as_ref().map(|v| v.unit),
+            I128(v) => v.variable_info.as_ref().map(|v| v.unit),
+            U8(v) => v.variable_info.as_ref().map(|v| v.unit),
+            U16(v) => v.variable_info.as_ref().map(|v| v.unit),
+            U32(v) => v.variable_info.as_ref().map(|v| v.unit),
+            U64(v) => v.variable_info.as_ref().map(|v| v.unit),
+            U128(v) => v.variable_info.as_ref().map(|v| v.unit),
+            F16(v) => v.variable_info.as_ref().map(|v| v.unit),
+            F32(v) => v.variable_info.as_ref().map(|v| v.unit),
+            F64(v) => v.variable_info.as_ref().map(|v| v.unit),
+            F128(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrBool(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrI8(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrI16(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrI32(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrI64(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrI128(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrU8(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrU16(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrU32(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrU64(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrU128(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrF16(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrF32(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrF64(v) => v.variable_info.as_ref().map(|v| v.unit),
+            ArrF128(v) => v.variable_info.as_ref().map(|v| v.unit),
+            Struct(_) => None,
+            Raw(_) => None,
         }
     }
 }

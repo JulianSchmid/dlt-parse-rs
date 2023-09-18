@@ -12,7 +12,7 @@ impl<'a> PrecheckedVerboseIter<'a> {
     /// there are no errors present.
     pub fn try_new(
         is_big_endian: bool,
-        number_of_arguments: u8,
+        number_of_arguments: u16,
         payload: &'a [u8],
     ) -> Result<PrecheckedVerboseIter<'a>, VerboseDecodeError> {
         let iter = VerboseIter::new(is_big_endian, number_of_arguments, payload);
