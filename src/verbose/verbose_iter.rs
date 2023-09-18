@@ -5,14 +5,14 @@ use crate::error::VerboseDecodeError;
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct VerboseIter<'a> {
     is_big_endian: bool,
-    number_of_arguments: u8,
+    number_of_arguments: u16,
     rest: &'a [u8],
 }
 
 impl<'a> VerboseIter<'a> {
     /// Creates new iterator to iterate over the verbose values of a dlt messages.
     #[inline]
-    pub fn new(is_big_endian: bool, number_of_arguments: u8, payload: &'a [u8]) -> VerboseIter<'a> {
+    pub fn new(is_big_endian: bool, number_of_arguments: u16, payload: &'a [u8]) -> VerboseIter<'a> {
         VerboseIter {
             is_big_endian,
             number_of_arguments,
@@ -28,7 +28,7 @@ impl<'a> VerboseIter<'a> {
 
     /// Number of arguments left in the iterator.
     #[inline]
-    pub fn number_of_arguments(&self) -> u8 {
+    pub fn number_of_arguments(&self) -> u16 {
         self.number_of_arguments
     }
 
