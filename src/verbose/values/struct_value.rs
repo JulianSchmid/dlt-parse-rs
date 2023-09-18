@@ -3,7 +3,6 @@ use arrayvec::{ArrayVec, CapacityError};
 use crate::verbose::VerboseIter;
 
 #[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct StructValue<'a> {
     pub is_big_endian: bool,
     pub number_of_entries: u16,
@@ -67,6 +66,23 @@ impl<'a> StructValue<'a> {
     #[inline]
     pub fn entries_raw_data(&self) -> &'a [u8] {
         self.entries_data
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'a> serde::Serialize for StructValue<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer
+    {
+        use serde::ser::{Error, SerializeSeq};
+
+        let mut s = serializer.serialize_seq(Some(self.number_of_entries.into()))?;
+        for v in self.entries() {
+            let v = v.map_err(Error::custom)?;
+            s.serialize_element(&v)?;
+        }
+        s.end()
     }
 }
 
