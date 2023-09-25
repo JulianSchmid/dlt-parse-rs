@@ -34,7 +34,7 @@ impl RawF16 {
         let masked_expo = raw_u16 & RawF16::EXPO_MASK;
         let expo = if RawF16::EXPO_MASK == masked_expo {
             // max has to be handled specially (as it represents infinity or NaN)
-            0b0111_1111_1000_0000__0000_0000_0000_0000
+            0b0111_1111_1000_0000_0000_0000_0000_0000
         } else if masked_expo == 0 {
             0
         } else {

@@ -123,6 +123,22 @@
 //! # References
 //! * [Log and Trace Protocol Specification](https://www.autosar.org/fileadmin/standards/foundation/1-3/AUTOSAR_PRS_LogAndTraceProtocol.pdf)
 
+// # Reason for 'bool_comparison' disable:
+//
+// Clippy triggers triggers errors like the following if the warning stays enabled:
+//
+//   warning: equality checks against false can be replaced by a negation
+//     --> src/packet_decoder.rs:131:20
+//      |
+//  131 |                 if false == fragmented {
+//      |                    ^^^^^^^^^^^^^^^^^^^ help: try simplifying it as shown: `!fragmented`
+//
+//
+// I prefer to write `false == value` instead of `!value` as it
+// is more visually striking and is not as easy to overlook as the single
+// character '!'.
+#![allow(clippy::bool_comparison)]
+
 #![no_std]
 
 #[cfg(test)]

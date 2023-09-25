@@ -269,11 +269,11 @@ impl<'a> FieldSlicer<'a> {
     }
 
     pub fn read_f16(&mut self, is_big_endian: bool) -> Result<RawF16, VerboseDecodeError> {
-        self.read_u16(is_big_endian).map(|v| RawF16::from_bits(v))
+        self.read_u16(is_big_endian).map(RawF16::from_bits)
     }
 
     pub fn read_f128(&mut self, is_big_endian: bool) -> Result<RawF128, VerboseDecodeError> {
-        self.read_u128(is_big_endian).map(|v| RawF128::from_bits(v))
+        self.read_u128(is_big_endian).map(RawF128::from_bits)
     }
 
     pub fn read_f32(&mut self, is_big_endian: bool) -> Result<f32, VerboseDecodeError> {
