@@ -32,8 +32,12 @@ use super::StorageSlice;
 #[derive(Debug)]
 pub struct DltStorageReader<R: Read + BufRead> {
     reader: R,
+    /// Continue search for next storage header if it is missing.
+    is_seeking_storage_pattern: bool,
     last_packet: Vec<u8>,
     read_error: bool,
+    num_read_packets: usize,
+    num_pattern_seeks: usize,
 }
 
 #[cfg(feature = "std")]
@@ -42,9 +46,33 @@ impl<R: Read + BufRead> DltStorageReader<R> {
     pub fn new(reader: R) -> DltStorageReader<R> {
         DltStorageReader {
             reader,
+            is_seeking_storage_pattern: true,
             last_packet: Vec::with_capacity(u16::MAX as usize),
             read_error: false,
+            num_read_packets: 0,
+            num_pattern_seeks: 0,
         }
+    }
+
+    /// Returns if the reader will seek storage headers if corrupted
+    /// data is present between packets.
+    #[inline]
+    pub fn is_seeking_storage_pattern(&self) -> bool {
+        self.is_seeking_storage_pattern
+    }
+
+    /// Returns the number of DLT packets read.
+    #[inline]
+    pub fn num_read_packets(&self) -> usize {
+        self.num_read_packets
+    }
+
+    /// Returns the number of times corrupt data was encountered and the
+    /// next "storage pattern" ([`crate::storage::StorageHeader::PATTERN_AT_START`])
+    /// had to be searched in the data stream.
+    #[inline]
+    pub fn num_pattern_seeks(&self) -> usize {
+        self.num_pattern_seeks
     }
 
     /// Returns the next DLT packet.
@@ -54,30 +82,89 @@ impl<R: Read + BufRead> DltStorageReader<R> {
             return None;
         }
 
-        // check if there is data left in the reader
-        match self.reader.fill_buf() {
-            Ok(slice) => {
-                if slice.is_empty() {
-                    return None;
+        // goto & read storage header
+        let storage_header = if self.num_read_packets == 0
+            || false == self.is_seeking_storage_pattern
+        {
+            // check if there is data left in the reader
+            match self.reader.fill_buf() {
+                Ok(slice) => {
+                    if slice.is_empty() {
+                        return None;
+                    }
+                }
+                Err(err) => {
+                    self.read_error = true;
+                    return Some(Err(err.into()));
                 }
             }
-            Err(err) => {
+
+            // in the non seeking version a storage header is expected to be directly present
+            let mut storage_header_data = [0u8; StorageHeader::BYTE_LEN];
+            if let Err(err) = self.reader.read_exact(&mut storage_header_data) {
                 self.read_error = true;
                 return Some(Err(err.into()));
             }
-        }
+            match StorageHeader::from_bytes(storage_header_data) {
+                Ok(value) => value,
+                Err(err) => {
+                    self.read_error = true;
+                    return Some(Err(err.into()));
+                }
+            }
+        } else {
+            // seek the next storage header pattern
+            let mut pattern_elements_found = 0;
+            let mut storage_pattern_error = false;
 
-        // get the data from the storage header bytes
-        let mut storage_header_data = [0u8; StorageHeader::BYTE_LEN];
-        if let Err(err) = self.reader.read_exact(&mut storage_header_data) {
-            self.read_error = true;
-            return Some(Err(err.into()));
-        }
-        let storage_header = match StorageHeader::from_bytes(storage_header_data) {
-            Ok(value) => value,
-            Err(err) => {
+            while pattern_elements_found < StorageHeader::PATTERN_AT_START.len() {
+                // load data
+                let slice = match self.reader.fill_buf() {
+                    Ok(slice) => {
+                        if slice.is_empty() {
+                            return None;
+                        }
+                        slice
+                    }
+                    Err(err) => {
+                        self.read_error = true;
+                        return Some(Err(err.into()));
+                    }
+                };
+
+                // check for the pattern
+                let mut consumed_len = 0;
+                for d in slice {
+                    if *d == StorageHeader::PATTERN_AT_START[pattern_elements_found] {
+                        pattern_elements_found += 1;
+                    } else {
+                        storage_pattern_error = true;
+                        pattern_elements_found = 0;
+                    }
+                    consumed_len += 1;
+                    if pattern_elements_found >= StorageHeader::PATTERN_AT_START.len() {
+                        break;
+                    }
+                }
+                self.reader.consume(consumed_len);
+            }
+            if storage_pattern_error {
+                self.num_pattern_seeks += 1;
+            }
+
+            // read the rest of the storage header
+            let mut bytes = [0u8; StorageHeader::BYTE_LEN - StorageHeader::PATTERN_AT_START.len()];
+            if let Err(err) = self.reader.read_exact(&mut bytes) {
                 self.read_error = true;
                 return Some(Err(err.into()));
+            }
+
+            StorageHeader {
+                timestamp_seconds: u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+                timestamp_microseconds: u32::from_le_bytes([
+                    bytes[4], bytes[5], bytes[6], bytes[7],
+                ]),
+                ecu_id: [bytes[8], bytes[9], bytes[10], bytes[11]],
             }
         };
 
@@ -131,6 +218,9 @@ impl<R: Read + BufRead> DltStorageReader<R> {
             }
         };
 
+        // packet successfully read
+        self.num_read_packets += 1;
+
         Some(Ok(StorageSlice {
             storage_header,
             packet,
@@ -181,6 +271,9 @@ mod dlt_storage_reader_tests {
         {
             let mut r = DltStorageReader::new(BufReader::new(Cursor::new(&[])));
             assert!(r.next_packet().is_none());
+            assert!(r.is_seeking_storage_pattern());
+            assert_eq!(0, r.num_read_packets());
+            assert_eq!(0, r.num_pattern_seeks());
         }
 
         // reader with working packets
@@ -238,9 +331,18 @@ mod dlt_storage_reader_tests {
             v.extend_from_slice(&packet0);
             v.extend_from_slice(&storage_header1.to_bytes());
             v.extend_from_slice(&packet1);
+            // add some dummy data to test the seeking of the storage pattern
+            v.extend_from_slice(&[0, 0, 0]);
+            v.extend_from_slice(&storage_header1.to_bytes());
+            v.extend_from_slice(&packet1);
+            v.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
 
             // check result
             let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
+            assert!(reader.is_seeking_storage_pattern());
+            assert_eq!(0, reader.num_read_packets());
+            assert_eq!(0, reader.num_pattern_seeks());
+
             assert_eq!(
                 reader.next_packet().unwrap().unwrap(),
                 StorageSlice {
@@ -248,6 +350,19 @@ mod dlt_storage_reader_tests {
                     packet: DltPacketSlice::from_slice(&packet0).unwrap()
                 }
             );
+            assert_eq!(1, reader.num_read_packets());
+            assert_eq!(0, reader.num_pattern_seeks());
+
+            assert_eq!(
+                reader.next_packet().unwrap().unwrap(),
+                StorageSlice {
+                    storage_header: storage_header1.clone(),
+                    packet: DltPacketSlice::from_slice(&packet1).unwrap()
+                }
+            );
+            assert_eq!(2, reader.num_read_packets());
+            assert_eq!(0, reader.num_pattern_seeks());
+
             assert_eq!(
                 reader.next_packet().unwrap().unwrap(),
                 StorageSlice {
@@ -255,10 +370,13 @@ mod dlt_storage_reader_tests {
                     packet: DltPacketSlice::from_slice(&packet1).unwrap()
                 }
             );
+            assert_eq!(3, reader.num_read_packets());
+            assert_eq!(1, reader.num_pattern_seeks());
+
             assert!(reader.next_packet().is_none());
         }
 
-        // reader with error during buffering
+        // reader with error during buffering (non seeking)
         {
             let mut buf = BufferFillErrorReader {};
             buf.consume(0);
@@ -269,10 +387,35 @@ mod dlt_storage_reader_tests {
             assert!(reader.next_packet().is_none());
         }
 
-        // storage header read error
+        // reader with error during buffering (seeking)
+        {
+            let mut buf = BufferFillErrorReader {};
+            buf.consume(0);
+            buf.read(&mut []).unwrap();
+
+            let mut reader = DltStorageReader::new(buf);
+            reader.num_read_packets = 1;
+            assert_matches!(reader.next_packet(), Some(Err(ReadError::IoError(_))));
+            assert!(reader.next_packet().is_none());
+        }
+
+        // storage header read error at start (non seeking)
         {
             let bytes = [0u8; StorageHeader::BYTE_LEN - 1];
             let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&bytes[..])));
+            assert_matches!(reader.next_packet(), Some(Err(ReadError::IoError(_))));
+            assert!(reader.next_packet().is_none());
+        }
+
+        // storage header read error at start (seeking)
+        {
+            let mut bytes = [0u8; StorageHeader::BYTE_LEN - 1];
+            bytes[0] = StorageHeader::PATTERN_AT_START[0];
+            bytes[1] = StorageHeader::PATTERN_AT_START[1];
+            bytes[2] = StorageHeader::PATTERN_AT_START[2];
+            bytes[3] = StorageHeader::PATTERN_AT_START[3];
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&bytes[..])));
+            reader.num_read_packets = 1;
             assert_matches!(reader.next_packet(), Some(Err(ReadError::IoError(_))));
             assert!(reader.next_packet().is_none());
         }
