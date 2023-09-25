@@ -138,7 +138,6 @@
 // is more visually striking and is not as easy to overlook as the single
 // character '!'.
 #![allow(clippy::bool_comparison)]
-
 #![no_std]
 
 #[cfg(test)]

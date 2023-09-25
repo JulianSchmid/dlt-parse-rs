@@ -54,6 +54,20 @@ impl<R: Read + BufRead> DltStorageReader<R> {
         }
     }
 
+    /// Creates a new reader that does not allow corrupted data
+    /// and does NOT seek to the next storage pattern whenever
+    /// corrupted data is encountered.
+    pub fn new_strict(reader: R) -> DltStorageReader<R> {
+        DltStorageReader {
+            reader,
+            is_seeking_storage_pattern: false,
+            last_packet: Vec::with_capacity(u16::MAX as usize),
+            read_error: false,
+            num_read_packets: 0,
+            num_pattern_seeks: 0,
+        }
+    }
+
     /// Returns if the reader will seek storage headers if corrupted
     /// data is present between packets.
     #[inline]
@@ -372,6 +386,98 @@ mod dlt_storage_reader_tests {
             );
             assert_eq!(3, reader.num_read_packets());
             assert_eq!(1, reader.num_pattern_seeks());
+
+            assert!(reader.next_packet().is_none());
+        }
+
+        // reader with working packets (strict)
+        {
+            // build two packets
+            let storage_header0 = StorageHeader {
+                timestamp_seconds: 1,
+                timestamp_microseconds: 2,
+                ecu_id: [0, 0, 0, 0],
+            };
+            let packet0 = {
+                let mut packet = Vec::new();
+                let mut header = DltHeader {
+                    is_big_endian: true,
+                    message_counter: 1,
+                    length: 0, // set afterwords
+                    ecu_id: None,
+                    session_id: None,
+                    timestamp: None,
+                    extended_header: None,
+                };
+                header.length = header.header_len() + 4;
+                header.write(&mut packet).unwrap();
+                // set version to 0
+                packet[0] = packet[0] & 0b0001_1111;
+                packet.extend_from_slice(&[1, 2, 3, 4]);
+                packet
+            };
+
+            let storage_header1 = StorageHeader {
+                timestamp_seconds: 3,
+                timestamp_microseconds: 4,
+                ecu_id: [5, 6, 7, 8],
+            };
+            let packet1 = {
+                let mut packet = Vec::new();
+                let mut header = DltHeader {
+                    is_big_endian: true,
+                    message_counter: 2,
+                    length: 0, // set afterwords
+                    ecu_id: None,
+                    session_id: None,
+                    timestamp: None,
+                    extended_header: None,
+                };
+                header.length = header.header_len() + 6;
+                header.write(&mut packet).unwrap();
+                packet.extend_from_slice(&[10, 11, 12, 13, 14, 15]);
+                packet
+            };
+
+            // compose data
+            let mut v = Vec::new();
+            v.extend_from_slice(&storage_header0.to_bytes());
+            v.extend_from_slice(&packet0);
+            v.extend_from_slice(&storage_header1.to_bytes());
+            v.extend_from_slice(&packet1);
+            // add some dummy data to test that an error gets triggered
+            v.extend_from_slice(&[0u8; StorageHeader::BYTE_LEN]);
+
+            // check result
+            let mut reader = DltStorageReader::new_strict(BufReader::new(Cursor::new(&v[..])));
+            assert!(false == reader.is_seeking_storage_pattern());
+            assert_eq!(0, reader.num_read_packets());
+            assert_eq!(0, reader.num_pattern_seeks());
+
+            assert_eq!(
+                reader.next_packet().unwrap().unwrap(),
+                StorageSlice {
+                    storage_header: storage_header0,
+                    packet: DltPacketSlice::from_slice(&packet0).unwrap()
+                }
+            );
+            assert_eq!(1, reader.num_read_packets());
+            assert_eq!(0, reader.num_pattern_seeks());
+
+            assert_eq!(
+                reader.next_packet().unwrap().unwrap(),
+                StorageSlice {
+                    storage_header: storage_header1.clone(),
+                    packet: DltPacketSlice::from_slice(&packet1).unwrap()
+                }
+            );
+            assert_eq!(2, reader.num_read_packets());
+            assert_eq!(0, reader.num_pattern_seeks());
+
+            assert_matches!(
+                reader.next_packet(),
+                Some(Err(ReadError::StorageHeaderStartPattern(_)))
+            );
 
             assert!(reader.next_packet().is_none());
         }
