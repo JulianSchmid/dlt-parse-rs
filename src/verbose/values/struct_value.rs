@@ -59,7 +59,11 @@ impl<'a> StructValue<'a> {
     /// Returns an iterator over the entries/fields of the struct
     #[inline]
     pub fn entries(&self) -> VerboseIter<'a> {
-        VerboseIter::new(self.is_big_endian, self.number_of_entries, self.entries_data)
+        VerboseIter::new(
+            self.is_big_endian,
+            self.number_of_entries,
+            self.entries_data,
+        )
     }
 
     /// Returns the slice containing the raw entries data.
@@ -73,7 +77,7 @@ impl<'a> StructValue<'a> {
 impl<'a> serde::Serialize for StructValue<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer
+        S: serde::Serializer,
     {
         use serde::ser::{Error, SerializeSeq};
 

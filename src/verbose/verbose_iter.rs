@@ -12,7 +12,11 @@ pub struct VerboseIter<'a> {
 impl<'a> VerboseIter<'a> {
     /// Creates new iterator to iterate over the verbose values of a dlt messages.
     #[inline]
-    pub fn new(is_big_endian: bool, number_of_arguments: u16, payload: &'a [u8]) -> VerboseIter<'a> {
+    pub fn new(
+        is_big_endian: bool,
+        number_of_arguments: u16,
+        payload: &'a [u8],
+    ) -> VerboseIter<'a> {
         VerboseIter {
             is_big_endian,
             number_of_arguments,
