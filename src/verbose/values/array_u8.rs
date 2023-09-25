@@ -191,7 +191,7 @@ impl Iterator for ArrayU8Iterator<'_> {
 
     #[inline]
     fn last(self) -> Option<Self::Item> {
-        self.rest.last().map(|v| *v)
+        self.rest.last().copied()
     }
 
     #[inline]
