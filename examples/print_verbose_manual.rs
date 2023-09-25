@@ -1,6 +1,10 @@
 use std::{fs::File, io::BufReader, path::PathBuf};
 
-use dlt_parse::{error::{ReadError, VerboseDecodeError}, storage::DltStorageReader, verbose::VerboseIter};
+use dlt_parse::{
+    error::{ReadError, VerboseDecodeError},
+    storage::DltStorageReader,
+    verbose::VerboseIter,
+};
 use structopt::StructOpt;
 
 /// Expected command line arguments
@@ -61,7 +65,6 @@ fn main() -> Result<(), ReadError> {
 }
 
 fn print_fields(iter: VerboseIter, indent: usize) -> Result<(), VerboseDecodeError> {
-
     let print_indent = || {
         for _ in 0..indent {
             print!("  ");
@@ -87,21 +90,21 @@ fn print_fields(iter: VerboseIter, indent: usize) -> Result<(), VerboseDecodeErr
 
         match value {
             Bool(v) => println!("value = {}", v.value),
-            Str(v) =>  println!("value = {}", v.value),
+            Str(v) => println!("value = {}", v.value),
             TraceInfo(v) => println!("value = {}", v.value),
-            I8(v) =>   println!("value = {}", v.value),
-            I16(v) =>  println!("value = {}", v.value),
-            I32(v) =>  println!("value = {}", v.value),
-            I64(v) =>  println!("value = {}", v.value),
+            I8(v) => println!("value = {}", v.value),
+            I16(v) => println!("value = {}", v.value),
+            I32(v) => println!("value = {}", v.value),
+            I64(v) => println!("value = {}", v.value),
             I128(v) => println!("value = {}", v.value),
-            U8(v) =>   println!("value = {}", v.value),
-            U16(v) =>  println!("value = {}", v.value),
-            U32(v) =>  println!("value = {}", v.value),
-            U64(v) =>  println!("value = {}", v.value),
+            U8(v) => println!("value = {}", v.value),
+            U16(v) => println!("value = {}", v.value),
+            U32(v) => println!("value = {}", v.value),
+            U64(v) => println!("value = {}", v.value),
             U128(v) => println!("value = {}", v.value),
             F16(v) => println!("value = {}", v.value.to_f32()),
-            F32(v) =>  println!("value = {}", v.value),
-            F64(v) =>  println!("value = {}", v.value),
+            F32(v) => println!("value = {}", v.value),
+            F64(v) => println!("value = {}", v.value),
             F128(v) => println!("value = F128Bits({})", v.value.to_bits()),
             ArrBool(v) => print_arr(v.iter()),
             ArrI8(v) => print_arr(v.iter()),
@@ -121,10 +124,10 @@ fn print_fields(iter: VerboseIter, indent: usize) -> Result<(), VerboseDecodeErr
             Struct(v) => print_fields(v.entries(), indent + 1)?,
             Raw(v) => {
                 println!("raw = {:?}", v.data);
-            },
+            }
         }
     }
-    
+
     Ok(())
 }
 

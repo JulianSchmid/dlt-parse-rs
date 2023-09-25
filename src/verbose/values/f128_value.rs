@@ -1,6 +1,6 @@
+use super::RawF128;
 use crate::verbose::VariableInfoUnit;
 use arrayvec::{ArrayVec, CapacityError};
-use super::RawF128;
 
 /// Verbose 128 bit float number.
 #[derive(Debug, PartialEq, Clone)]

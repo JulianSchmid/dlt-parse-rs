@@ -341,7 +341,11 @@ impl<'a> DltPacketSlice<'a> {
 
                 return Some(DltTypedPayload::Verbose {
                     info: message_info,
-                    iter: VerboseIter::new(is_big_endian, u16::from(number_of_arguments), self.payload()),
+                    iter: VerboseIter::new(
+                        is_big_endian,
+                        u16::from(number_of_arguments),
+                        self.payload(),
+                    ),
                 });
             } else {
                 Some(message_info)
@@ -793,7 +797,8 @@ mod tests {
                     let ext = t.0.extended_header.clone().unwrap();
                     let p_start = 0x1234_5678u32.to_be_bytes();
                     let payload = [p_start[0], p_start[1], p_start[2], p_start[3], 0x10, 0x11];
-                    let expected_iter = VerboseIter::new(true, u16::from(ext.number_of_arguments), &payload);
+                    let expected_iter =
+                        VerboseIter::new(true, u16::from(ext.number_of_arguments), &payload);
                     let expected_message_info = ext.message_info;
 
                     assert_eq!(None, slice.message_id());
@@ -856,7 +861,8 @@ mod tests {
                     let ext = t.0.extended_header.clone().unwrap();
                     let p_start = 0x1234_5678u32.to_le_bytes();
                     let payload = [p_start[0], p_start[1], p_start[2], p_start[3], 0x10, 0x11];
-                    let expected_iter = VerboseIter::new(false, u16::from(ext.number_of_arguments), &payload);
+                    let expected_iter =
+                        VerboseIter::new(false, u16::from(ext.number_of_arguments), &payload);
                     let expected_message_info = ext.message_info;
 
                     assert_eq!(None, slice.message_id());
