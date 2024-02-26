@@ -15,21 +15,21 @@ By default `serde` is disabled and `std` is enabled if you add `dlt_parse` as de
 
 ```toml
 [dependencies]
-dlt_parse = "0.9.1"
+dlt_parse = "0.9.2"
 ```
 
 If you additionally want `serde` support you will have to activate the `serde` feature:
 
 ```toml
 [dependencies]
-dlt_parse = { version = "0.9.1", features = ["serde"] }
+dlt_parse = { version = "0.9.2", features = ["serde"] }
 ```
 
 If you want to use the crate in `no_std` mode you will have to disable the default features:
 
 ```toml
 [dependencies]
-dlt_parse = { version = "0.9.1", default-features = false }
+dlt_parse = { version = "0.9.2", default-features = false }
 ```
 
 ## What is dlt_parse?
