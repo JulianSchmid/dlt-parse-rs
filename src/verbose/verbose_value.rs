@@ -72,6 +72,7 @@ impl<'a> VerboseValue<'a> {
         };
 
         // determine the type
+
         const TYPE_LEN_MASK_0: u8 = 0b0000_1111;
         const BOOL_FLAG_0: u8 = 0b0001_0000;
         const SIGNED_FLAG_0: u8 = 0b0010_0000;
@@ -619,12 +620,12 @@ impl<'a> VerboseValue<'a> {
             } else {
                 None
             };
-            let parse: Result<&str, str::Utf8Error> = match slicer.read_raw(len) {
+            let value = match slicer.read_raw(len) {
                 Ok(valid_parse) => {
                     if len > 0 {
-                        core::str::from_utf8(&valid_parse[..valid_parse.len() - 1])
+                        core::str::from_utf8(&valid_parse[..valid_parse.len() - 1])?
                     } else {
-                        Ok("")
+                        ""
                     }
                 }
                 Err(_) => {
@@ -636,14 +637,7 @@ impl<'a> VerboseValue<'a> {
                 }
             };
 
-            match parse {
-                Ok(value) => Ok((Str(StringValue { name, value }), slicer.rest())),
-                Err(_) => Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
-                    layer: error::Layer::VerboseValue,
-                    minimum_size: len,
-                    actual_size: slicer.rest().len(),
-                })),
-            }
+            Ok((Str(StringValue { name, value }), slicer.rest()))
         } else if 0 != type_info[1] & RAW_FLAG_1 {
             // verify no conflicting information is present+
             const CONTRADICTING_MASK_0: u8 = 0b1111_0000;
