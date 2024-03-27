@@ -58,7 +58,6 @@ mod test {
     use crate::verbose::VerboseValue;
     use crate::verbose::VerboseValue::F64;
     use alloc::vec::Vec;
-    use proptest::arbitrary::any;
     use proptest::prelude::*;
     use std::format;
 

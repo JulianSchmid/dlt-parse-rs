@@ -1,7 +1,4 @@
 use crate::*;
-#[cfg(feature = "std")]
-use std::io;
-
 use core::str::Utf8Error;
 
 /// Header present before a `DltHeader` if a DLT packet is
