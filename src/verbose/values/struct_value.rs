@@ -95,7 +95,6 @@ mod test {
     use super::*;
     use crate::verbose::VerboseValue::*;
     use crate::verbose::*;
-    use alloc::vec::Vec;
     use proptest::prelude::*;
     use std::format;
 

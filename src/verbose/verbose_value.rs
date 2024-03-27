@@ -3,7 +3,6 @@ use crate::error::VerboseDecodeError;
 use super::*;
 
 use core::slice;
-use core::str;
 
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]

@@ -585,9 +585,7 @@ impl<'a> FieldSlicer<'a> {
 #[cfg(test)]
 mod test_field_slicer {
     use super::*;
-    use crate::error::{Layer, UnexpectedEndOfSliceError, VerboseDecodeError};
     use alloc::vec::Vec;
-    use proptest::arbitrary::any;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use std::format;

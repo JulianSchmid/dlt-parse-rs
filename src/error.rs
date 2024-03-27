@@ -2,9 +2,6 @@ use super::*;
 use core::fmt;
 use core::str::Utf8Error;
 
-#[cfg(feature = "std")]
-use std::io;
-
 #[cfg(test)]
 use alloc::format;
 
