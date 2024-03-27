@@ -183,11 +183,10 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                 packet,
             }))
         } else {
-            // seek the next storage header pattern
-            let mut pattern_elements_found = 0;
-            let mut storage_pattern_error = false;
-
             loop {
+                // seek the next storage header pattern
+                let mut pattern_elements_found = 0;
+                let mut storage_pattern_error = false;
                 while pattern_elements_found < StorageHeader::PATTERN_AT_START.len() {
                     // load data
                     let slice = match self.reader.fill_buf() {
