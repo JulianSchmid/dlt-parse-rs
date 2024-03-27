@@ -2,8 +2,8 @@ use std::io::{BufRead, ErrorKind, Read};
 use std::vec::Vec;
 
 use crate::error::{DltMessageLengthTooSmallError, ReadError, UnsupportedDltVersionError};
-use crate::MAX_VERSION;
-use crate::{storage::StorageHeader, DltPacketSlice};
+use crate::*;
+use crate::storage::StorageHeader;
 
 use super::StorageSlice;
 
@@ -261,9 +261,34 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                     continue;
                 }
 
+                // calculate the minimum size based on the header flags
+                let header_len = if 0 != header_start[0] & ECU_ID_FLAG {
+                    4 + 4
+                } else {
+                    4
+                };
+
+                let header_len = if 0 != header_start[0] & SESSION_ID_FLAG {
+                    header_len + 4
+                } else {
+                    header_len
+                };
+
+                let header_len = if 0 != header_start[0] & TIMESTAMP_FLAG {
+                    header_len + 4
+                } else {
+                    header_len
+                };
+
+                let header_len = if 0 != header_start[0] & EXTDENDED_HEADER_FLAG {
+                    header_len + 10
+                } else {
+                    header_len
+                };
+
                 // check length to be at least 4
                 let length = u16::from_be_bytes([header_start[2], header_start[3]]) as usize;
-                if length < 4 {
+                if length < header_len {
                     continue;
                 }
 
