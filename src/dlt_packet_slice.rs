@@ -2,6 +2,57 @@ use crate::verbose::VerboseIter;
 
 use super::*;
 
+const SET_LOG_LEVEL: &[u8] = "set_log_level".as_bytes();
+const SET_TRACE_STATUS: &[u8] = "set_trace_status".as_bytes();
+const GET_LOG_INFO: &[u8] = "get_log_info".as_bytes();
+const GET_DEFAULT_LOG_LEVEL: &[u8] = "get_default_log_level".as_bytes();
+const STORE_CONFIGURATION: &[u8] = "store_configuration".as_bytes();
+const RESET_TO_FACTORY_DEFAULT: &[u8] = "reset_to_factory_default".as_bytes();
+const SET_MESSAGE_FILTERING: &[u8] = "set_message_filtering".as_bytes();
+const SET_DEFAULT_LOG_LEVEL: &[u8] = "set_default_log_level".as_bytes();
+const SET_DEFAULT_TRACE_STATUS: &[u8] = "set_default_trace_status".as_bytes();
+const GET_SOFTWARE_VERSION: &[u8] = "get_software_version".as_bytes();
+const GET_DEFAULT_TRACE_STATUS: &[u8] = "get_default_trace_status".as_bytes();
+const GET_LOG_CHANNEL_NAMES: &[u8] = "get_log_channel_names".as_bytes();
+const GET_TRACE_STATUS: &[u8] = "get_trace_status".as_bytes();
+const SET_LOG_CHANNEL_ASSIGNMENT: &[u8] = "set_log_channel_assignment".as_bytes();
+const SET_LOG_CHANNEL_THRESHOLD: &[u8] = "set_log_channel_threshold".as_bytes();
+const GET_LOG_CHANNEL_THRESHOLD: &[u8] = "get_log_channel_threshold".as_bytes();
+const BUFFER_OVERFLOW_NOTIFICATION: &[u8] = "buffer_overflow_notification".as_bytes();
+const SYNC_TIME_STAMP: &[u8] = "sync_time_stamp".as_bytes();
+const CALL_SWC_INJECTIONS: &[u8] = "call_swc_injections".as_bytes();
+
+const OK: &[u8] = "ok".as_bytes();
+const NOT_SUPPORTED: &[u8] = "not_supported".as_bytes();
+const ERROR: &[u8] = "error".as_bytes();
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct ControlMessage<'a> {
+    service_name: &'a [u8],
+    status: Option<&'a [u8]>,
+    non_verbose_payload: &'a [u8],
+}
+
+pub trait ToVec {
+    fn to_vec(&self) -> std::vec::Vec<u8>;
+}
+
+impl ToVec for ControlMessage<'_> {
+    fn to_vec(&self) -> std::vec::Vec<u8> {
+        let mut control_message = std::vec::Vec::with_capacity(16);
+        control_message.push(91);
+        control_message.extend_from_slice(self.service_name);
+        if let Some(status) = self.status {
+            control_message.push(32);
+            control_message.extend_from_slice(status);
+        }
+        control_message.push(93);
+        control_message.push(32);
+        control_message.extend_from_slice(self.non_verbose_payload);
+        control_message
+    }
+}
+
 ///A slice containing an dlt header & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DltPacketSlice<'a> {
@@ -380,14 +431,63 @@ impl<'a> DltPacketSlice<'a> {
                     self.slice.len() - self.header_len - 4,
                 )
             };
-            Some(DltTypedPayload::NonVerbose {
-                info: message_info,
-                msg_id: message_id,
-                payload: non_verbose_payload,
-            })
-        } else {
-            None
+            if let Some(info) = message_info {
+                let service_name = match message_id {
+                    0x01 => SET_LOG_LEVEL,
+                    0x02 => SET_TRACE_STATUS,
+                    0x03 => GET_LOG_INFO,
+                    0x04 => GET_DEFAULT_LOG_LEVEL,
+                    0x05 => STORE_CONFIGURATION,
+                    0x06 => RESET_TO_FACTORY_DEFAULT,
+                    0x0A => SET_MESSAGE_FILTERING,
+                    0x11 => SET_DEFAULT_LOG_LEVEL,
+                    0x12 => SET_DEFAULT_TRACE_STATUS,
+                    0x13 => GET_SOFTWARE_VERSION,
+                    0x15 => GET_DEFAULT_TRACE_STATUS,
+                    0x17 => GET_LOG_CHANNEL_NAMES,
+                    0x1F => GET_TRACE_STATUS,
+                    0x20 => SET_LOG_CHANNEL_ASSIGNMENT,
+                    0x21 => SET_LOG_CHANNEL_THRESHOLD,
+                    0x22 => GET_LOG_CHANNEL_THRESHOLD,
+                    0x23 => BUFFER_OVERFLOW_NOTIFICATION,
+                    0x24 => SYNC_TIME_STAMP,
+                    0xFFF..=0xFFFFFFFF => CALL_SWC_INJECTIONS,
+                    _ => return None,
+                };
+
+                match info.into_message_type() {
+                    Some(DltMessageType::Control(DltControlMessageType::Response)) => {
+                        return determine_dlt_typed_playload_for_non_verbose_response(
+                            non_verbose_payload,
+                            service_name,
+                            message_id,
+                            message_info,
+                        );
+                    }
+                    Some(DltMessageType::Control(DltControlMessageType::Request)) => {
+                        return Some(DltTypedPayload::NonVerbose {
+                            info: message_info,
+                            msg_id: message_id,
+                            payload: non_verbose_payload,
+                            control_message: Some(ControlMessage {
+                                non_verbose_payload,
+                                service_name,
+                                status: None,
+                            }),
+                        });
+                    }
+                    _ => {
+                        return Some(DltTypedPayload::NonVerbose {
+                            info: message_info,
+                            msg_id: message_id,
+                            payload: non_verbose_payload,
+                            control_message: None,
+                        });
+                    }
+                }
+            }
         }
+        None
     }
 
     ///Deserialize the dlt header
@@ -535,6 +635,42 @@ impl<'a> DltPacketSlice<'a> {
             extended_header,
         }
     }
+}
+
+fn determine_dlt_typed_playload_for_non_verbose_response<'a>(
+    non_verbose_payload: &'a [u8],
+    service_name: &'a [u8],
+    message_id: u32,
+    message_info: Option<DltMessageInfo>,
+) -> Option<DltTypedPayload<'a>> {
+    if non_verbose_payload.len() > 5 {
+        let control_message = match non_verbose_payload[0] {
+            0 => Some(ControlMessage {
+                non_verbose_payload: &non_verbose_payload[5..],
+                service_name,
+                status: Some(OK),
+            }),
+            1 => Some(ControlMessage {
+                non_verbose_payload: &non_verbose_payload[5..],
+                service_name,
+                status: Some(NOT_SUPPORTED),
+            }),
+            2 => Some(ControlMessage {
+                non_verbose_payload: &non_verbose_payload[5..],
+                service_name,
+                status: Some(ERROR),
+            }),
+            _ => None,
+        };
+
+        return Some(DltTypedPayload::NonVerbose {
+            info: message_info,
+            msg_id: message_id,
+            payload: non_verbose_payload,
+            control_message,
+        });
+    }
+    None
 }
 
 /// Tests for `DltPacketSlice` methods
@@ -785,14 +921,44 @@ mod tests {
                     assert_eq!(Some(expected_payload), slice.non_verbose_payload());
                     assert_eq!(None, slice.verbose_value_iter());
 
-                    assert_eq!(
-                        Some(DltTypedPayload::NonVerbose {
-                            info: expected_message_info,
-                            msg_id: expected_message_id,
-                            payload: expected_payload
-                        }),
-                        slice.typed_payload()
-                    );
+                    if slice.header_len + 4 <= slice.slice.len() && slice.has_extended_header() {
+                        let ext_slice = unsafe {
+                            from_raw_parts(slice.slice.as_ptr().add(slice.header_len - 10), 10)
+                        };
+                        let message_info = DltMessageInfo(unsafe { *ext_slice.get_unchecked(0) });
+
+                        match message_info.into_message_type() {
+                            Some(DltMessageType::Control(_)) => {
+                                let expected_control_message = ControlMessage {
+                                    non_verbose_payload: expected_payload,
+                                    service_name: CALL_SWC_INJECTIONS,
+                                    status: None,
+                                };
+                                assert_eq!(
+                                    Some(DltTypedPayload::NonVerbose {
+                                        info: expected_message_info,
+                                        msg_id: expected_message_id,
+                                        payload: expected_payload,
+                                        control_message: Some(expected_control_message)
+                                    }),
+                                    slice.typed_payload()
+                                );
+                            }
+                            _ => {
+                                assert_eq!(
+                                    Some(DltTypedPayload::NonVerbose {
+                                        info: expected_message_info,
+                                        msg_id: expected_message_id,
+                                        payload: expected_payload,
+                                        control_message: None,
+                                    }),
+                                    slice.typed_payload()
+                                );
+                            }
+                        }
+                    } else {
+                        assert_eq!(None, slice.typed_payload());
+                    }
                 } else {
                     let ext = t.0.extended_header.clone().unwrap();
                     let p_start = 0x1234_5678u32.to_be_bytes();
@@ -849,14 +1015,45 @@ mod tests {
                     assert_eq!(Some(expected_payload), slice.non_verbose_payload());
                     assert_eq!(None, slice.verbose_value_iter());
 
-                    assert_eq!(
-                        Some(DltTypedPayload::NonVerbose {
-                            info: expected_message_info,
-                            msg_id: expected_message_id,
-                            payload: expected_payload
-                        }),
-                        slice.typed_payload()
-                    );
+                    if slice.header_len + 4 <= slice.slice.len() && slice.has_extended_header() {
+                        let ext_slice = unsafe {
+                            from_raw_parts(slice.slice.as_ptr().add(slice.header_len - 10), 10)
+                        };
+                        let message_info = DltMessageInfo(unsafe { *ext_slice.get_unchecked(0) });
+
+                        match message_info.into_message_type() {
+                            Some(DltMessageType::Control(_)) => {
+                                let expected_control_message = ControlMessage {
+                                    non_verbose_payload: expected_payload,
+                                    service_name: CALL_SWC_INJECTIONS,
+                                    status: None,
+                                };
+
+                                assert_eq!(
+                                    Some(DltTypedPayload::NonVerbose {
+                                        info: expected_message_info,
+                                        msg_id: expected_message_id,
+                                        payload: expected_payload,
+                                        control_message: Some(expected_control_message)
+                                    }),
+                                    slice.typed_payload()
+                                );
+                            }
+                            _ => {
+                                assert_eq!(
+                                    Some(DltTypedPayload::NonVerbose {
+                                        info: expected_message_info,
+                                        msg_id: expected_message_id,
+                                        payload: expected_payload,
+                                        control_message: None,
+                                    }),
+                                    slice.typed_payload()
+                                );
+                            }
+                        }
+                    } else {
+                        assert_eq!(None, slice.typed_payload());
+                    }
                 } else {
                     let ext = t.0.extended_header.clone().unwrap();
                     let p_start = 0x1234_5678u32.to_le_bytes();

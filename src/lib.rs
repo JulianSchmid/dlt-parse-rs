@@ -45,6 +45,7 @@
 //!
 //! ```
 //! use self::dlt_parse::{DltHeader, DltLogLevel, DltExtendedHeader, SliceIterator};
+//! use crate::dlt_parse::ToVec;
 //!
 //! let header = {
 //!     let mut header = DltHeader {
@@ -97,13 +98,24 @@
 //!                         info,
 //!                         msg_id,
 //!                         payload,
+//!                         control_message,
 //!                     } => {
-//!                         println!(
-//!                             "non verbose message 0x{:x} of type {:?} and {} bytes of payload",
-//!                             msg_id,
-//!                             info.map(|v| v.into_message_type()),
-//!                             payload.len()
-//!                        );
+//!                         if let Some(control_message) = control_message {
+//!                             println!(
+//!                                 "non verbose message 0x{:x} of type {:?} and {} bytes of payload with control message: {:?}",
+//!                                 msg_id,
+//!                                 info.map(|v| v.into_message_type()),
+//!                                 payload.len(),
+//!                                 std::str::from_utf8(&control_message.to_vec())
+//!                             );
+//!                         } else {
+//!                             println!(
+//!                                 "non verbose message 0x{:x} of type {:?} and {} bytes of payload without control message.",
+//!                                 msg_id,
+//!                                 info.map(|v| v.into_message_type()),
+//!                                 payload.len(),
+//!                             );
+//!                         }
 //!                    }
 //!                }
 //!            } else {
