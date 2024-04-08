@@ -54,6 +54,7 @@ fn main() -> Result<(), ReadError> {
                     info: _,
                     msg_id: _,
                     payload: _,
+                    control_message: _,
                 } => {}
             }
         } else {

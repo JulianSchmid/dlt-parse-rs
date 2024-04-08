@@ -1,4 +1,4 @@
-use crate::{verbose::VerboseIter, DltMessageInfo};
+use crate::{verbose::VerboseIter, ControlMessage, DltMessageInfo};
 
 /// Payload of a DLT log message.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -13,5 +13,6 @@ pub enum DltTypedPayload<'a> {
         info: Option<DltMessageInfo>,
         msg_id: u32,
         payload: &'a [u8],
+        control_message: Option<ControlMessage<'a>>,
     },
 }
