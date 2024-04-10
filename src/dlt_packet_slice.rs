@@ -21,6 +21,7 @@ const GET_LOG_CHANNEL_THRESHOLD: &[u8] = "get_log_channel_threshold".as_bytes();
 const BUFFER_OVERFLOW_NOTIFICATION: &[u8] = "buffer_overflow_notification".as_bytes();
 const SYNC_TIME_STAMP: &[u8] = "sync_time_stamp".as_bytes();
 const CALL_SWC_INJECTIONS: &[u8] = "call_swc_injections".as_bytes();
+const DEPRECATED_COMMAND_NAME: &[u8] = "deprecated_command_name".as_bytes();
 
 const OK: &[u8] = "ok".as_bytes();
 const NOT_SUPPORTED: &[u8] = "not_supported".as_bytes();
@@ -28,28 +29,55 @@ const ERROR: &[u8] = "error".as_bytes();
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ControlMessage<'a> {
-    service_name: &'a [u8],
+    message_id: u32,
     status: Option<&'a [u8]>,
     non_verbose_payload: &'a [u8],
 }
 
-pub trait ToVec {
-    fn to_vec(&self) -> std::vec::Vec<u8>;
-}
-
-impl ToVec for ControlMessage<'_> {
-    fn to_vec(&self) -> std::vec::Vec<u8> {
+impl std::io::Write for ControlMessage<'_> {
+    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
         let mut control_message = std::vec::Vec::with_capacity(16);
         control_message.push(91);
-        control_message.extend_from_slice(self.service_name);
+        control_message.extend_from_slice(self.service_name());
         if let Some(status) = self.status {
             control_message.push(32);
             control_message.extend_from_slice(status);
         }
-        control_message.push(93);
-        control_message.push(32);
+        control_message.extend_from_slice(&[93, 32]);
         control_message.extend_from_slice(self.non_verbose_payload);
-        control_message
+        control_message.push(10);
+        io::stdout().write(&control_message)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        io::stdout().flush()
+    }
+}
+
+impl ControlMessage<'_> {
+    fn service_name(&self) -> &'static [u8] {
+        match self.message_id {
+            0x01 => SET_LOG_LEVEL,
+            0x02 => SET_TRACE_STATUS,
+            0x03 => GET_LOG_INFO,
+            0x04 => GET_DEFAULT_LOG_LEVEL,
+            0x05 => STORE_CONFIGURATION,
+            0x06 => RESET_TO_FACTORY_DEFAULT,
+            0x0A => SET_MESSAGE_FILTERING,
+            0x11 => SET_DEFAULT_LOG_LEVEL,
+            0x12 => SET_DEFAULT_TRACE_STATUS,
+            0x13 => GET_SOFTWARE_VERSION,
+            0x15 => GET_DEFAULT_TRACE_STATUS,
+            0x17 => GET_LOG_CHANNEL_NAMES,
+            0x1F => GET_TRACE_STATUS,
+            0x20 => SET_LOG_CHANNEL_ASSIGNMENT,
+            0x21 => SET_LOG_CHANNEL_THRESHOLD,
+            0x22 => GET_LOG_CHANNEL_THRESHOLD,
+            0x23 => BUFFER_OVERFLOW_NOTIFICATION,
+            0x24 => SYNC_TIME_STAMP,
+            0xFFF..=0xFFFFFFFF => CALL_SWC_INJECTIONS,
+            _ => DEPRECATED_COMMAND_NAME,
+        }
     }
 }
 
@@ -390,14 +418,51 @@ impl<'a> DltPacketSlice<'a> {
                 // Safe as the ext_slice is at 10.
                 let number_of_arguments = unsafe { *ext_slice.get_unchecked(1) };
 
-                return Some(DltTypedPayload::Verbose {
-                    info: message_info,
-                    iter: VerboseIter::new(
-                        is_big_endian,
-                        u16::from(number_of_arguments),
-                        self.payload(),
-                    ),
-                });
+                if let Some(message_type) = message_info.into_message_type() {
+                    match message_type {
+                        DltMessageType::Control(_) => {
+                            return Some(DltTypedPayload::ControlV(ControlVPayload {
+                                info: message_info,
+                                iter: VerboseIter::new(
+                                    is_big_endian,
+                                    u16::from(number_of_arguments),
+                                    self.payload(),
+                                ),
+                            }));
+                        }
+                        DltMessageType::Log(_) => {
+                            return Some(DltTypedPayload::LogV(LogVPayload {
+                                info: message_info,
+                                iter: VerboseIter::new(
+                                    is_big_endian,
+                                    u16::from(number_of_arguments),
+                                    self.payload(),
+                                ),
+                            }));
+                        }
+                        DltMessageType::NetworkTrace(_) => {
+                            return Some(DltTypedPayload::NetworkV(NetworkVPayload {
+                                info: message_info,
+                                iter: VerboseIter::new(
+                                    is_big_endian,
+                                    u16::from(number_of_arguments),
+                                    self.payload(),
+                                ),
+                            }));
+                        }
+                        DltMessageType::Trace(_) => {
+                            return Some(DltTypedPayload::TraceV(TraceVPayload {
+                                info: message_info,
+                                iter: VerboseIter::new(
+                                    is_big_endian,
+                                    u16::from(number_of_arguments),
+                                    self.payload(),
+                                ),
+                            }));
+                        }
+                    }
+                }
+                return None;
             } else {
                 Some(message_info)
             }
@@ -432,57 +497,53 @@ impl<'a> DltPacketSlice<'a> {
                 )
             };
             if let Some(info) = message_info {
-                let service_name = match message_id {
-                    0x01 => SET_LOG_LEVEL,
-                    0x02 => SET_TRACE_STATUS,
-                    0x03 => GET_LOG_INFO,
-                    0x04 => GET_DEFAULT_LOG_LEVEL,
-                    0x05 => STORE_CONFIGURATION,
-                    0x06 => RESET_TO_FACTORY_DEFAULT,
-                    0x0A => SET_MESSAGE_FILTERING,
-                    0x11 => SET_DEFAULT_LOG_LEVEL,
-                    0x12 => SET_DEFAULT_TRACE_STATUS,
-                    0x13 => GET_SOFTWARE_VERSION,
-                    0x15 => GET_DEFAULT_TRACE_STATUS,
-                    0x17 => GET_LOG_CHANNEL_NAMES,
-                    0x1F => GET_TRACE_STATUS,
-                    0x20 => SET_LOG_CHANNEL_ASSIGNMENT,
-                    0x21 => SET_LOG_CHANNEL_THRESHOLD,
-                    0x22 => GET_LOG_CHANNEL_THRESHOLD,
-                    0x23 => BUFFER_OVERFLOW_NOTIFICATION,
-                    0x24 => SYNC_TIME_STAMP,
-                    0xFFF..=0xFFFFFFFF => CALL_SWC_INJECTIONS,
-                    _ => return None,
-                };
-
                 match info.into_message_type() {
                     Some(DltMessageType::Control(DltControlMessageType::Response)) => {
                         return determine_dlt_typed_playload_for_non_verbose_response(
                             non_verbose_payload,
-                            service_name,
                             message_id,
                             message_info,
                         );
                     }
                     Some(DltMessageType::Control(DltControlMessageType::Request)) => {
-                        return Some(DltTypedPayload::NonVerbose {
+                        return Some(DltTypedPayload::ControlNv(ControlNvPayload {
                             info: message_info,
                             msg_id: message_id,
                             payload: non_verbose_payload,
                             control_message: Some(ControlMessage {
                                 non_verbose_payload,
-                                service_name,
+                                message_id,
                                 status: None,
                             }),
-                        });
+                        }));
                     }
-                    _ => {
-                        return Some(DltTypedPayload::NonVerbose {
+                    Some(DltMessageType::Log(_)) => {
+                        return Some(DltTypedPayload::LogNv(LogNvPayload {
                             info: message_info,
                             msg_id: message_id,
                             payload: non_verbose_payload,
-                            control_message: None,
-                        });
+                        }));
+                    }
+                    Some(DltMessageType::NetworkTrace(_)) => {
+                        return Some(DltTypedPayload::NetworkNv(NetworkNvPayload {
+                            info: message_info,
+                            msg_id: message_id,
+                            payload: non_verbose_payload,
+                        }));
+                    }
+                    Some(DltMessageType::Trace(_)) => {
+                        return Some(DltTypedPayload::TraceNv(TraceNvPayload {
+                            info: message_info,
+                            msg_id: message_id,
+                            payload: non_verbose_payload,
+                        }));
+                    }
+                    None => {
+                        return Some(DltTypedPayload::GenericNv(GenericNvPayload {
+                            info: message_info,
+                            msg_id: message_id,
+                            payload: non_verbose_payload,
+                        }));
                     }
                 }
             }
@@ -637,38 +698,37 @@ impl<'a> DltPacketSlice<'a> {
     }
 }
 
-fn determine_dlt_typed_playload_for_non_verbose_response<'a>(
-    non_verbose_payload: &'a [u8],
-    service_name: &'a [u8],
+fn determine_dlt_typed_playload_for_non_verbose_response(
+    non_verbose_payload: &[u8],
     message_id: u32,
     message_info: Option<DltMessageInfo>,
-) -> Option<DltTypedPayload<'a>> {
+) -> Option<DltTypedPayload<'_>> {
     if non_verbose_payload.len() > 5 {
         let control_message = match non_verbose_payload[0] {
             0 => Some(ControlMessage {
                 non_verbose_payload: &non_verbose_payload[5..],
-                service_name,
+                message_id,
                 status: Some(OK),
             }),
             1 => Some(ControlMessage {
                 non_verbose_payload: &non_verbose_payload[5..],
-                service_name,
+                message_id,
                 status: Some(NOT_SUPPORTED),
             }),
             2 => Some(ControlMessage {
                 non_verbose_payload: &non_verbose_payload[5..],
-                service_name,
+                message_id,
                 status: Some(ERROR),
             }),
             _ => None,
         };
 
-        return Some(DltTypedPayload::NonVerbose {
+        return Some(DltTypedPayload::ControlNv(ControlNvPayload {
             info: message_info,
             msg_id: message_id,
             payload: non_verbose_payload,
             control_message,
-        });
+        }));
     }
     None
 }
@@ -922,40 +982,14 @@ mod tests {
                     assert_eq!(None, slice.verbose_value_iter());
 
                     if slice.header_len + 4 <= slice.slice.len() && slice.has_extended_header() {
-                        let ext_slice = unsafe {
-                            from_raw_parts(slice.slice.as_ptr().add(slice.header_len - 10), 10)
-                        };
-                        let message_info = DltMessageInfo(unsafe { *ext_slice.get_unchecked(0) });
-
-                        match message_info.into_message_type() {
-                            Some(DltMessageType::Control(_)) => {
-                                let expected_control_message = ControlMessage {
-                                    non_verbose_payload: expected_payload,
-                                    service_name: CALL_SWC_INJECTIONS,
-                                    status: None,
-                                };
-                                assert_eq!(
-                                    Some(DltTypedPayload::NonVerbose {
-                                        info: expected_message_info,
-                                        msg_id: expected_message_id,
-                                        payload: expected_payload,
-                                        control_message: Some(expected_control_message)
-                                    }),
-                                    slice.typed_payload()
-                                );
-                            }
-                            _ => {
-                                assert_eq!(
-                                    Some(DltTypedPayload::NonVerbose {
-                                        info: expected_message_info,
-                                        msg_id: expected_message_id,
-                                        payload: expected_payload,
-                                        control_message: None,
-                                    }),
-                                    slice.typed_payload()
-                                );
-                            }
-                        }
+                        assert_eq!(
+                            Some(DltTypedPayload::GenericNv(GenericNvPayload {
+                                info: expected_message_info,
+                                msg_id: expected_message_id,
+                                payload: expected_payload,
+                            })),
+                            slice.typed_payload()
+                        );
                     } else {
                         assert_eq!(None, slice.typed_payload());
                     }
@@ -965,20 +999,13 @@ mod tests {
                     let payload = [p_start[0], p_start[1], p_start[2], p_start[3], 0x10, 0x11];
                     let expected_iter =
                         VerboseIter::new(true, u16::from(ext.number_of_arguments), &payload);
-                    let expected_message_info = ext.message_info;
 
                     assert_eq!(None, slice.message_id());
                     assert_eq!(None, slice.message_id_and_payload());
                     assert_eq!(None, slice.non_verbose_payload());
 
                     assert_eq!(Some(expected_iter.clone()), slice.verbose_value_iter());
-                    assert_eq!(
-                        Some(DltTypedPayload::Verbose {
-                            info: expected_message_info,
-                            iter: expected_iter
-                        }),
-                        slice.typed_payload()
-                    );
+                    assert_eq!(None, slice.typed_payload());
                 }
             }
 
@@ -1016,41 +1043,14 @@ mod tests {
                     assert_eq!(None, slice.verbose_value_iter());
 
                     if slice.header_len + 4 <= slice.slice.len() && slice.has_extended_header() {
-                        let ext_slice = unsafe {
-                            from_raw_parts(slice.slice.as_ptr().add(slice.header_len - 10), 10)
-                        };
-                        let message_info = DltMessageInfo(unsafe { *ext_slice.get_unchecked(0) });
-
-                        match message_info.into_message_type() {
-                            Some(DltMessageType::Control(_)) => {
-                                let expected_control_message = ControlMessage {
-                                    non_verbose_payload: expected_payload,
-                                    service_name: CALL_SWC_INJECTIONS,
-                                    status: None,
-                                };
-
-                                assert_eq!(
-                                    Some(DltTypedPayload::NonVerbose {
-                                        info: expected_message_info,
-                                        msg_id: expected_message_id,
-                                        payload: expected_payload,
-                                        control_message: Some(expected_control_message)
-                                    }),
-                                    slice.typed_payload()
-                                );
-                            }
-                            _ => {
-                                assert_eq!(
-                                    Some(DltTypedPayload::NonVerbose {
-                                        info: expected_message_info,
-                                        msg_id: expected_message_id,
-                                        payload: expected_payload,
-                                        control_message: None,
-                                    }),
-                                    slice.typed_payload()
-                                );
-                            }
-                        }
+                        assert_eq!(
+                            Some(DltTypedPayload::GenericNv(GenericNvPayload {
+                                info: expected_message_info,
+                                msg_id: expected_message_id,
+                                payload: expected_payload,
+                            })),
+                            slice.typed_payload()
+                        );
                     } else {
                         assert_eq!(None, slice.typed_payload());
                     }
@@ -1060,20 +1060,13 @@ mod tests {
                     let payload = [p_start[0], p_start[1], p_start[2], p_start[3], 0x10, 0x11];
                     let expected_iter =
                         VerboseIter::new(false, u16::from(ext.number_of_arguments), &payload);
-                    let expected_message_info = ext.message_info;
 
                     assert_eq!(None, slice.message_id());
                     assert_eq!(None, slice.message_id_and_payload());
                     assert_eq!(None, slice.non_verbose_payload());
 
                     assert_eq!(Some(expected_iter.clone()), slice.verbose_value_iter());
-                    assert_eq!(
-                        Some(DltTypedPayload::Verbose {
-                            info: expected_message_info,
-                            iter: expected_iter
-                        }),
-                        slice.typed_payload()
-                    );
+                    assert_eq!(None, slice.typed_payload());
                 }
             }
 
