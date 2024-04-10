@@ -7,7 +7,7 @@ use etherparse;
 use rpcap::read::PcapReader;
 
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 
 use dlt_parse::*;
 
@@ -94,7 +94,7 @@ fn read(arguments: CommandLineArguments) -> Result<(), Error> {
                 if let Some(typed_payload) = dlt_slice.typed_payload() {
                     use dlt_parse::DltTypedPayload::*;
                     match typed_payload {
-                        Verbose { info, iter } => {
+                        LogV(LogVPayload { info, iter }) => {
                             println!(
                                 "verbose message of type {:?} with values:",
                                 info.into_message_type()
@@ -103,29 +103,38 @@ fn read(arguments: CommandLineArguments) -> Result<(), Error> {
                                 println!("  {:?}", value);
                             }
                         }
-                        NonVerbose {
+                        LogNv(LogNvPayload {
+                            info,
+                            msg_id,
+                            payload,
+                        }) => {
+                            println!(
+                                "non verbose message 0x{:x} of type {:?} and {} bytes of payload without control message.",
+                                msg_id,
+                                info.map(|v| v.into_message_type()),
+                                payload.len(),
+                            );
+                        }
+                        ControlNv(ControlNvPayload {
                             info,
                             msg_id,
                             payload,
                             control_message,
-                        } => {
-                            if let Some(control_message) = control_message {
+                        }) => {
+                            if let Some(mut control_message) = control_message {
                                 println!(
-                                    "non verbose message 0x{:x} of type {:?} and {} bytes of payload with control message: {:?}",
-                                    msg_id,
-                                    info.map(|v| v.into_message_type()),
-                                    payload.len(),
-                                    std::str::from_utf8(&control_message.to_vec())
-                                );
-                            } else {
-                                println!(
-                                    "non verbose message 0x{:x} of type {:?} and {} bytes of payload without control message.",
-                                    msg_id,
-                                    info.map(|v| v.into_message_type()),
-                                    payload.len(),
-                                );
+                            "non verbose message 0x{:x} of type {:?} and {} bytes of payload.",
+                            msg_id,
+                            info.map(|v| v.into_message_type()),
+                            payload.len(),
+                        );
+                                print!("With control message: ");
+                                if let Err(err) = control_message.write(b"") {
+                                    println!("The following error occured while trying to write the control message content: {:?}" , err);
+                                }
                             }
                         }
+                        _ => {}
                     }
                 } else {
                     println!("non verbose message with incomplete message id");

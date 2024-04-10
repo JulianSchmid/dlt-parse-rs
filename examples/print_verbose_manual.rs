@@ -4,6 +4,7 @@ use dlt_parse::{
     error::{ReadError, VerboseDecodeError},
     storage::DltStorageReader,
     verbose::VerboseIter,
+    LogVPayload,
 };
 use structopt::StructOpt;
 
@@ -40,7 +41,7 @@ fn main() -> Result<(), ReadError> {
         if let Some(typed_payload) = msg.packet.typed_payload() {
             use dlt_parse::DltTypedPayload::*;
             match typed_payload {
-                Verbose { info, iter } => {
+                LogV(LogVPayload { info, iter }) => {
                     println!(
                         "verbose message of type {:?} with values:",
                         info.into_message_type()
@@ -50,12 +51,7 @@ fn main() -> Result<(), ReadError> {
                         println!("  ERROR decoding value: {}", err);
                     }
                 }
-                NonVerbose {
-                    info: _,
-                    msg_id: _,
-                    payload: _,
-                    control_message: _,
-                } => {}
+                _ => {}
             }
         } else {
             println!("non verbose message with incomplete message id");
