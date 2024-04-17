@@ -2,25 +2,45 @@ use crate::verbose::VerboseIter;
 
 use super::*;
 
+#[cfg(feature = "std")]
 const SET_LOG_LEVEL: &[u8] = "set_log_level".as_bytes();
+#[cfg(feature = "std")]
 const SET_TRACE_STATUS: &[u8] = "set_trace_status".as_bytes();
+#[cfg(feature = "std")]
 const GET_LOG_INFO: &[u8] = "get_log_info".as_bytes();
+#[cfg(feature = "std")]
 const GET_DEFAULT_LOG_LEVEL: &[u8] = "get_default_log_level".as_bytes();
+#[cfg(feature = "std")]
 const STORE_CONFIGURATION: &[u8] = "store_configuration".as_bytes();
+#[cfg(feature = "std")]
 const RESET_TO_FACTORY_DEFAULT: &[u8] = "reset_to_factory_default".as_bytes();
+#[cfg(feature = "std")]
 const SET_MESSAGE_FILTERING: &[u8] = "set_message_filtering".as_bytes();
+#[cfg(feature = "std")]
 const SET_DEFAULT_LOG_LEVEL: &[u8] = "set_default_log_level".as_bytes();
+#[cfg(feature = "std")]
 const SET_DEFAULT_TRACE_STATUS: &[u8] = "set_default_trace_status".as_bytes();
+#[cfg(feature = "std")]
 const GET_SOFTWARE_VERSION: &[u8] = "get_software_version".as_bytes();
+#[cfg(feature = "std")]
 const GET_DEFAULT_TRACE_STATUS: &[u8] = "get_default_trace_status".as_bytes();
+#[cfg(feature = "std")]
 const GET_LOG_CHANNEL_NAMES: &[u8] = "get_log_channel_names".as_bytes();
+#[cfg(feature = "std")]
 const GET_TRACE_STATUS: &[u8] = "get_trace_status".as_bytes();
+#[cfg(feature = "std")]
 const SET_LOG_CHANNEL_ASSIGNMENT: &[u8] = "set_log_channel_assignment".as_bytes();
+#[cfg(feature = "std")]
 const SET_LOG_CHANNEL_THRESHOLD: &[u8] = "set_log_channel_threshold".as_bytes();
+#[cfg(feature = "std")]
 const GET_LOG_CHANNEL_THRESHOLD: &[u8] = "get_log_channel_threshold".as_bytes();
+#[cfg(feature = "std")]
 const BUFFER_OVERFLOW_NOTIFICATION: &[u8] = "buffer_overflow_notification".as_bytes();
+#[cfg(feature = "std")]
 const SYNC_TIME_STAMP: &[u8] = "sync_time_stamp".as_bytes();
+#[cfg(feature = "std")]
 const CALL_SWC_INJECTIONS: &[u8] = "call_swc_injections".as_bytes();
+#[cfg(feature = "std")]
 const DEPRECATED_COMMAND_NAME: &[u8] = "deprecated_command_name".as_bytes();
 
 const OK: &[u8] = "ok".as_bytes();
@@ -34,6 +54,7 @@ pub struct ControlMessage<'a> {
     non_verbose_payload: &'a [u8],
 }
 
+#[cfg(feature = "std")]
 impl std::io::Write for ControlMessage<'_> {
     fn write(&mut self, _: &[u8]) -> io::Result<usize> {
         let mut control_message = std::vec::Vec::with_capacity(16);
@@ -54,6 +75,7 @@ impl std::io::Write for ControlMessage<'_> {
     }
 }
 
+#[cfg(feature = "std")]
 impl ControlMessage<'_> {
     fn service_name(&self) -> &'static [u8] {
         match self.message_id {
