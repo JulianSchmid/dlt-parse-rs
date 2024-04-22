@@ -41,17 +41,21 @@ fn main() -> Result<(), ReadError> {
         if let Some(typed_payload) = msg.packet.typed_payload() {
             use dlt_parse::DltTypedPayload::*;
             match typed_payload {
-                LogV(LogVPayload { info, iter }) => {
-                    println!(
-                        "verbose message of type {:?} with values:",
-                        info.into_message_type()
-                    );
+                LogV(LogVPayload { log_level, iter }) => {
+                    println!("verbose message of type {:?} with values:", log_level);
                     let field_print_result = print_fields(iter, 1);
                     if let Err(err) = field_print_result {
                         println!("  ERROR decoding value: {}", err);
                     }
                 }
-                _ => {}
+                GenericNv(_) => println!("generic non verbose message received"),
+                TraceV(_) => println!("verbose trace message received"),
+                TraceNv(_) => println!("non verbose trace message received"),
+                NetworkV(_) => println!("verbose network message received"),
+                NetworkNv(_) => println!("non verbose network message received"),
+                ControlV(_) => println!("verbose control message received"),
+                LogNv(_) => println!("non verbose log message received"),
+                ControlNv(_) => println!("non verbose control message received"),
             }
         } else {
             println!("non verbose message with incomplete message id");

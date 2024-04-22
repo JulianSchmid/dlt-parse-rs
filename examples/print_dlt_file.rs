@@ -1,8 +1,4 @@
-use std::{
-    fs::File,
-    io::{BufReader, Write},
-    path::PathBuf,
-};
+use std::{fs::File, io::BufReader, path::PathBuf};
 
 use dlt_parse::{
     error::ReadError, storage::DltStorageReader, ControlNvPayload, LogNvPayload, LogVPayload,
@@ -42,47 +38,45 @@ fn main() -> Result<(), ReadError> {
         if let Some(typed_payload) = msg.packet.typed_payload() {
             use dlt_parse::DltTypedPayload::*;
             match typed_payload {
-                LogV(LogVPayload { info, iter }) => {
+                LogV(LogVPayload { iter, log_level }) => {
                     println!(
-                        "verbose message of type {:?} with values:",
-                        info.into_message_type()
+                        "verbose log message with log level {:?} and values:",
+                        log_level
                     );
                     for value in iter {
                         println!("  {:?}", value);
                     }
                 }
                 LogNv(LogNvPayload {
-                    info,
+                    log_level,
                     msg_id,
                     payload,
                 }) => {
                     println!(
-                        "non verbose message 0x{:x} of type {:?} and {} bytes of payload without control message.",
+                        "non verbose log message 0x{:x} with log level {:?} and {} bytes of payload.",
                         msg_id,
-                        info.map(|v| v.into_message_type()),
+                        log_level,
                         payload.len(),
                     );
                 }
                 ControlNv(ControlNvPayload {
-                    info,
-                    msg_id,
+                    msg_type,
+                    service_id,
                     payload,
-                    control_message,
                 }) => {
-                    if let Some(mut control_message) = control_message {
-                        println!(
-                            "non verbose message 0x{:x} of type {:?} and {} bytes of payload.",
-                            msg_id,
-                            info.map(|v| v.into_message_type()),
-                            payload.len(),
-                        );
-                        print!("With control message: ");
-                        if let Err(err) = control_message.write(b"") {
-                            println!("The following error occured while trying to write the control message content: {:?}" , err);
-                        }
-                    }
+                    println!(
+                        "non verbose control message {:?} with service id: {} and {} bytes of payload.",
+                        msg_type,
+                        service_id,
+                        payload.len(),
+                    );
                 }
-                _ => {}
+                GenericNv(_) => println!("generic non verbose message received"),
+                TraceV(_) => println!("verbose trace message received"),
+                TraceNv(_) => println!("non verbose trace message received"),
+                NetworkV(_) => println!("verbose network message received"),
+                NetworkNv(_) => println!("non verbose network message received"),
+                ControlV(_) => println!("verbose control message received"),
             }
         } else {
             println!("non verbose message with incomplete message id");
