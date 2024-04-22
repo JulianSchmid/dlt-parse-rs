@@ -48,6 +48,7 @@ const NOT_SUPPORTED: &[u8] = "not_supported".as_bytes();
 const ERROR: &[u8] = "error".as_bytes();
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[cfg(feature = "std")]
 pub struct ControlMessage<'a> {
     message_id: u32,
     status: Option<&'a [u8]>,
