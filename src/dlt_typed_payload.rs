@@ -1,4 +1,7 @@
-use crate::{verbose::VerboseIter, ControlMessage, DltMessageInfo};
+use crate::{
+    verbose::VerboseIter, DltControlMessageType, DltLogLevel, DltMessageInfo, DltNetworkType,
+    DltTraceType,
+};
 
 /// Payload of a DLT log message.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -25,25 +28,25 @@ pub enum DltTypedPayload<'a> {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct LogVPayload<'a> {
-    pub info: DltMessageInfo,
+    pub log_level: DltLogLevel,
     pub iter: VerboseIter<'a>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct TraceVPayload<'a> {
-    pub info: DltMessageInfo,
+    pub trace_type: DltTraceType,
     pub iter: VerboseIter<'a>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct NetworkVPayload<'a> {
-    pub info: DltMessageInfo,
+    pub net_type: DltNetworkType,
     pub iter: VerboseIter<'a>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ControlVPayload<'a> {
-    pub info: DltMessageInfo,
+    pub msg_type: DltControlMessageType,
     pub iter: VerboseIter<'a>,
 }
 
@@ -70,15 +73,14 @@ pub struct NetworkNvPayload<'a> {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct LogNvPayload<'a> {
-    pub info: Option<DltMessageInfo>,
+    pub log_level: DltLogLevel,
     pub msg_id: u32,
     pub payload: &'a [u8],
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ControlNvPayload<'a> {
-    pub info: Option<DltMessageInfo>,
-    pub msg_id: u32,
+    pub msg_type: DltControlMessageType,
+    pub service_id: u32,
     pub payload: &'a [u8],
-    pub control_message: Option<ControlMessage<'a>>,
 }

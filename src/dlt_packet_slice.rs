@@ -2,105 +2,48 @@ use crate::verbose::VerboseIter;
 
 use super::*;
 
-#[cfg(feature = "std")]
-const SET_LOG_LEVEL: &[u8] = "set_log_level".as_bytes();
-#[cfg(feature = "std")]
-const SET_TRACE_STATUS: &[u8] = "set_trace_status".as_bytes();
-#[cfg(feature = "std")]
-const GET_LOG_INFO: &[u8] = "get_log_info".as_bytes();
-#[cfg(feature = "std")]
-const GET_DEFAULT_LOG_LEVEL: &[u8] = "get_default_log_level".as_bytes();
-#[cfg(feature = "std")]
-const STORE_CONFIGURATION: &[u8] = "store_configuration".as_bytes();
-#[cfg(feature = "std")]
-const RESET_TO_FACTORY_DEFAULT: &[u8] = "reset_to_factory_default".as_bytes();
-#[cfg(feature = "std")]
-const SET_MESSAGE_FILTERING: &[u8] = "set_message_filtering".as_bytes();
-#[cfg(feature = "std")]
-const SET_DEFAULT_LOG_LEVEL: &[u8] = "set_default_log_level".as_bytes();
-#[cfg(feature = "std")]
-const SET_DEFAULT_TRACE_STATUS: &[u8] = "set_default_trace_status".as_bytes();
-#[cfg(feature = "std")]
-const GET_SOFTWARE_VERSION: &[u8] = "get_software_version".as_bytes();
-#[cfg(feature = "std")]
-const GET_DEFAULT_TRACE_STATUS: &[u8] = "get_default_trace_status".as_bytes();
-#[cfg(feature = "std")]
-const GET_LOG_CHANNEL_NAMES: &[u8] = "get_log_channel_names".as_bytes();
-#[cfg(feature = "std")]
-const GET_TRACE_STATUS: &[u8] = "get_trace_status".as_bytes();
-#[cfg(feature = "std")]
-const SET_LOG_CHANNEL_ASSIGNMENT: &[u8] = "set_log_channel_assignment".as_bytes();
-#[cfg(feature = "std")]
-const SET_LOG_CHANNEL_THRESHOLD: &[u8] = "set_log_channel_threshold".as_bytes();
-#[cfg(feature = "std")]
-const GET_LOG_CHANNEL_THRESHOLD: &[u8] = "get_log_channel_threshold".as_bytes();
-#[cfg(feature = "std")]
-const BUFFER_OVERFLOW_NOTIFICATION: &[u8] = "buffer_overflow_notification".as_bytes();
-#[cfg(feature = "std")]
-const SYNC_TIME_STAMP: &[u8] = "sync_time_stamp".as_bytes();
-#[cfg(feature = "std")]
-const CALL_SWC_INJECTIONS: &[u8] = "call_swc_injections".as_bytes();
-#[cfg(feature = "std")]
-const DEPRECATED_COMMAND_NAME: &[u8] = "deprecated_command_name".as_bytes();
+const SET_LOG_LEVEL: &str = "set_log_level";
+const SET_TRACE_STATUS: &str = "set_trace_status";
+const GET_LOG_INFO: &str = "get_log_info";
+const GET_DEFAULT_LOG_LEVEL: &str = "get_default_log_level";
+const STORE_CONFIGURATION: &str = "store_configuration";
+const RESET_TO_FACTORY_DEFAULT: &str = "reset_to_factory_default";
+const SET_MESSAGE_FILTERING: &str = "set_message_filtering";
+const SET_DEFAULT_LOG_LEVEL: &str = "set_default_log_level";
+const SET_DEFAULT_TRACE_STATUS: &str = "set_default_trace_status";
+const GET_SOFTWARE_VERSION: &str = "get_software_version";
+const GET_DEFAULT_TRACE_STATUS: &str = "get_default_trace_status";
+const GET_LOG_CHANNEL_NAMES: &str = "get_log_channel_names";
+const GET_TRACE_STATUS: &str = "get_trace_status";
+const SET_LOG_CHANNEL_ASSIGNMENT: &str = "set_log_channel_assignment";
+const SET_LOG_CHANNEL_THRESHOLD: &str = "set_log_channel_threshold";
+const GET_LOG_CHANNEL_THRESHOLD: &str = "get_log_channel_threshold";
+const BUFFER_OVERFLOW_NOTIFICATION: &str = "buffer_overflow_notification";
+const SYNC_TIME_STAMP: &str = "sync_time_stamp";
+const CALL_SWC_INJECTIONS: &str = "call_swc_injections";
 
-const OK: &[u8] = "ok".as_bytes();
-const NOT_SUPPORTED: &[u8] = "not_supported".as_bytes();
-const ERROR: &[u8] = "error".as_bytes();
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-#[cfg(feature = "std")]
-pub struct ControlMessage<'a> {
-    message_id: u32,
-    status: Option<&'a [u8]>,
-    non_verbose_payload: &'a [u8],
-}
-
-#[cfg(feature = "std")]
-impl std::io::Write for ControlMessage<'_> {
-    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        let mut control_message = std::vec::Vec::with_capacity(16);
-        control_message.push(91);
-        control_message.extend_from_slice(self.service_name());
-        if let Some(status) = self.status {
-            control_message.push(32);
-            control_message.extend_from_slice(status);
-        }
-        control_message.extend_from_slice(&[93, 32]);
-        control_message.extend_from_slice(self.non_verbose_payload);
-        control_message.push(10);
-        io::stdout().write(&control_message)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        io::stdout().flush()
-    }
-}
-
-#[cfg(feature = "std")]
-impl ControlMessage<'_> {
-    fn service_name(&self) -> &'static [u8] {
-        match self.message_id {
-            0x01 => SET_LOG_LEVEL,
-            0x02 => SET_TRACE_STATUS,
-            0x03 => GET_LOG_INFO,
-            0x04 => GET_DEFAULT_LOG_LEVEL,
-            0x05 => STORE_CONFIGURATION,
-            0x06 => RESET_TO_FACTORY_DEFAULT,
-            0x0A => SET_MESSAGE_FILTERING,
-            0x11 => SET_DEFAULT_LOG_LEVEL,
-            0x12 => SET_DEFAULT_TRACE_STATUS,
-            0x13 => GET_SOFTWARE_VERSION,
-            0x15 => GET_DEFAULT_TRACE_STATUS,
-            0x17 => GET_LOG_CHANNEL_NAMES,
-            0x1F => GET_TRACE_STATUS,
-            0x20 => SET_LOG_CHANNEL_ASSIGNMENT,
-            0x21 => SET_LOG_CHANNEL_THRESHOLD,
-            0x22 => GET_LOG_CHANNEL_THRESHOLD,
-            0x23 => BUFFER_OVERFLOW_NOTIFICATION,
-            0x24 => SYNC_TIME_STAMP,
-            0xFFF..=0xFFFFFFFF => CALL_SWC_INJECTIONS,
-            _ => DEPRECATED_COMMAND_NAME,
-        }
+pub fn service_name(service_id: u32) -> Option<&'static str> {
+    match service_id {
+        0x01 => Some(SET_LOG_LEVEL),
+        0x02 => Some(SET_TRACE_STATUS),
+        0x03 => Some(GET_LOG_INFO),
+        0x04 => Some(GET_DEFAULT_LOG_LEVEL),
+        0x05 => Some(STORE_CONFIGURATION),
+        0x06 => Some(RESET_TO_FACTORY_DEFAULT),
+        0x0A => Some(SET_MESSAGE_FILTERING),
+        0x11 => Some(SET_DEFAULT_LOG_LEVEL),
+        0x12 => Some(SET_DEFAULT_TRACE_STATUS),
+        0x13 => Some(GET_SOFTWARE_VERSION),
+        0x15 => Some(GET_DEFAULT_TRACE_STATUS),
+        0x17 => Some(GET_LOG_CHANNEL_NAMES),
+        0x1F => Some(GET_TRACE_STATUS),
+        0x20 => Some(SET_LOG_CHANNEL_ASSIGNMENT),
+        0x21 => Some(SET_LOG_CHANNEL_THRESHOLD),
+        0x22 => Some(GET_LOG_CHANNEL_THRESHOLD),
+        0x23 => Some(BUFFER_OVERFLOW_NOTIFICATION),
+        0x24 => Some(SYNC_TIME_STAMP),
+        0xFFF..=0xFFFFFFFF => Some(CALL_SWC_INJECTIONS),
+        _ => None,
     }
 }
 
@@ -443,9 +386,9 @@ impl<'a> DltPacketSlice<'a> {
 
                 if let Some(message_type) = message_info.into_message_type() {
                     match message_type {
-                        DltMessageType::Control(_) => {
+                        DltMessageType::Control(msg_type) => {
                             return Some(DltTypedPayload::ControlV(ControlVPayload {
-                                info: message_info,
+                                msg_type,
                                 iter: VerboseIter::new(
                                     is_big_endian,
                                     u16::from(number_of_arguments),
@@ -453,9 +396,9 @@ impl<'a> DltPacketSlice<'a> {
                                 ),
                             }));
                         }
-                        DltMessageType::Log(_) => {
+                        DltMessageType::Log(log_level) => {
                             return Some(DltTypedPayload::LogV(LogVPayload {
-                                info: message_info,
+                                log_level,
                                 iter: VerboseIter::new(
                                     is_big_endian,
                                     u16::from(number_of_arguments),
@@ -463,9 +406,9 @@ impl<'a> DltPacketSlice<'a> {
                                 ),
                             }));
                         }
-                        DltMessageType::NetworkTrace(_) => {
+                        DltMessageType::NetworkTrace(net_type) => {
                             return Some(DltTypedPayload::NetworkV(NetworkVPayload {
-                                info: message_info,
+                                net_type,
                                 iter: VerboseIter::new(
                                     is_big_endian,
                                     u16::from(number_of_arguments),
@@ -473,9 +416,9 @@ impl<'a> DltPacketSlice<'a> {
                                 ),
                             }));
                         }
-                        DltMessageType::Trace(_) => {
+                        DltMessageType::Trace(trace_type) => {
                             return Some(DltTypedPayload::TraceV(TraceVPayload {
-                                info: message_info,
+                                trace_type,
                                 iter: VerboseIter::new(
                                     is_big_endian,
                                     u16::from(number_of_arguments),
@@ -525,24 +468,18 @@ impl<'a> DltPacketSlice<'a> {
                         return determine_dlt_typed_playload_for_non_verbose_response(
                             non_verbose_payload,
                             message_id,
-                            message_info,
                         );
                     }
                     Some(DltMessageType::Control(DltControlMessageType::Request)) => {
                         return Some(DltTypedPayload::ControlNv(ControlNvPayload {
-                            info: message_info,
-                            msg_id: message_id,
+                            msg_type: DltControlMessageType::Request,
+                            service_id: message_id,
                             payload: non_verbose_payload,
-                            control_message: Some(ControlMessage {
-                                non_verbose_payload,
-                                message_id,
-                                status: None,
-                            }),
                         }));
                     }
-                    Some(DltMessageType::Log(_)) => {
+                    Some(DltMessageType::Log(log_level)) => {
                         return Some(DltTypedPayload::LogNv(LogNvPayload {
-                            info: message_info,
+                            log_level,
                             msg_id: message_id,
                             payload: non_verbose_payload,
                         }));
@@ -723,35 +660,25 @@ impl<'a> DltPacketSlice<'a> {
 
 fn determine_dlt_typed_playload_for_non_verbose_response(
     non_verbose_payload: &[u8],
-    message_id: u32,
-    message_info: Option<DltMessageInfo>,
+    service_id: u32,
 ) -> Option<DltTypedPayload<'_>> {
     if non_verbose_payload.len() > 5 {
-        let control_message = match non_verbose_payload[0] {
-            0 => Some(ControlMessage {
-                non_verbose_payload: &non_verbose_payload[5..],
-                message_id,
-                status: Some(OK),
-            }),
-            1 => Some(ControlMessage {
-                non_verbose_payload: &non_verbose_payload[5..],
-                message_id,
-                status: Some(NOT_SUPPORTED),
-            }),
-            2 => Some(ControlMessage {
-                non_verbose_payload: &non_verbose_payload[5..],
-                message_id,
-                status: Some(ERROR),
-            }),
-            _ => None,
+        match service_id {
+            0..=2 => {
+                return Some(DltTypedPayload::ControlNv(ControlNvPayload {
+                    msg_type: DltControlMessageType::Response,
+                    payload: non_verbose_payload,
+                    service_id,
+                }))
+            }
+            _ => {
+                return Some(DltTypedPayload::ControlNv(ControlNvPayload {
+                    msg_type: DltControlMessageType::Request,
+                    payload: non_verbose_payload,
+                    service_id,
+                }))
+            }
         };
-
-        return Some(DltTypedPayload::ControlNv(ControlNvPayload {
-            info: message_info,
-            msg_id: message_id,
-            payload: non_verbose_payload,
-            control_message,
-        }));
     }
     None
 }
