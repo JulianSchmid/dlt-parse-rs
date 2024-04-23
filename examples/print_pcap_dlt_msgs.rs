@@ -127,7 +127,7 @@ fn read(arguments: CommandLineArguments) -> Result<(), Error> {
                                 payload.len(),
                             );
                         }
-                        GenericNv(_) => println!("generic non verbose message received"),
+                        UnknownNv(_) => println!("generic non verbose message received"),
                         TraceV(_) => println!("verbose trace message received"),
                         TraceNv(_) => println!("non verbose trace message received"),
                         NetworkV(_) => println!("verbose network message received"),
