@@ -100,6 +100,43 @@ pub fn log_level_any() -> impl Strategy<Value = DltLogLevel> {
     ]
 }
 
+pub fn trace_type_any() -> impl Strategy<Value = DltTraceType> {
+    use DltTraceType::*;
+    prop_oneof![
+        Just(Variable),
+        Just(FunctionIn),
+        Just(FunctionOut),
+        Just(State),
+        Just(Vfb),
+    ]
+}
+
+pub fn network_type_any() -> impl Strategy<Value = DltNetworkType> {
+    use DltNetworkType::*;
+    prop_oneof![
+        Just(Ipc),
+        Just(Can),
+        Just(Flexray),
+        Just(Most),
+        Just(Ethernet),
+        Just(SomeIp),
+        Just(UserDefined(0x7)),
+        Just(UserDefined(0x8)),
+        Just(UserDefined(0x9)),
+        Just(UserDefined(0xA)),
+        Just(UserDefined(0xB)),
+        Just(UserDefined(0xC)),
+        Just(UserDefined(0xD)),
+        Just(UserDefined(0xE)),
+        Just(UserDefined(0xF)),
+    ]
+}
+
+pub fn control_message_type_any() -> impl Strategy<Value = DltControlMessageType> {
+    use DltControlMessageType::*;
+    prop_oneof![Just(Request), Just(Response),]
+}
+
 pub fn message_type_any() -> impl Strategy<Value = DltMessageType> {
     use DltControlMessageType::*;
     use DltLogLevel::*;
