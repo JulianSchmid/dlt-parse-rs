@@ -218,6 +218,9 @@ pub use dlt_packet_slice::*;
 mod dlt_slice_iterator;
 pub use dlt_slice_iterator::*;
 
+/// Control message related types & functions.
+pub mod control;
+
 /// Errors that can be returned by functions in dlt_parse.
 pub mod error;
 
