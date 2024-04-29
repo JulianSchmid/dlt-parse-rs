@@ -1,5 +1,7 @@
 use crate::verbose::VerboseIter;
 
+use self::error::TypedPayloadError;
+
 use super::*;
 
 const SET_LOG_LEVEL: &str = "set_log_level";
@@ -360,7 +362,7 @@ impl<'a> DltPacketSlice<'a> {
 
     /// Returns the verbose or non verbose payload of the given dlt message (if it has one).
     #[inline]
-    pub fn typed_payload(&self) -> Option<DltTypedPayload<'a>> {
+    pub fn typed_payload(&self) -> Result<DltTypedPayload<'a>, TypedPayloadError> {
         // verbose messages are required to have an extended header
         let message_info = if self.has_extended_header() {
             // SAFETY:
@@ -387,7 +389,7 @@ impl<'a> DltPacketSlice<'a> {
                 if let Some(message_type) = message_info.into_message_type() {
                     match message_type {
                         DltMessageType::Control(msg_type) => {
-                            return Some(DltTypedPayload::ControlV(ControlVPayload {
+                            return Ok(DltTypedPayload::ControlV(ControlVPayload {
                                 msg_type,
                                 iter: VerboseIter::new(
                                     is_big_endian,
@@ -397,7 +399,7 @@ impl<'a> DltPacketSlice<'a> {
                             }));
                         }
                         DltMessageType::Log(log_level) => {
-                            return Some(DltTypedPayload::LogV(LogVPayload {
+                            return Ok(DltTypedPayload::LogV(LogVPayload {
                                 log_level,
                                 iter: VerboseIter::new(
                                     is_big_endian,
@@ -407,7 +409,7 @@ impl<'a> DltPacketSlice<'a> {
                             }));
                         }
                         DltMessageType::NetworkTrace(net_type) => {
-                            return Some(DltTypedPayload::NetworkV(NetworkVPayload {
+                            return Ok(DltTypedPayload::NetworkV(NetworkVPayload {
                                 net_type,
                                 iter: VerboseIter::new(
                                     is_big_endian,
@@ -417,7 +419,7 @@ impl<'a> DltPacketSlice<'a> {
                             }));
                         }
                         DltMessageType::Trace(trace_type) => {
-                            return Some(DltTypedPayload::TraceV(TraceVPayload {
+                            return Ok(DltTypedPayload::TraceV(TraceVPayload {
                                 trace_type,
                                 iter: VerboseIter::new(
                                     is_big_endian,
@@ -427,8 +429,9 @@ impl<'a> DltPacketSlice<'a> {
                             }));
                         }
                     }
+                } else {
+                    return Err(TypedPayloadError::UnknownMessageInfo(message_info));
                 }
-                return None;
             } else {
                 Some(message_info)
             }
@@ -465,28 +468,28 @@ impl<'a> DltPacketSlice<'a> {
             if let Some(info) = message_info {
                 match info.into_message_type() {
                     Some(DltMessageType::Control(msg_type)) => {
-                        Some(DltTypedPayload::ControlNv(ControlNvPayload {
+                        Ok(DltTypedPayload::ControlNv(ControlNvPayload {
                             msg_type,
                             service_id: message_id,
                             payload: non_verbose_payload,
                         }))
                     }
                     Some(DltMessageType::Log(log_level)) => {
-                        Some(DltTypedPayload::LogNv(LogNvPayload {
+                        Ok(DltTypedPayload::LogNv(LogNvPayload {
                             log_level,
                             msg_id: message_id,
                             payload: non_verbose_payload,
                         }))
                     }
                     Some(DltMessageType::NetworkTrace(net_type)) => {
-                        Some(DltTypedPayload::NetworkNv(NetworkNvPayload {
+                        Ok(DltTypedPayload::NetworkNv(NetworkNvPayload {
                             net_type,
                             msg_id: message_id,
                             payload: non_verbose_payload,
                         }))
                     }
                     Some(DltMessageType::Trace(trace_type)) => {
-                        Some(DltTypedPayload::TraceNv(TraceNvPayload {
+                        Ok(DltTypedPayload::TraceNv(TraceNvPayload {
                             trace_type,
                             msg_id: message_id,
                             payload: non_verbose_payload,
@@ -495,18 +498,21 @@ impl<'a> DltPacketSlice<'a> {
                     None => {
                         // in case there is a message info but the type
                         // is not any known
-                        None
+                        return Err(TypedPayloadError::UnknownMessageInfo(info));
                     }
                 }
             } else {
-                Some(DltTypedPayload::UnknownNv(NvPayload {
+                Ok(DltTypedPayload::UnknownNv(NvPayload {
                     msg_id: message_id,
                     payload: non_verbose_payload,
                 }))
             }
         } else {
             // not enough data for a non verbose message id
-            None
+            Err(TypedPayloadError::LenSmallerThanMessageId {
+                packet_len: self.slice.len(),
+                header_len: self.header_len,
+            })
         }
     }
 
@@ -838,7 +844,7 @@ mod tests {
         ) {
             struct Packet {
                 header: DltHeader,
-                packet: ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 4 }>,
+                packet: ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 8 }>,
             }
 
             impl Packet {
@@ -846,8 +852,7 @@ mod tests {
                 fn new(message_info: Option<DltMessageInfo>, is_big_endian: bool) -> Packet {
                     // build header
                     let mut header: DltHeader = Default::default();
-                    header.length = header.header_len() + 4 + 2;
-
+                    header.is_big_endian = is_big_endian;
                     if let Some(message_info) = message_info {
                         header.extended_header = Some(DltExtendedHeader{
                             message_info,
@@ -856,22 +861,27 @@ mod tests {
                             context_id: [0;4]
                         });
                     }
+                    header.length = header.header_len() + 4 + 2;
 
-                    // serialize
-                    let mut packet = ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 4 }>::new();
-                    packet.try_extend_from_slice(&header.to_bytes()).unwrap();
-                    if is_big_endian {
-                        packet
-                            .try_extend_from_slice(&0x1234_5678u32.to_be_bytes())
+                    let packet = Self::serialize(&header, 0x1234_5678u32);
+                    Packet{ header, packet }
+                }
+
+                fn serialize(header: &DltHeader, message_id: u32) -> ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 8 }> {
+                    let mut result = ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 8 }>::new();
+                    result.try_extend_from_slice(&header.to_bytes()).unwrap();
+                    if header.is_big_endian {
+                        result
+                            .try_extend_from_slice(&message_id.to_be_bytes())
                             .unwrap();
                     } else {
-                        packet
-                            .try_extend_from_slice(&0x1234_5678u32.to_le_bytes())
+                        result
+                            .try_extend_from_slice(&message_id.to_le_bytes())
                             .unwrap();
                     }
-                    packet.try_extend_from_slice(&[0x10, 0x11]).unwrap();
-
-                    Packet{ header, packet }
+                    // dummy padding for tests
+                    result.try_extend_from_slice(&[0x10, 0x11]).unwrap();
+                    result
                 }
 
                 fn to_slice(&self) -> DltPacketSlice {
@@ -886,13 +896,22 @@ mod tests {
                     [0x10, 0x11]
                 }
 
-                fn check_nv_len_check(&self) {
-                    for missing_len in 1..=4 {
-                        let slice = DltPacketSlice::from_slice(&self.packet[..self.packet.len() - self.non_verbose_payload().len() - missing_len]).unwrap();
+                fn check_nv_len_err(&self) {
+                    for payload_len in 0..4 {
+
+                        // build new header with the new payload len
+                        let mut header = self.header.clone();
+                        header.length = self.header.header_len() + payload_len;
+                        let data = Self::serialize(&header, 0x1234_5678u32);
+
+                        let slice = DltPacketSlice::from_slice(&data).unwrap();
                         assert_eq!(None, slice.message_id());
                         assert_eq!(None, slice.message_id_and_payload());
                         assert_eq!(None, slice.non_verbose_payload());
-                        assert_eq!(None, slice.typed_payload());
+                        assert_eq!(
+                            Err(TypedPayloadError::LenSmallerThanMessageId { packet_len: slice.slice().len(), header_len: slice.header_len }),
+                            slice.typed_payload()
+                        );
                     }
                 }
             }
@@ -909,18 +928,39 @@ mod tests {
                 assert_eq!(slice.verbose_value_iter(), None);
                 assert_eq!(
                     slice.typed_payload(),
-                    Some(DltTypedPayload::UnknownNv(NvPayload {
+                    Ok(DltTypedPayload::UnknownNv(NvPayload {
                         msg_id: packet.message_id(),
                         payload: &packet.non_verbose_payload()[..]
                     }))
                 );
 
                 // check len check
-                packet.check_nv_len_check();
+                packet.check_nv_len_err();
             }
 
             // log non verbose message
-            // TODO
+            {
+                let info = DltMessageInfo(DltMessageType::Log(log_level).to_byte().unwrap());
+                let packet = Packet::new(Some(info), is_big_endian);
+                let slice = packet.to_slice();
+
+                // check accessors
+                assert_eq!(slice.message_id(), Some(packet.message_id()));
+                assert_eq!(slice.non_verbose_payload(), Some(&packet.non_verbose_payload()[..]));
+                assert_eq!(slice.message_id_and_payload(), Some((packet.message_id(), &packet.non_verbose_payload()[..])));
+                assert_eq!(slice.verbose_value_iter(), None);
+                assert_eq!(
+                    slice.typed_payload(),
+                    Ok(DltTypedPayload::LogNv(LogNvPayload {
+                        msg_id: packet.message_id(),
+                        log_level,
+                        payload: &packet.non_verbose_payload()[..]
+                    }))
+                );
+
+                // check len check
+                packet.check_nv_len_err();
+            }
 
             // log verbose message
             // TODO
@@ -946,7 +986,7 @@ mod tests {
             // unknown message info error
             // TODO
 
-            todo!("Remove the code bellow");
+            /*todo!("Remove the code bellow");
 
             // pairs of (header, expected_non_verbose)
             let tests = [
@@ -1130,7 +1170,7 @@ mod tests {
                         assert_eq!(None, slice.typed_payload());
                     }
                 }
-            }
+            }*/
         }
     }
 } // mod dlt_packet_slice

@@ -4,7 +4,6 @@ use dlt_parse::{
     error::{ReadError, VerboseDecodeError},
     storage::DltStorageReader,
     verbose::VerboseIter,
-    LogVPayload,
 };
 use structopt::StructOpt;
 
@@ -27,7 +26,7 @@ fn main() -> Result<(), ReadError> {
         let msg = msg?;
 
         println!("{:?}", msg.storage_header);
-
+        println!("{:?}", msg.packet.message_type());
         if let Some(extended_header) = msg.packet.extended_header() {
             use core::str::from_utf8;
 
@@ -38,27 +37,11 @@ fn main() -> Result<(), ReadError> {
             );
         }
 
-        if let Some(typed_payload) = msg.packet.typed_payload() {
-            use dlt_parse::DltTypedPayload::*;
-            match typed_payload {
-                LogV(LogVPayload { log_level, iter }) => {
-                    println!("verbose message of type {:?} with values:", log_level);
-                    let field_print_result = print_fields(iter, 1);
-                    if let Err(err) = field_print_result {
-                        println!("  ERROR decoding value: {}", err);
-                    }
-                }
-                UnknownNv(_) => println!("generic non verbose message received"),
-                TraceV(_) => println!("verbose trace message received"),
-                TraceNv(_) => println!("non verbose trace message received"),
-                NetworkV(_) => println!("verbose network message received"),
-                NetworkNv(_) => println!("non verbose network message received"),
-                ControlV(_) => println!("verbose control message received"),
-                LogNv(_) => println!("non verbose log message received"),
-                ControlNv(_) => println!("non verbose control message received"),
+        if let Some(verb_iter) = msg.packet.verbose_value_iter() {
+            let field_print_result = print_fields(verb_iter, 1);
+            if let Err(err) = field_print_result {
+                println!("  ERROR decoding value: {}", err);
             }
-        } else {
-            println!("non verbose message with incomplete message id");
         }
     }
 

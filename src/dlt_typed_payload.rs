@@ -1,6 +1,5 @@
 use crate::{
-    verbose::VerboseIter, DltControlMessageType, DltLogLevel, DltMessageInfo, DltNetworkType,
-    DltTraceType,
+    verbose::VerboseIter, DltControlMessageType, DltLogLevel, DltNetworkType, DltTraceType,
 };
 
 /// Typed payload of a DLT log message based on the message info in the DLT
