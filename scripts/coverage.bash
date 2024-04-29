@@ -34,14 +34,14 @@ mkdir -p "${coverage_dir}"
 mkdir -p "${coverage_dir}/raw"
 
 # run the instrumented tests
-RUSTFLAGS="-Zinstrument-coverage" \
+RUSTFLAGS="-C instrument-coverage" \
     LLVM_PROFILE_FILE="${coverage_dir}/raw/coverage-%m.profraw" \
-    cargo +nightly test --tests --all-features
+    cargo test --tests --all-features
 
 # determine the filenames of the run executables
-RUSTFLAGS="-Zinstrument-coverage" \
+RUSTFLAGS="-C instrument-coverage" \
     LLVM_PROFILE_FILE="${coverage_dir}/raw/coverage-%m.profraw" \
-cargo +nightly test --no-run --all-features --message-format=json | jq -r "select(.profile.test == true) | .filenames[]" | grep -v dSYM - > "${coverage_dir}/raw/filenames.txt"
+cargo test --no-run --all-features --message-format=json | jq -r "select(.profile.test == true) | .filenames[]" | grep -v dSYM - > "${coverage_dir}/raw/filenames.txt"
 
 cargo profdata -- merge -sparse "${coverage_dir}/raw/coverage-"*".profraw" -o "${coverage_dir}/raw/merge.profdata"
 
