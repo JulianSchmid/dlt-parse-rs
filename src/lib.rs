@@ -245,6 +245,9 @@ const ECU_ID_FLAG: u8 = 0b100;
 const SESSION_ID_FLAG: u8 = 0b1000;
 const TIMESTAMP_FLAG: u8 = 0b10000;
 
+/// Flag in extended header message info indicating that the message is verbose.
+pub const EXT_MSIN_VERB_FLAG: u8 = 0b0000_0001;
+
 ///Shifted value in the msin extended header field for dlt "log" messages.
 const EXT_MSIN_MSTP_TYPE_LOG: u8 = 0x0 << 1;
 ///Shifted value in the msin extended header field for dlt "trace" messages.

@@ -840,7 +840,10 @@ mod tests {
         #[test]
         fn payload_methods(
             is_big_endian in any::<bool>(),
-            log_level in log_level_any()
+            log_level in log_level_any(),
+            trace_type in trace_type_any(),
+            net_type in network_type_any(),
+            control_message_type in control_message_type_any()
         ) {
             struct Packet {
                 header: DltHeader,
@@ -894,6 +897,14 @@ mod tests {
 
                 fn non_verbose_payload(&self) -> [u8;2] {
                     [0x10, 0x11]
+                }
+
+                fn verb_iter(&self) -> VerboseIter {
+                    VerboseIter::new(
+                        self.header.is_big_endian,
+                        self.header.extended_header.as_ref().map(|v| v.number_of_arguments).unwrap_or_default().into(),
+                        &self.packet[self.header.header_len() as usize..]
+                    )
                 }
 
                 fn check_nv_len_err(&self) {
@@ -963,214 +974,182 @@ mod tests {
             }
 
             // log verbose message
-            // TODO
+            {
+                let info = DltMessageInfo(
+                    DltMessageType::Log(log_level).to_byte().unwrap() | EXT_MSIN_VERB_FLAG
+                );
+                let packet = Packet::new(Some(info), is_big_endian);
+                let slice = packet.to_slice();
+
+                // check accessors
+                assert_eq!(slice.message_id(), None);
+                assert_eq!(slice.non_verbose_payload(), None);
+                assert_eq!(slice.message_id_and_payload(), None);
+                assert_eq!(slice.verbose_value_iter(), Some(packet.verb_iter()));
+                assert_eq!(
+                    slice.typed_payload(),
+                    Ok(DltTypedPayload::LogV(LogVPayload {
+                        log_level,
+                        iter: packet.verb_iter()
+                    }))
+                );
+            }
 
             // trace non verbose message
-            // TODO
+            {
+                let info = DltMessageInfo(DltMessageType::Trace(trace_type).to_byte().unwrap());
+                let packet = Packet::new(Some(info), is_big_endian);
+                let slice = packet.to_slice();
+
+                // check accessors
+                assert_eq!(slice.message_id(), Some(packet.message_id()));
+                assert_eq!(slice.non_verbose_payload(), Some(&packet.non_verbose_payload()[..]));
+                assert_eq!(slice.message_id_and_payload(), Some((packet.message_id(), &packet.non_verbose_payload()[..])));
+                assert_eq!(slice.verbose_value_iter(), None);
+                assert_eq!(
+                    slice.typed_payload(),
+                    Ok(DltTypedPayload::TraceNv(TraceNvPayload {
+                        trace_type,
+                        msg_id: packet.message_id(),
+                        payload: &packet.non_verbose_payload()[..]
+                    }))
+                );
+
+                // check len check
+                packet.check_nv_len_err();
+            }
 
             // trace verbose message
-            // TODO
+            {
+                let info = DltMessageInfo(
+                    DltMessageType::Trace(trace_type).to_byte().unwrap() | EXT_MSIN_VERB_FLAG
+                );
+                let packet = Packet::new(Some(info), is_big_endian);
+                let slice = packet.to_slice();
+
+                // check accessors
+                assert_eq!(slice.message_id(), None);
+                assert_eq!(slice.non_verbose_payload(), None);
+                assert_eq!(slice.message_id_and_payload(), None);
+                assert_eq!(slice.verbose_value_iter(), Some(packet.verb_iter()));
+                assert_eq!(
+                    slice.typed_payload(),
+                    Ok(DltTypedPayload::TraceV(TraceVPayload {
+                        trace_type,
+                        iter: packet.verb_iter()
+                    }))
+                );
+            }
 
             // network non verbose message
-            // TODO
+            {
+                let info = DltMessageInfo(DltMessageType::NetworkTrace(net_type).to_byte().unwrap());
+                let packet = Packet::new(Some(info), is_big_endian);
+                let slice = packet.to_slice();
+
+                // check accessors
+                assert_eq!(slice.message_id(), Some(packet.message_id()));
+                assert_eq!(slice.non_verbose_payload(), Some(&packet.non_verbose_payload()[..]));
+                assert_eq!(slice.message_id_and_payload(), Some((packet.message_id(), &packet.non_verbose_payload()[..])));
+                assert_eq!(slice.verbose_value_iter(), None);
+                assert_eq!(
+                    slice.typed_payload(),
+                    Ok(DltTypedPayload::NetworkNv(NetworkNvPayload {
+                        net_type,
+                        msg_id: packet.message_id(),
+                        payload: &packet.non_verbose_payload()[..]
+                    }))
+                );
+
+                // check len check
+                packet.check_nv_len_err();
+            }
 
             // network verbose message
-            // TODO
+            {
+                let info = DltMessageInfo(
+                    DltMessageType::NetworkTrace(net_type).to_byte().unwrap() | EXT_MSIN_VERB_FLAG
+                );
+                let packet = Packet::new(Some(info), is_big_endian);
+                let slice = packet.to_slice();
+
+                // check accessors
+                assert_eq!(slice.message_id(), None);
+                assert_eq!(slice.non_verbose_payload(), None);
+                assert_eq!(slice.message_id_and_payload(), None);
+                assert_eq!(slice.verbose_value_iter(), Some(packet.verb_iter()));
+                assert_eq!(
+                    slice.typed_payload(),
+                    Ok(DltTypedPayload::NetworkV(NetworkVPayload {
+                        net_type,
+                        iter: packet.verb_iter()
+                    }))
+                );
+            }
 
             // control non verbose message
-            // TODO
+            {
+                let info = DltMessageInfo(DltMessageType::Control(control_message_type).to_byte().unwrap());
+                let packet = Packet::new(Some(info), is_big_endian);
+                let slice = packet.to_slice();
+
+                // check accessors
+                assert_eq!(slice.message_id(), Some(packet.message_id()));
+                assert_eq!(slice.non_verbose_payload(), Some(&packet.non_verbose_payload()[..]));
+                assert_eq!(slice.message_id_and_payload(), Some((packet.message_id(), &packet.non_verbose_payload()[..])));
+                assert_eq!(slice.verbose_value_iter(), None);
+                assert_eq!(
+                    slice.typed_payload(),
+                    Ok(DltTypedPayload::ControlNv(ControlNvPayload {
+                        msg_type: control_message_type,
+                        service_id: packet.message_id(),
+                        payload: &packet.non_verbose_payload()[..]
+                    }))
+                );
+
+                // check len check
+                packet.check_nv_len_err();
+            }
 
             // control verbose message
-            // TODO
+            {
+                let info = DltMessageInfo(
+                    DltMessageType::Control(control_message_type).to_byte().unwrap() | EXT_MSIN_VERB_FLAG
+                );
+                let packet = Packet::new(Some(info), is_big_endian);
+                let slice = packet.to_slice();
+
+                // check accessors
+                assert_eq!(slice.message_id(), None);
+                assert_eq!(slice.non_verbose_payload(), None);
+                assert_eq!(slice.message_id_and_payload(), None);
+                assert_eq!(slice.verbose_value_iter(), Some(packet.verb_iter()));
+                assert_eq!(
+                    slice.typed_payload(),
+                    Ok(DltTypedPayload::ControlV(ControlVPayload {
+                        msg_type: control_message_type,
+                        iter: packet.verb_iter()
+                    }))
+                );
+            }
 
             // unknown message info error
-            // TODO
+            {
+                // 7 is not a valid log level
+                let info = DltMessageInfo(EXT_MSIN_MSTP_TYPE_LOG | (0x7 << 4));
+                let packet = Packet::new(Some(info), is_big_endian);
+                let slice = packet.to_slice();
 
-            /*todo!("Remove the code bellow");
-
-            // pairs of (header, expected_non_verbose)
-            let tests = [
-                //verbose (does not have message id)
-                (
-                    {
-                        let mut header: DltHeader = Default::default();
-                        header.extended_header = Some({
-                            let mut ext: DltExtendedHeader = Default::default();
-                            ext.set_is_verbose(true);
-                            ext
-                        });
-                        header
-                    },
-                    true,
-                ),
-                //with extended header non-verbose
-                (
-                    {
-                        let mut header: DltHeader = Default::default();
-                        header.extended_header = Some({
-                            let mut ext: DltExtendedHeader = Default::default();
-                            ext.set_is_verbose(false);
-                            ext
-                        });
-                        header
-                    },
-                    true,
-                ),
-                //without extended header (always non verbose)
-                (
-                    {
-                        let mut header: DltHeader = Default::default();
-                        header.extended_header = None;
-                        header
-                    },
-                    true,
-                ),
-            ];
-            // run tests
-            for t in tests.iter() {
-                // big endian
-                {
-                    let header = {
-                        let mut header = t.0.clone();
-                        header.is_big_endian = true;
-                        header.length = header.header_len() + 6;
-                        header
-                    };
-
-                    // serialize
-                    let mut buffer = ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 4 }>::new();
-                    buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
-                    buffer
-                        .try_extend_from_slice(&0x1234_5678u32.to_be_bytes())
-                        .unwrap();
-                    buffer.try_extend_from_slice(&[0x10, 0x11]).unwrap();
-
-                    // slice
-                    let slice = DltPacketSlice::from_slice(&buffer).unwrap();
-                    if t.1 {
-                        let expected_message_id = 0x1234_5678u32;
-                        let expected_payload = &[0x10u8, 0x11][..];
-
-                        assert_eq!(Some(expected_message_id), slice.message_id());
-                        assert_eq!(
-                            Some((expected_message_id, expected_payload)),
-                            slice.message_id_and_payload()
-                        );
-                        assert_eq!(Some(expected_payload), slice.non_verbose_payload());
-                        assert_eq!(None, slice.verbose_value_iter());
-
-                        if slice.header_len + 4 <= slice.slice.len() && slice.has_extended_header() {
-                            assert_eq!(
-                                Some(DltTypedPayload::UnknownNv(NvPayload {
-                                    msg_id: expected_message_id,
-                                    payload: expected_payload,
-                                })),
-                                slice.typed_payload()
-                            );
-                        } else {
-                            assert_eq!(None, slice.typed_payload());
-                        }
-                    } else {
-                        let ext = t.0.extended_header.clone().unwrap();
-                        let p_start = 0x1234_5678u32.to_be_bytes();
-                        let payload = [p_start[0], p_start[1], p_start[2], p_start[3], 0x10, 0x11];
-                        let expected_iter =
-                            VerboseIter::new(true, u16::from(ext.number_of_arguments), &payload);
-
-                        assert_eq!(None, slice.message_id());
-                        assert_eq!(None, slice.message_id_and_payload());
-                        assert_eq!(None, slice.non_verbose_payload());
-
-                        assert_eq!(Some(expected_iter.clone()), slice.verbose_value_iter());
-                        assert_eq!(None, slice.typed_payload());
-                    }
-                }
-
-                // little endian
-                {
-                    let header = {
-                        let mut header = t.0.clone();
-                        header.is_big_endian = false;
-                        header.length = header.header_len() + 6;
-                        header
-                    };
-
-                    // serialize
-                    let mut buffer = ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 4 }>::new();
-                    buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
-                    buffer
-                        .try_extend_from_slice(&0x1234_5678u32.to_le_bytes())
-                        .unwrap();
-                    buffer.try_extend_from_slice(&[0x10, 0x11]).unwrap();
-
-                    // slice
-                    let slice = DltPacketSlice::from_slice(&buffer).unwrap();
-                    if t.1 {
-                        let expected_message_id = 0x1234_5678u32;
-                        let expected_payload = &[0x10u8, 0x11][..];
-
-                        assert_eq!(Some(expected_message_id), slice.message_id());
-                        assert_eq!(
-                            Some((expected_message_id, expected_payload)),
-                            slice.message_id_and_payload()
-                        );
-                        assert_eq!(Some(expected_payload), slice.non_verbose_payload());
-                        assert_eq!(None, slice.verbose_value_iter());
-
-                        if slice.header_len + 4 <= slice.slice.len() && slice.has_extended_header() {
-                            assert_eq!(
-                                Some(DltTypedPayload::UnknownNv(NvPayload {
-                                    msg_id: expected_message_id,
-                                    payload: expected_payload,
-                                })),
-                                slice.typed_payload()
-                            );
-                        } else {
-                            assert_eq!(None, slice.typed_payload());
-                        }
-                    } else {
-                        let ext = t.0.extended_header.clone().unwrap();
-                        let p_start = 0x1234_5678u32.to_le_bytes();
-                        let payload = [p_start[0], p_start[1], p_start[2], p_start[3], 0x10, 0x11];
-                        let expected_iter =
-                            VerboseIter::new(false, u16::from(ext.number_of_arguments), &payload);
-
-                        assert_eq!(None, slice.message_id());
-                        assert_eq!(None, slice.message_id_and_payload());
-                        assert_eq!(None, slice.non_verbose_payload());
-
-                        assert_eq!(Some(expected_iter.clone()), slice.verbose_value_iter());
-                        assert_eq!(None, slice.typed_payload());
-                    }
-                }
-
-                // not enough data for the message id
-                for missing_len in 1..=4 {
-                    let header = {
-                        let mut header = t.0.clone();
-                        header.is_big_endian = false;
-                        header.length = header.header_len() + 4 - missing_len as u16;
-                        header
-                    };
-
-                    // serialize
-                    let mut buffer = ArrayVec::<u8, { DltHeader::MAX_SERIALIZED_SIZE + 4 }>::new();
-                    buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
-                    buffer
-                        .try_extend_from_slice(&0x1234_5678u32.to_le_bytes())
-                        .unwrap();
-
-                    // slice
-                    let slice =
-                        DltPacketSlice::from_slice(&buffer[..buffer.len() - missing_len]).unwrap();
-                    assert_eq!(None, slice.message_id());
-                    assert_eq!(None, slice.message_id_and_payload());
-                    assert_eq!(None, slice.non_verbose_payload());
-                    if t.1 {
-                        assert_eq!(None, slice.typed_payload());
-                    }
-                }
-            }*/
+                // check accessors
+                assert_eq!(slice.message_id(), Some(packet.message_id()));
+                assert_eq!(slice.non_verbose_payload(), Some(&packet.non_verbose_payload()[..]));
+                assert_eq!(slice.message_id_and_payload(), Some((packet.message_id(), &packet.non_verbose_payload()[..])));
+                assert_eq!(slice.verbose_value_iter(), None);
+                assert_eq!(
+                    slice.typed_payload(),
+                    Err(TypedPayloadError::UnknownMessageInfo(info))
+                );
+            }
         }
     }
 } // mod dlt_packet_slice
