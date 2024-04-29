@@ -498,7 +498,7 @@ impl<'a> DltPacketSlice<'a> {
                     None => {
                         // in case there is a message info but the type
                         // is not any known
-                        return Err(TypedPayloadError::UnknownMessageInfo(info));
+                        Err(TypedPayloadError::UnknownMessageInfo(info))
                     }
                 }
             } else {
