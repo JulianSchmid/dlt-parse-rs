@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 3b51f0d9e6fab88939ee5a7ae049eb659354ebf994ab602913e3d84ed9ef1c21 # shrinks to is_big_endian = false, log_level = Fatal
