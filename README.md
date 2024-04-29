@@ -91,31 +91,83 @@ buffer.extend_from_slice(&header.to_bytes());
 for dlt_message in SliceIterator::new(&buffer) {
     match dlt_message {
         Ok(dlt_slice) => {
-            //check if the message is verbose or non verbose
-            if let Some(typed_payload) = dlt_slice.typed_payload() {
-                use dlt_parse::DltTypedPayload::*;
-                match typed_payload {
-                    Verbose { info, iter } => {
-                        println!("verbose message of type {:?} with values:", info.into_message_type());
-                        for value in iter {
-                            println!("  {:?}", value);
+            // check what type of message was received
+            match dlt_slice.typed_payload() {
+                Ok(typed_payload) => {
+                    use dlt_parse::DltTypedPayload::*;
+                    match typed_payload {
+                        UnknownNv(p) => {
+                            println!(
+                                "non verbose message 0x{:x} (unknown) with {} bytes of payload.",
+                                p.msg_id,
+                                p.payload.len(),
+                            );
+                        }
+                        LogNv(p) => {
+                            println!(
+                                "non verbose log message 0x{:x} with log level {:?} and {} bytes of payload.",
+                                p.msg_id,
+                                p.log_level,
+                                p.payload.len(),
+                            );
+                        }
+                        LogV(p) => {
+                            println!(
+                                "verbose log message with log level {:?} and values:",
+                                p.log_level
+                            );
+                            for value in p.iter {
+                                println!("  {:?}", value);
+                            }
+                        }
+                        TraceNv(p) => {
+                            println!(
+                                "non verbose trace message 0x{:x} of type {:?} and {} bytes of payload.",
+                                p.msg_id,
+                                p.trace_type,
+                                p.payload.len(),
+                            );
+                        }
+                        TraceV(p) => {
+                            println!(
+                                "verbose trace message with of type {:?} and values:",
+                                p.trace_type
+                            );
+                            for value in p.iter {
+                                println!("  {:?}", value);
+                            }
+                        }
+                        NetworkNv(p) => {
+                            println!(
+                                "non verbose network message 0x{:x} of type {:?} and {} bytes of payload.",
+                                p.msg_id,
+                                p.net_type,
+                                p.payload.len(),
+                            );
+                        }
+                        NetworkV(p) => {
+                            println!(
+                                "verbose network message with of type {:?} and values:",
+                                p.net_type
+                            );
+                            for value in p.iter {
+                                println!("  {:?}", value);
+                            }
+                        }
+                        ControlNv(p) => {
+                            println!("non verbose control message {:?} with service id: {} and {} bytes of payload.", p.msg_type, p.service_id, p.payload.len());
+                        }
+                        ControlV(p) => {
+                            println!("verbose control message {:?} with values:", p.msg_type);
+                            for value in p.iter {
+                                println!("  {:?}", value);
+                            }
                         }
                     }
-                    NonVerbose {
-                        info,
-                        msg_id,
-                        payload,
-                    } => {
-                        println!(
-                            "non verbose message 0x{:x} of type {:?} and {} bytes of payload",
-                            msg_id,
-                            info.map(|v| v.into_message_type()),
-                            payload.len()
-                        );
-                    }
                 }
-            } else {
-                println!("non verbose message with incomplete message id");
+                Err(err) => {
+                    println!("message with payload error received: {}", err);
+                }
             }
         },
         Err(err) => {
