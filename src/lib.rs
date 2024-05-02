@@ -218,6 +218,9 @@ pub use dlt_packet_slice::*;
 mod dlt_slice_iterator;
 pub use dlt_slice_iterator::*;
 
+mod nv_payload;
+pub use nv_payload::*;
+
 /// Control message related types & functions.
 pub mod control;
 
