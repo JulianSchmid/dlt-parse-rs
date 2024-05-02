@@ -1,6 +1,4 @@
-use crate::{
-    verbose::VerboseIter, DltControlMessageType, DltLogLevel, DltNetworkType, DltTraceType,
-};
+use crate::{*, verbose::VerboseIter};
 
 /// Typed payload of a DLT log message based on the message info in the DLT
 /// extended header.
@@ -46,47 +44,6 @@ pub enum DltTypedPayload<'a> {
 
     /// Verbose control message.
     ControlV(ControlVPayload<'a>),
-}
-
-/// A non verbose message of unknown type.
-///
-/// This type is used if the DLT message did not contain an extended
-/// header and the type of message can only be determined via the
-/// message id. In this the type of th message can only be determined
-/// based on the message id and an additional information source describing
-/// how to decode the message payloads and what type of message it is
-/// (e.g. a Fibex file).
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct NvPayload<'a> {
-    pub msg_id: u32,
-    pub payload: &'a [u8],
-}
-
-impl<'a> From<LogNvPayload<'a>> for NvPayload<'a> {
-    fn from(value: LogNvPayload<'a>) -> Self {
-        NvPayload {
-            msg_id: value.msg_id,
-            payload: value.payload,
-        }
-    }
-}
-
-impl<'a> From<TraceNvPayload<'a>> for NvPayload<'a> {
-    fn from(value: TraceNvPayload<'a>) -> Self {
-        NvPayload {
-            msg_id: value.msg_id,
-            payload: value.payload,
-        }
-    }
-}
-
-impl<'a> From<NetworkNvPayload<'a>> for NvPayload<'a> {
-    fn from(value: NetworkNvPayload<'a>) -> Self {
-        NvPayload {
-            msg_id: value.msg_id,
-            payload: value.payload,
-        }
-    }
 }
 
 /// Non verbose log message (does not contain a description of it's contents).
