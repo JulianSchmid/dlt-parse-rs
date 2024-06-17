@@ -21,7 +21,7 @@ impl From<i64> for DltFtInt {
 #[cfg(target_pointer_width = "32")]
 impl From<isize> for DltFtInt {
     fn from(value: isize) -> Self {
-        DltFtInt::I32(value as u32)
+        DltFtInt::I32(value as i32)
     }
 }
 
