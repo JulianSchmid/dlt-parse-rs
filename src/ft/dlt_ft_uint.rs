@@ -1,4 +1,3 @@
-
 /// Unsigned integer (either 32 or 64 bit).
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum DltFtUInt {

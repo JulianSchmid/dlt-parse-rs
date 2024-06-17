@@ -8,16 +8,16 @@ pub struct DltFtHeaderPkg<'a, 'b> {
 
     /// Absolute path to the file.
     pub file_name: &'a str,
-    
+
     /// Size of the file.
     pub file_size: DltFtUInt,
-    
+
     /// File creaton date.
     pub creation_date: &'b str,
-    
+
     /// Number of packages that will be used to transfer the file.
     pub number_of_packages: DltFtUInt,
-    
+
     /// Needed buffer size to reconsturct the file.
     pub buffer_size: DltFtUInt,
 }

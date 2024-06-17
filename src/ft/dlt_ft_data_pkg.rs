@@ -13,7 +13,6 @@ pub struct DltFtDataPkg<'a> {
     pub data: &'a [u8],
 }
 
-
 impl<'a> DltFtDataPkg<'a> {
     /// Verbose string at the start and end of the "DLT File Transfer Data" package.
     pub const PKG_FLAG: &'static str = "FLDA";
