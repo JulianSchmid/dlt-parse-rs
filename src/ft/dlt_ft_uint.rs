@@ -1,8 +1,26 @@
+use crate::verbose::*;
+
 /// Unsigned integer (either 32 or 64 bit).
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum DltFtUInt {
     U32(u32),
     U64(u64),
+}
+
+impl DltFtUInt {
+    pub fn try_take_from_iter(iter: &mut VerboseIter) -> Option<DltFtUInt> {
+        let Some(Ok(value)) = iter.next() else {
+            return None;
+        };
+        if value.name().is_some() {
+            return None;
+        }
+        match value {
+            VerboseValue::U32(v) => Some(DltFtUInt::U32(v.value)),
+            VerboseValue::U64(v) => Some(DltFtUInt::U64(v.value)),
+            _ => None,
+        }
+    }
 }
 
 impl From<u32> for DltFtUInt {
