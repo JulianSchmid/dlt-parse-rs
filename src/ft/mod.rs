@@ -1,6 +1,9 @@
 mod dlt_ft_buffer;
 pub use dlt_ft_buffer::*;
 
+mod dlt_ft_complete_in_mem_file;
+pub use dlt_ft_complete_in_mem_file::*;
+
 mod dlt_ft_data_pkg;
 pub use dlt_ft_data_pkg::*;
 
@@ -21,6 +24,9 @@ pub use dlt_ft_header_pkg::*;
 
 mod dlt_ft_info_pkg;
 pub use dlt_ft_info_pkg::*;
+
+mod dlt_ft_pool;
+pub use dlt_ft_pool::*;
 
 mod dlt_ft_int;
 pub use dlt_ft_int::*;

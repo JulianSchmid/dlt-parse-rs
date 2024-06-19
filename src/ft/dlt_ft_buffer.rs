@@ -32,6 +32,9 @@ pub struct DltFtBuffer {
 
     /// File creaton date.
     creation_date: String,
+
+    /// True if an end packet was received.
+    end_received: bool,
 }
 
 #[cfg(feature = "std")]
@@ -56,6 +59,12 @@ impl DltFtBuffer {
         &self.creation_date
     }
 
+    /// True if an end packet was received.
+    #[inline]
+    pub fn end_received(&self) -> bool {
+        self.end_received
+    }
+
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn new(header: &DltFtHeaderPkg) -> Result<DltFtBuffer, FtReassembleError> {
@@ -68,6 +77,7 @@ impl DltFtBuffer {
             file_serial_number: header.file_serial_number,
             file_name: String::with_capacity(header.file_name.len()),
             creation_date: String::with_capacity(header.creation_date.len()),
+            end_received: false,
         };
         result.reinit_from_header_pkg(header)?;
         Ok(result)
@@ -82,6 +92,10 @@ impl DltFtBuffer {
         self.file_size = 0;
         self.number_of_packets = 0;
         self.buffer_size = 0;
+        self.file_serial_number = DltFtUInt::U64(0);
+        self.file_name.clear();
+        self.creation_date.clear();
+        self.end_received = false;
     }
 
     /// Setup all the buffers based on a received header package.
@@ -115,7 +129,7 @@ impl DltFtBuffer {
 
         // reset the buffer
         self.data.clear();
-        // TODO fix for 32 bit systems
+        // TODO implement for 32 bit systems
         self.data.try_reserve(header.file_size.into())
             .map_err(|_| FtReassembleError::AllocationFailure { len: header.file_size.into() })?;
         self.sections.clear();
@@ -124,8 +138,18 @@ impl DltFtBuffer {
         self.file_size = header.file_size.into();
         self.number_of_packets = header.number_of_packages.into();
         self.buffer_size = header.buffer_size.into();
+        self.file_name.clear();
+        self.file_name.push_str(header.file_name);
+        self.creation_date.clear();
+        self.creation_date.push_str(header.creation_date);
+        self.end_received = false;
 
         Ok(())
+    }
+
+    /// Sets that the end packet was received.
+    pub fn set_end_received(&mut self) {
+        self.end_received = true;
     }
 
     /// Consume a DLT file transfer data package, the caller is responsible to ensure the
@@ -214,18 +238,23 @@ impl DltFtBuffer {
         Ok(())
     }
 
-    /// Returns true if the data 
+    /// Returns true if the data has been completed and the end received.
     pub fn is_complete(&self) -> bool {
-        1 == self.sections.len() && 0 == self.sections[0].start && self.sections[0].end == self.file_size
+        self.end_received && 1 == self.sections.len() && 0 == self.sections[0].start && self.sections[0].end == self.file_size
     }
 
     /// Try finalizing the reconstructed file data and return a reference to it
     /// if the stream reconstruction was completed.
-    pub fn try_finalize(&mut self) -> Option<&[u8]> {
+    pub fn try_finalize<'a>(&'a self) -> Option<DltFtCompleteInMemFile<'a>> {
         if false == self.is_complete() {
             return None;
         } else {
-            Some(&self.data)
+            Some(DltFtCompleteInMemFile{
+                file_serial_number: self.file_serial_number,
+                file_name: &self.file_name,
+                creation_date: &self.creation_date,
+                data: &self.data,
+            })
         }
     }
 }

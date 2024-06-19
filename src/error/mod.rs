@@ -1,6 +1,9 @@
 mod dlt_message_length_too_small_error;
 pub use dlt_message_length_too_small_error::*;
 
+mod ft_pool_error;
+pub use ft_pool_error::*;
+
 mod ft_reassemble_error;
 pub use ft_reassemble_error::*;
 
