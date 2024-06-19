@@ -1,3 +1,6 @@
+mod dlt_ft_buffer;
+pub use dlt_ft_buffer::*;
+
 mod dlt_ft_data_pkg;
 pub use dlt_ft_data_pkg::*;
 
@@ -24,6 +27,9 @@ pub use dlt_ft_int::*;
 
 mod dlt_ft_pkg;
 pub use dlt_ft_pkg::*;
+
+mod dlt_ft_range;
+pub use dlt_ft_range::*;
 
 mod dlt_ft_uint;
 pub use dlt_ft_uint::*;
