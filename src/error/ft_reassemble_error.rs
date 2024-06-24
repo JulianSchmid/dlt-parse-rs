@@ -27,7 +27,7 @@ pub enum FtReassembleError {
 }
 
 impl core::fmt::Display for FtReassembleError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use FtReassembleError::*;
         match self {
             DataLenNotMatchingBufferSize{ header_buffer_len, data_pkt_len, data_pkt_nr, number_of_packages } => write!(f, "Payload length {data_pkt_len} of DLT file transfer data packet (nr {data_pkt_nr} of {number_of_packages}) is not matching the buffer len {header_buffer_len} set by the header packet."),
@@ -38,6 +38,8 @@ impl core::fmt::Display for FtReassembleError {
     }
 }
 
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for FtReassembleError {}
 
 #[cfg(test)]

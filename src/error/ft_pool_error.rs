@@ -14,7 +14,7 @@ pub enum FtPoolError {
 }
 
 impl core::fmt::Display for FtPoolError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use FtPoolError::*;
         match self {
             FtReassemble(err) => err.fmt(f),
@@ -24,6 +24,8 @@ impl core::fmt::Display for FtPoolError {
     }
 }
 
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for FtPoolError {}
 
 impl From<FtReassembleError> for FtPoolError {

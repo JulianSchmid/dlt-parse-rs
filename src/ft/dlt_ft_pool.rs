@@ -30,6 +30,8 @@ where
     finished: Vec<DltFtBuffer>,
 }
 
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<ChannelId, Timestamp: Sized> DltFtPool<ChannelId, Timestamp>
 where
     ChannelId: Hash + Eq + PartialEq + Clone + Sized,
@@ -163,6 +165,8 @@ where
     }
 }
 
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<ChannelId, Timestamp: Sized> PartialEq for DltFtPool<ChannelId, Timestamp>
 where
     ChannelId: Hash + Eq + PartialEq + Clone + Sized,
@@ -173,6 +177,8 @@ where
     }
 }
 
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<ChannelId, Timestamp: Sized> Eq for DltFtPool<ChannelId, Timestamp>
 where
     ChannelId: Hash + Eq + PartialEq + Clone + Sized,
@@ -193,23 +199,7 @@ mod tests {
     }
 
     /*
-    #[test]
-    fn with_capacity() {
-        let pool = DltFtPool::<(), ()>::with_capacity(Default::default(), 3);
-        assert_eq!(3, pool.finished_bufs().len());
-        assert!(pool.active.capacity() >= 3);
-    }
 
-    #[test]
-    fn reserve() {
-        let mut pool = DltFtPool::<(), ()>::new(Default::default());
-        pool.reserve(2);
-        assert_eq!(2, pool.finished_bufs().len());
-        assert!(pool.active.capacity() >= 2);
-        pool.reserve(3);
-        assert_eq!(5, pool.finished_bufs().len());
-        assert!(pool.active.capacity() >= 5);
-    }
 
     struct TestPacket {
         request_id: u32,

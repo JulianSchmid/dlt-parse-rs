@@ -30,6 +30,7 @@ use super::StorageSlice;
 /// }
 /// ```
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug)]
 pub struct DltStorageReader<R: Read + BufRead> {
     reader: R,
@@ -42,6 +43,7 @@ pub struct DltStorageReader<R: Read + BufRead> {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<R: Read + BufRead> DltStorageReader<R> {
     /// Creates a new reader.
     pub fn new(reader: R) -> DltStorageReader<R> {

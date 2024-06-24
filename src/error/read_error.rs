@@ -1,7 +1,9 @@
+#[cfg(feature = "std")]
 use super::*;
 
 ///Errors that can occure on reading a dlt header.
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug)]
 pub enum ReadError {
     /// Error if the slice is smaller then dlt length field or minimal size.
@@ -22,6 +24,7 @@ pub enum ReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use ReadError::*;
@@ -36,6 +39,7 @@ impl std::error::Error for ReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl core::fmt::Display for ReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use ReadError::*;
@@ -53,6 +57,7 @@ impl core::fmt::Display for ReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<StorageHeaderStartPatternError> for ReadError {
     fn from(err: StorageHeaderStartPatternError) -> ReadError {
         ReadError::StorageHeaderStartPattern(err)
@@ -60,6 +65,7 @@ impl From<StorageHeaderStartPatternError> for ReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<PacketSliceError> for ReadError {
     fn from(err: PacketSliceError) -> ReadError {
         use PacketSliceError as I;
@@ -72,6 +78,7 @@ impl From<PacketSliceError> for ReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<std::io::Error> for ReadError {
     fn from(err: std::io::Error) -> ReadError {
         ReadError::IoError(err)

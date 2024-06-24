@@ -4,7 +4,7 @@ use super::*;
 /// existing file.
 ///
 /// If a files does not exist
-/// [`crate::ft::DltFileNotExistErrorPkg`] is sent instead.
+/// [`crate::ft::DltFtFileNotExistErrorPkg`] is sent instead.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct DltFtErrorPkg<'a, 'b> {
     /// Error code.
