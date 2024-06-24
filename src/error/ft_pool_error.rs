@@ -7,14 +7,10 @@ pub enum FtPoolError {
     FtReassemble(FtReassembleError),
 
     /// Error if a data packet for an unknown stream is received.
-    DataForUnknownStream{
-        file_serial_number: DltFtUInt
-    },
+    DataForUnknownStream { file_serial_number: DltFtUInt },
 
     /// Error if a end packet for an unknown stream is received.
-    EndForUnknownStream{
-        file_serial_number: DltFtUInt
-    },
+    EndForUnknownStream { file_serial_number: DltFtUInt },
 }
 
 impl core::fmt::Display for FtPoolError {

@@ -5,7 +5,7 @@ use crate::{error::*, ft::*};
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 use core::hash::Hash;
 #[cfg(feature = "std")]
-use std::{vec::Vec, collections::HashMap};
+use std::{collections::HashMap, vec::Vec};
 
 /// Pool of buffers to reconstruct multiple DLT file transfer packet streams in
 /// parallel (re-uses buffers to minimize allocations).
@@ -17,7 +17,7 @@ use std::{vec::Vec, collections::HashMap};
 /// never ending them and filling them up with as much data as possible.
 #[cfg(feature = "std")]
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct DltFtPool<ChannelId, Timestamp>
 where
     ChannelId: Hash + Eq + PartialEq + Clone + Sized,
@@ -70,18 +70,17 @@ where
 
                         // TODO add error
                         Ok(None)
-                    },
+                    }
                     Vacant(vac) => {
                         vac.insert((DltFtBuffer::new(header_pkg)?, timestamp));
                         Ok(None)
-                    },
+                    }
                 }
-            },
+            }
             DltFtPkg::Data(data_pkg) => {
                 match self.active.entry((id, data_pkg.file_serial_number)) {
                     Occupied(mut entry) => {
-
-                        // inject the new data & process 
+                        // inject the new data & process
                         let (buffer, last_ts) = entry.get_mut();
                         *last_ts = timestamp;
                         buffer.consume_data_pkg(data_pkg)?;
@@ -91,23 +90,20 @@ where
                             // take out the buffer
                             let (buf, _) = entry.remove();
                             self.finished.push(buf);
-                            Ok(Some(
-                                self.finished.last().unwrap().try_finalize().unwrap()
-                            ))
+                            Ok(Some(self.finished.last().unwrap().try_finalize().unwrap()))
                         } else {
                             Ok(None)
                         }
-                    },
-                    Vacant(_) => {
-                        return Err(FtPoolError::DataForUnknownStream { file_serial_number: data_pkg.file_serial_number });
-                    },
+                    }
+                    Vacant(_) => Err(FtPoolError::DataForUnknownStream {
+                        file_serial_number: data_pkg.file_serial_number,
+                    }),
                 }
-            },
+            }
             DltFtPkg::End(end_pkg) => {
                 match self.active.entry((id, end_pkg.file_serial_number)) {
                     Occupied(mut entry) => {
-
-                        // inject the new data & process 
+                        // inject the new data & process
                         let (buffer, last_ts) = entry.get_mut();
                         *last_ts = timestamp;
                         buffer.set_end_received();
@@ -117,19 +113,17 @@ where
                             // take out the buffer
                             let (buf, _) = entry.remove();
                             self.finished.push(buf);
-                            Ok(Some(
-                                self.finished.last().unwrap().try_finalize().unwrap()
-                            ))
+                            Ok(Some(self.finished.last().unwrap().try_finalize().unwrap()))
                         } else {
                             Ok(None)
                         }
-                    },
-                    Vacant(_) => {
-                        return Err(FtPoolError::EndForUnknownStream { file_serial_number: end_pkg.file_serial_number });
-                    },
+                    }
+                    Vacant(_) => Err(FtPoolError::EndForUnknownStream {
+                        file_serial_number: end_pkg.file_serial_number,
+                    }),
                 }
-            },
-            
+            }
+
             DltFtPkg::Error(err) => {
                 match self.active.entry((id, err.file_serial_number)) {
                     Occupied(entry) => {
@@ -137,10 +131,10 @@ where
                         let (buf, _) = entry.remove();
                         self.finished.push(buf);
                         Ok(None)
-                    },
+                    }
                     Vacant(_) => Ok(None),
                 }
-            },
+            }
             DltFtPkg::FileNotExistsError(_) => Ok(None),
             DltFtPkg::Info(_) => Ok(None),
         }
@@ -175,8 +169,7 @@ where
     Timestamp: core::fmt::Debug + Clone + Sized + PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.active == other.active
-            && self.finished == other.finished
+        self.active == other.active && self.finished == other.finished
     }
 }
 
@@ -190,16 +183,16 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
 
-    /*
     #[test]
     fn debug_clone_eq() {
-        let pool: DltFtPool<(), ()> = DltFtPool::new(Default::default());
+        let pool: DltFtPool<(), ()> = Default::default();
         let _ = format!("{:?}", pool);
         assert_eq!(pool, pool.clone());
-        assert_eq!(pool.buf_config(), &TpBufConfig::default());
     }
 
+    /*
     #[test]
     fn with_capacity() {
         let pool = DltFtPool::<(), ()>::with_capacity(Default::default(), 3);
@@ -299,7 +292,7 @@ mod tests {
             let mut result = Vec::with_capacity(SOMEIP_HEADER_LENGTH + 8);
             result.extend_from_slice(&header.base_to_bytes());
             result.extend_from_slice(&[0;8]);
-            
+
             let someip_slice = SomeipMsgSlice::from_slice(&result).unwrap();
 
             let mut pool: DltFtPool<(), ()> = DltFtPool::new(TpBufConfig::new(1024, 2048).unwrap());

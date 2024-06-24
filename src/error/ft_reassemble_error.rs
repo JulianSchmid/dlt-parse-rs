@@ -1,6 +1,5 @@
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum FtReassembleError {
-
     /// Error if the number of bytes of data in a "DLT file transfer" packet
     /// is not matching the original in the header specified buffer size.
     DataLenNotMatchingBufferSize {
@@ -14,7 +13,7 @@ pub enum FtReassembleError {
     InconsitantHeaderLenValues {
         file_size: u64,
         number_of_packages: u64,
-        buffer_len: u64
+        buffer_len: u64,
     },
 
     /// Error if a data package with an unexpected package nr is received.
@@ -45,7 +44,7 @@ impl std::error::Error for FtReassembleError {}
 mod tests {
     /*use super::FtReassembleError::*;
 
-    
+
     #[test]
     fn debug() {
         let err = AllocationFailure { len: 0 };

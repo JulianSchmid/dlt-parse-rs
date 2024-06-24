@@ -1,9 +1,9 @@
 #[cfg(feature = "std")]
-use crate::{ft::*, error::FtReassembleError};
-#[cfg(feature = "std")]
-use std::vec::Vec;
+use crate::{error::FtReassembleError, ft::*};
 #[cfg(feature = "std")]
 use std::string::String;
+#[cfg(feature = "std")]
+use std::vec::Vec;
 
 #[cfg(feature = "std")]
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
@@ -40,7 +40,6 @@ pub struct DltFtBuffer {
 #[cfg(feature = "std")]
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl DltFtBuffer {
-
     /// File serial number (usually inode).
     #[inline]
     pub fn file_serial_number(&self) -> DltFtUInt {
@@ -101,15 +100,17 @@ impl DltFtBuffer {
     /// Setup all the buffers based on a received header package.
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-    #[cfg(any(target_pointer_width = "64"))]
-    pub fn reinit_from_header_pkg(&mut self, header: &DltFtHeaderPkg) -> Result<(), FtReassembleError> {
-
+    #[cfg(target_pointer_width = "64")]
+    pub fn reinit_from_header_pkg(
+        &mut self,
+        header: &DltFtHeaderPkg,
+    ) -> Result<(), FtReassembleError> {
         // validate that the header is consistant
         use core::ops::RangeInclusive;
         let value_err = FtReassembleError::InconsitantHeaderLenValues {
             file_size: header.file_size.into(),
             number_of_packages: header.number_of_packages.into(),
-            buffer_len: header.buffer_size.into()
+            buffer_len: header.buffer_size.into(),
         };
         if u64::from(header.number_of_packages) == 0 {
             return Err(value_err.clone());
@@ -123,15 +124,20 @@ impl DltFtBuffer {
             .checked_add(1)
             .ok_or_else(|| value_err.clone())?;
 
-        if !RangeInclusive::new(min_expected_size, max_expected_size).contains(&header.file_size.into()) {
+        if !RangeInclusive::new(min_expected_size, max_expected_size)
+            .contains(&header.file_size.into())
+        {
             return Err(value_err);
         }
 
         // reset the buffer
         self.data.clear();
         // TODO implement for 32 bit systems
-        self.data.try_reserve(header.file_size.into())
-            .map_err(|_| FtReassembleError::AllocationFailure { len: header.file_size.into() })?;
+        self.data
+            .try_reserve(header.file_size.into())
+            .map_err(|_| FtReassembleError::AllocationFailure {
+                len: header.file_size.into(),
+            })?;
         self.sections.clear();
 
         // set values
@@ -155,23 +161,19 @@ impl DltFtBuffer {
     /// Consume a DLT file transfer data package, the caller is responsible to ensure the
     /// [`DltFtDataPkg::file_serial_number`] of the data package match the
     /// [`Self::file_serial_number`] of the buffer.
-    #[cfg(any(target_pointer_width = "64"))]
-    pub fn consume_data_pkg(
-        &mut self,
-        data: &DltFtDataPkg,
-    ) -> Result<(), FtReassembleError> {
-
+    #[cfg(target_pointer_width = "64")]
+    pub fn consume_data_pkg(&mut self, data: &DltFtDataPkg) -> Result<(), FtReassembleError> {
         // validate the package number
         let package_nr: u64 = data.package_nr.into();
         if package_nr == 0 || package_nr > self.number_of_packets {
-            return Err(FtReassembleError::UnexpectedPackageNrInDataPkg{
+            return Err(FtReassembleError::UnexpectedPackageNrInDataPkg {
                 expected_nr_of_packages: self.number_of_packets,
                 package_nr,
             });
         }
 
         // determine insertion start
-        let insertion_start: usize = (package_nr as usize - 1)*(self.buffer_size as usize);
+        let insertion_start: usize = (package_nr as usize - 1) * (self.buffer_size as usize);
 
         // validate the data len of the package
         let expected_len = if package_nr < self.number_of_packets {
@@ -206,12 +208,12 @@ impl DltFtBuffer {
             // add data
             self.data.extend_from_slice(data.data);
         } else {
-
             // overwrite the existing data
             let overwrite_end = std::cmp::min(self.data.len(), insert_end);
             let overwrite_len = overwrite_end - insertion_start;
-            (&mut self.data.as_mut_slice()[insertion_start..overwrite_end]).clone_from_slice(&data.data[..overwrite_len]);
-        
+            self.data.as_mut_slice()[insertion_start..overwrite_end]
+                .clone_from_slice(&data.data[..overwrite_len]);
+
             // in case some data still needs to appended do that as well
             if overwrite_end < insert_end {
                 self.data.extend_from_slice(&data.data[overwrite_len..]);
@@ -240,16 +242,19 @@ impl DltFtBuffer {
 
     /// Returns true if the data has been completed and the end received.
     pub fn is_complete(&self) -> bool {
-        self.end_received && 1 == self.sections.len() && 0 == self.sections[0].start && self.sections[0].end == self.file_size
+        self.end_received
+            && 1 == self.sections.len()
+            && 0 == self.sections[0].start
+            && self.sections[0].end == self.file_size
     }
 
     /// Try finalizing the reconstructed file data and return a reference to it
     /// if the stream reconstruction was completed.
-    pub fn try_finalize<'a>(&'a self) -> Option<DltFtCompleteInMemFile<'a>> {
+    pub fn try_finalize(&self) -> Option<DltFtCompleteInMemFile<'_>> {
         if false == self.is_complete() {
-            return None;
+            None
         } else {
-            Some(DltFtCompleteInMemFile{
+            Some(DltFtCompleteInMemFile {
                 file_serial_number: self.file_serial_number,
                 file_name: &self.file_name,
                 creation_date: &self.creation_date,
@@ -261,12 +266,20 @@ impl DltFtBuffer {
 
 #[cfg(test)]
 mod test {
-/*
-    use crate::*;
+
+    use crate::ft::*;
+    use alloc::format;
 
     #[test]
     fn debug_clone_eq() {
-        let buf = DltFtBuffer::new(Default::default());
+        let buf = DltFtBuffer::new(&DltFtHeaderPkg {
+            file_serial_number: DltFtUInt::U32(0),
+            file_name: "a.txt",
+            file_size: DltFtUInt::U32(0),
+            creation_date: "",
+            number_of_packages: DltFtUInt::U32(0),
+            buffer_size: DltFtUInt::U32(0),
+        });
         let _ = format!("{:?}", buf);
         assert_eq!(buf, buf.clone());
         assert_eq!(buf.cmp(&buf), core::cmp::Ordering::Equal);
@@ -286,7 +299,7 @@ mod test {
         };
         assert_eq!(h1, h2);
     }
-
+    /*
     struct TestPacket {
         offset: u32,
         more_segments: bool,
@@ -466,7 +479,7 @@ mod test {
 
             let packet = test_packet.to_vec();
             let slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-            
+
             assert_eq!(Ok(()), buffer.consume_tp(slice));
         }
 
@@ -477,7 +490,7 @@ mod test {
 
             let packet = test_packet.to_vec();
             let slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-            
+
             assert_eq!(
                 UnalignedTpPayloadLen { offset: 48, payload_len: 32 + bad_offset },
                 buffer.consume_tp(slice).unwrap_err()

@@ -1,5 +1,5 @@
-use crate::verbose::*;
 use super::*;
+use crate::verbose::*;
 
 /// DLT file transfer package.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -21,11 +21,9 @@ pub enum DltFtPkg<'a, 'b> {
 }
 
 impl<'a, 'b> DltFtPkg<'a, 'b> {
-
     /// Checks if the verbose iterator contains a DLT file transfer package
     /// and returns the package if so.
     pub fn try_from(mut iter: VerboseIter<'a>) -> Option<DltFtPkg<'a, 'a>> {
-
         match iter.number_of_arguments() {
             3 => {
                 Self::check_for_str(DltFtEndPkg::PKG_FLAG, &mut iter)?;
@@ -43,24 +41,24 @@ impl<'a, 'b> DltFtPkg<'a, 'b> {
                         let data = Self::try_take_raw_from_iter(&mut iter)?;
                         Self::check_for_str(DltFtDataPkg::PKG_FLAG, &mut iter)?;
 
-                        Some(DltFtPkg::Data(DltFtDataPkg{
+                        Some(DltFtPkg::Data(DltFtDataPkg {
                             file_serial_number,
                             package_nr,
                             data,
                         }))
-                    },
+                    }
                     DltFtFileNotExistErrorPkg::PKG_FLAG => {
                         let error_code = DltFtInt::try_take_from_iter(&mut iter)?;
                         let linux_error_code = DltFtInt::try_take_from_iter(&mut iter)?;
                         let file_name = Self::try_take_str_from_iter(&mut iter)?;
                         Self::check_for_str(DltFtFileNotExistErrorPkg::PKG_FLAG, &mut iter)?;
 
-                        Some(DltFtPkg::FileNotExistsError(DltFtFileNotExistErrorPkg{
+                        Some(DltFtPkg::FileNotExistsError(DltFtFileNotExistErrorPkg {
                             error_code: DltFtErrorCode(error_code),
                             linux_error_code,
                             file_name,
                         }))
-                    },
+                    }
                     _ => None,
                 }
             }
@@ -73,7 +71,7 @@ impl<'a, 'b> DltFtPkg<'a, 'b> {
                 let number_of_packages = DltFtUInt::try_take_from_iter(&mut iter)?;
                 Self::check_for_str(DltFtInfoPkg::PKG_FLAG, &mut iter)?;
 
-                Some(DltFtPkg::Info(DltFtInfoPkg{
+                Some(DltFtPkg::Info(DltFtInfoPkg {
                     file_serial_number,
                     file_name,
                     file_size,
@@ -91,7 +89,7 @@ impl<'a, 'b> DltFtPkg<'a, 'b> {
                 let buffer_size = DltFtUInt::try_take_from_iter(&mut iter)?;
                 Self::check_for_str(DltFtHeaderPkg::PKG_FLAG, &mut iter)?;
 
-                Some(DltFtPkg::Header(DltFtHeaderPkg{
+                Some(DltFtPkg::Header(DltFtHeaderPkg {
                     file_serial_number,
                     file_name,
                     file_size,
@@ -111,7 +109,7 @@ impl<'a, 'b> DltFtPkg<'a, 'b> {
                 let number_of_packages = DltFtUInt::try_take_from_iter(&mut iter)?;
                 Self::check_for_str(DltFtErrorPkg::PKG_FLAG, &mut iter)?;
 
-                Some(DltFtPkg::Error(DltFtErrorPkg{
+                Some(DltFtPkg::Error(DltFtErrorPkg {
                     error_code: DltFtErrorCode(error_code),
                     linux_error_code,
                     file_serial_number,
@@ -145,7 +143,7 @@ impl<'a, 'b> DltFtPkg<'a, 'b> {
         Some(result.data)
     }
 
-    fn check_for_str<'c>(expected: &str, iter: &mut VerboseIter<'_>) -> Option<()> {
+    fn check_for_str(expected: &str, iter: &mut VerboseIter<'_>) -> Option<()> {
         let Some(Ok(VerboseValue::Str(result))) = iter.next() else {
             return None;
         };
@@ -157,5 +155,4 @@ impl<'a, 'b> DltFtPkg<'a, 'b> {
         }
         Some(())
     }
-
 }
