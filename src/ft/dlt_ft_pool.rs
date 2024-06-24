@@ -186,7 +186,7 @@ where
 {
 }
 
-#[cfg(test)]
+#[cfg(all(feature = "std", test))]
 mod tests {
     use super::*;
     use alloc::format;

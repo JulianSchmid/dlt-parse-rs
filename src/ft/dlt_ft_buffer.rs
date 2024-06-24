@@ -64,8 +64,6 @@ impl DltFtBuffer {
         self.end_received
     }
 
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn new(header: &DltFtHeaderPkg) -> Result<DltFtBuffer, FtReassembleError> {
         let mut result = DltFtBuffer {
             data: Vec::new(),
@@ -83,8 +81,6 @@ impl DltFtBuffer {
     }
 
     /// Reset buffer to starting state.
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn clear(&mut self) {
         self.data.clear();
         self.sections.clear();
@@ -98,8 +94,6 @@ impl DltFtBuffer {
     }
 
     /// Setup all the buffers based on a received header package.
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     #[cfg(target_pointer_width = "64")]
     pub fn reinit_from_header_pkg(
         &mut self,
@@ -264,7 +258,7 @@ impl DltFtBuffer {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(feature = "std",test))]
 mod test {
 
     use crate::ft::*;
