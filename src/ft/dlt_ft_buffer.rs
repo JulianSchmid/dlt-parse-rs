@@ -64,6 +64,8 @@ impl DltFtBuffer {
         self.end_received
     }
 
+    #[cfg(target_pointer_width = "64")]
+    #[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
     pub fn new(header: &DltFtHeaderPkg) -> Result<DltFtBuffer, FtReassembleError> {
         let mut result = DltFtBuffer {
             data: Vec::new(),
@@ -95,6 +97,7 @@ impl DltFtBuffer {
 
     /// Setup all the buffers based on a received header package.
     #[cfg(target_pointer_width = "64")]
+    #[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
     pub fn reinit_from_header_pkg(
         &mut self,
         header: &DltFtHeaderPkg,
@@ -156,6 +159,7 @@ impl DltFtBuffer {
     /// [`DltFtDataPkg::file_serial_number`] of the data package match the
     /// [`Self::file_serial_number`] of the buffer.
     #[cfg(target_pointer_width = "64")]
+    #[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
     pub fn consume_data_pkg(&mut self, data: &DltFtDataPkg) -> Result<(), FtReassembleError> {
         // validate the package number
         let package_nr: u64 = data.package_nr.into();

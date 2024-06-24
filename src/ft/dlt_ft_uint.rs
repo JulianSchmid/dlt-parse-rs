@@ -45,6 +45,7 @@ impl From<usize> for DltFtUInt {
 }
 
 #[cfg(target_pointer_width = "64")]
+#[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
 impl From<usize> for DltFtUInt {
     fn from(value: usize) -> Self {
         DltFtUInt::U64(value as u64)
@@ -52,6 +53,7 @@ impl From<usize> for DltFtUInt {
 }
 
 #[cfg(target_pointer_width = "64")]
+#[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
 impl From<DltFtUInt> for usize {
     fn from(value: DltFtUInt) -> Self {
         match value {

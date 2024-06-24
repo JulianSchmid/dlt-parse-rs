@@ -1,8 +1,6 @@
 #[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 use crate::{error::*, ft::*};
 #[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 use core::hash::Hash;
 #[cfg(feature = "std")]
 use std::{collections::HashMap, vec::Vec};
