@@ -262,7 +262,7 @@ impl DltFtBuffer {
     }
 }
 
-#[cfg(all(feature = "std",test))]
+#[cfg(all(feature = "std", test))]
 mod test {
 
     use crate::ft::*;
