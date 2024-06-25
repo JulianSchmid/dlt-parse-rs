@@ -27,7 +27,7 @@ mod dlt_ft_info_pkg;
 pub use dlt_ft_info_pkg::*;
 
 mod dlt_ft_pool;
-#[cfg(all(feature = "std", target_pointer_width = "64"))]
+#[cfg(feature = "std")]
 pub use dlt_ft_pool::*;
 
 mod dlt_ft_int;

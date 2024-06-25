@@ -1,8 +1,8 @@
-#[cfg(all(feature = "std", target_pointer_width = "64"))]
+#[cfg(feature = "std")]
 use crate::{error::*, ft::*};
-#[cfg(all(feature = "std", target_pointer_width = "64"))]
+#[cfg(feature = "std")]
 use core::hash::Hash;
-#[cfg(all(feature = "std", target_pointer_width = "64"))]
+#[cfg(feature = "std")]
 use std::{collections::HashMap, vec::Vec};
 
 /// Pool of buffers to reconstruct multiple DLT file transfer packet streams in
@@ -13,8 +13,8 @@ use std::{collections::HashMap, vec::Vec};
 /// If you use the [`DltFtPool`] in an untrusted environment an attacker could
 /// cause an "out of memory error" by opening up multiple parallel file transfer streams,
 /// never ending them and filling them up with as much data as possible.
-#[cfg(all(feature = "std", target_pointer_width = "64"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "std", target_pointer_width = "64"))))]
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug, Default, Clone)]
 pub struct DltFtPool<ChannelId, Timestamp>
 where
@@ -28,8 +28,8 @@ where
     finished: Vec<DltFtBuffer>,
 }
 
-#[cfg(all(feature = "std", target_pointer_width = "64"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "std", target_pointer_width = "64"))))]
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<ChannelId, Timestamp: Sized> DltFtPool<ChannelId, Timestamp>
 where
     ChannelId: Hash + Eq + PartialEq + Clone + Sized,
@@ -163,8 +163,8 @@ where
     }
 }
 
-#[cfg(all(feature = "std", target_pointer_width = "64"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "std", target_pointer_width = "64"))))]
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<ChannelId, Timestamp: Sized> PartialEq for DltFtPool<ChannelId, Timestamp>
 where
     ChannelId: Hash + Eq + PartialEq + Clone + Sized,
@@ -175,8 +175,8 @@ where
     }
 }
 
-#[cfg(all(feature = "std", target_pointer_width = "64"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "std", target_pointer_width = "64"))))]
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<ChannelId, Timestamp: Sized> Eq for DltFtPool<ChannelId, Timestamp>
 where
     ChannelId: Hash + Eq + PartialEq + Clone + Sized,
@@ -184,7 +184,7 @@ where
 {
 }
 
-#[cfg(all(feature = "std", target_pointer_width = "64", test))]
+#[cfg(all(feature = "std", test))]
 mod tests {
     use super::*;
     use alloc::format;

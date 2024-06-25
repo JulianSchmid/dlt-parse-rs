@@ -13,13 +13,20 @@ pub enum FtReassembleError {
     InconsitantHeaderLenValues {
         file_size: u64,
         number_of_packages: u64,
-        buffer_len: u64,
+        buffer_size: u64,
     },
 
     /// Error if a data package with an unexpected package nr is received.
     UnexpectedPackageNrInDataPkg {
         expected_nr_of_packages: u64,
         package_nr: u64,
+    },
+
+    /// File transfer is too big to be stored in memory (if the file size
+    /// exceeds the platform pointer width).
+    FileSizeTooBig {
+        file_size: u64,
+        max_allowed: u64,
     },
 
     /// Error if not enough memory could be allocated to store the file in memory.
@@ -31,8 +38,9 @@ impl core::fmt::Display for FtReassembleError {
         use FtReassembleError::*;
         match self {
             DataLenNotMatchingBufferSize{ header_buffer_len, data_pkt_len, data_pkt_nr, number_of_packages } => write!(f, "Payload length {data_pkt_len} of DLT file transfer data packet (nr {data_pkt_nr} of {number_of_packages}) is not matching the buffer len {header_buffer_len} set by the header packet."),
-            InconsitantHeaderLenValues{ file_size, number_of_packages, buffer_len } => write!(f, "DLT file transfer header packet 'file size' {file_size} is inconsistant with the 'buffer size' {buffer_len} and 'number of packages' {number_of_packages}"),
+            InconsitantHeaderLenValues{ file_size, number_of_packages, buffer_size: buffer_len } => write!(f, "DLT file transfer header packet 'file size' {file_size} is inconsistant with the 'buffer size' {buffer_len} and 'number of packages' {number_of_packages}"),
             UnexpectedPackageNrInDataPkg { expected_nr_of_packages, package_nr } => write!(f, "Received a DLT file transfer data packet with the unexpected package number {package_nr} (expected number of packages based on header package is {expected_nr_of_packages})."),
+            FileSizeTooBig { file_size, max_allowed } => write!(f, "DLT filetransfer file size {file_size} exceeds the supported maximum of {max_allowed}."),
             AllocationFailure { len } => write!(f, "Failed to allocate {len} bytes of memory to reconstruct the SOMEIP TP packets."),
         }
     }

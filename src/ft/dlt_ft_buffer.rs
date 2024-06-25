@@ -1,7 +1,5 @@
 #[cfg(feature = "std")]
-use crate::ft::*;
-#[cfg(all(feature = "std", target_pointer_width = "64"))]
-use crate::error::FtReassembleError;
+use crate::{ft::*, error::FtReassembleError};
 #[cfg(feature = "std")]
 use std::string::String;
 #[cfg(feature = "std")]
@@ -66,8 +64,6 @@ impl DltFtBuffer {
         self.end_received
     }
 
-    #[cfg(target_pointer_width = "64")]
-    #[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
     pub fn new(header: &DltFtHeaderPkg) -> Result<DltFtBuffer, FtReassembleError> {
         let mut result = DltFtBuffer {
             data: Vec::new(),
@@ -98,30 +94,42 @@ impl DltFtBuffer {
     }
 
     /// Setup all the buffers based on a received header package.
-    #[cfg(target_pointer_width = "64")]
-    #[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
     pub fn reinit_from_header_pkg(
         &mut self,
         header: &DltFtHeaderPkg,
     ) -> Result<(), FtReassembleError> {
+        // validate that the file is not too big
+        let file_size: u64 = header.file_size.into();
+        {
+            let max_allowed: u64 = usize::MAX as u64;
+            if file_size > max_allowed {
+                return Err(FtReassembleError::FileSizeTooBig { file_size, max_allowed });
+            }
+        }
         // validate that the header is consistant
+        let number_of_packages: u64 = header.number_of_packages.into();
+        let buffer_size: u64 = header.buffer_size.into();
         use core::ops::RangeInclusive;
         let value_err = FtReassembleError::InconsitantHeaderLenValues {
             file_size: header.file_size.into(),
-            number_of_packages: header.number_of_packages.into(),
-            buffer_len: header.buffer_size.into(),
+            number_of_packages,
+            buffer_size,
         };
-        if u64::from(header.number_of_packages) == 0 {
+        if (number_of_packages == 0 || buffer_size == 0) && file_size != 0 {
             return Err(value_err.clone());
         }
         let max_expected_size = u64::from(header.buffer_size)
             .checked_mul(header.number_of_packages.into())
             .ok_or_else(|| value_err.clone())?;
-        let min_expected_size = max_expected_size
+        let min_expected_size = if number_of_packages > 0 {
+            max_expected_size
             .checked_sub(header.buffer_size.into())
             .ok_or_else(|| value_err.clone())?
             .checked_add(1)
-            .ok_or_else(|| value_err.clone())?;
+            .ok_or_else(|| value_err.clone())?
+        } else {
+            0
+        };
 
         if !RangeInclusive::new(min_expected_size, max_expected_size)
             .contains(&header.file_size.into())
@@ -131,9 +139,8 @@ impl DltFtBuffer {
 
         // reset the buffer
         self.data.clear();
-        // TODO implement for 32 bit systems
         self.data
-            .try_reserve(header.file_size.into())
+            .try_reserve(u64::from(header.file_size) as usize)
             .map_err(|_| FtReassembleError::AllocationFailure {
                 len: header.file_size.into(),
             })?;
@@ -160,8 +167,6 @@ impl DltFtBuffer {
     /// Consume a DLT file transfer data package, the caller is responsible to ensure the
     /// [`DltFtDataPkg::file_serial_number`] of the data package match the
     /// [`Self::file_serial_number`] of the buffer.
-    #[cfg(target_pointer_width = "64")]
-    #[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
     pub fn consume_data_pkg(&mut self, data: &DltFtDataPkg) -> Result<(), FtReassembleError> {
         // validate the package number
         let package_nr: u64 = data.package_nr.into();
