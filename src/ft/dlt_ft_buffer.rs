@@ -150,6 +150,7 @@ impl DltFtBuffer {
         self.file_size = header.file_size.into();
         self.number_of_packets = header.number_of_packages.into();
         self.buffer_size = header.buffer_size.into();
+        self.file_serial_number = header.file_serial_number;
         self.file_name.clear();
         self.file_name.push_str(header.file_name);
         self.creation_date.clear();
@@ -272,8 +273,8 @@ impl DltFtBuffer {
 #[cfg(all(feature = "std", test))]
 mod test {
 
-    use crate::ft::*;
-    use alloc::format;
+    use crate::{ft::*, error::FtReassembleError};
+    use alloc::{borrow::ToOwned, vec::Vec, format};
 
     #[test]
     fn debug_clone_eq() {
@@ -304,6 +305,110 @@ mod test {
         };
         assert_eq!(h1, h2);
     }
+
+    #[test]
+    fn new() {
+        // ok case
+        {
+            let buf = DltFtBuffer::new(&DltFtHeaderPkg {
+                file_serial_number: DltFtUInt::U32(1234),
+                file_name: "a.txt",
+                file_size: DltFtUInt::U32(20),
+                creation_date: "2024-06-25",
+                number_of_packages: DltFtUInt::U32(2),
+                buffer_size: DltFtUInt::U32(10),
+            });
+            assert_eq!(
+                DltFtBuffer {
+                    data: Vec::new(),
+                    sections: Vec::new(),
+                    file_size: 20,
+                    number_of_packets: 2,
+                    buffer_size: 10,
+                    file_serial_number: DltFtUInt::U32(1234),
+                    file_name: "a.txt".to_owned(),
+                    creation_date: "2024-06-25".to_owned(),
+                    end_received: false,
+                },
+                buf.unwrap()
+            );
+        }
+        // error case
+        {
+            let buf = DltFtBuffer::new(&DltFtHeaderPkg {
+                file_serial_number: DltFtUInt::U32(1234),
+                file_name: "a.txt",
+                file_size: DltFtUInt::U32(20),
+                creation_date: "2024-06-25",
+                // bad number of packages
+                number_of_packages: DltFtUInt::U32(0),
+                buffer_size: DltFtUInt::U32(10),
+            });
+            assert_eq!(
+                FtReassembleError::InconsitantHeaderLenValues {
+                    file_size: 20,
+                    number_of_packages: 0,
+                    buffer_size: 10,
+                },
+                buf.unwrap_err()
+            );
+        }
+    }
+
+    #[cfg(target_pointer_width = "32")]
+    #[test]
+    fn reinit_from_header_pkg() {
+
+    }
+
+    #[test]
+    fn reinit_from_header_pkg() {
+        let base = {
+            let mut base = DltFtBuffer::new(&DltFtHeaderPkg {
+                file_serial_number: DltFtUInt::U32(0),
+                file_name: "base.txt",
+                file_size: DltFtUInt::U32(4),
+                creation_date: "0-0-0",
+                number_of_packages: DltFtUInt::U32(1),
+                buffer_size: DltFtUInt::U32(4),
+            }).unwrap();
+            base.consume_data_pkg(&DltFtDataPkg{
+                file_serial_number: DltFtUInt::U32(0),
+                package_nr: DltFtUInt::U32(1),
+                data: &[1,2,3,4],
+            }).unwrap();
+            base.set_end_received();
+            base
+        };
+
+        // ok init
+        {
+            let mut buf = base.clone();
+            buf.reinit_from_header_pkg(&DltFtHeaderPkg {
+                file_serial_number: DltFtUInt::U32(1234),
+                file_name: "file.txt",
+                file_size: DltFtUInt::U32(10),
+                creation_date: "2024-06-25",
+                number_of_packages: DltFtUInt::U32(2),
+                buffer_size: DltFtUInt::U32(5),
+            }).unwrap();
+            assert_eq!(
+                DltFtBuffer {
+                    data: Vec::new(),
+                    sections: Vec::new(),
+                    file_size: 10,
+                    number_of_packets: 2,
+                    buffer_size: 5,
+                    file_serial_number: DltFtUInt::U32(1234),
+                    file_name: "file.txt".to_owned(),
+                    creation_date: "2024-06-25".to_owned(),
+                    end_received: false,
+                },
+                buf
+            );
+        }
+    }
+
     /*
     struct TestPacket {
         offset: u32,

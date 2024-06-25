@@ -35,32 +35,6 @@ impl From<i64> for DltFtInt {
     }
 }
 
-#[cfg(target_pointer_width = "32")]
-impl From<isize> for DltFtInt {
-    fn from(value: isize) -> Self {
-        DltFtInt::I32(value as i32)
-    }
-}
-
-#[cfg(target_pointer_width = "64")]
-#[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
-impl From<isize> for DltFtInt {
-    fn from(value: isize) -> Self {
-        DltFtInt::I64(value as i64)
-    }
-}
-
-#[cfg(target_pointer_width = "64")]
-#[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
-impl From<DltFtInt> for isize {
-    fn from(value: DltFtInt) -> Self {
-        match value {
-            DltFtInt::I32(v) => v as isize,
-            DltFtInt::I64(v) => v as isize,
-        }
-    }
-}
-
 impl From<DltFtInt> for i64 {
     fn from(value: DltFtInt) -> Self {
         match value {

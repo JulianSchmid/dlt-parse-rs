@@ -37,33 +37,6 @@ impl From<u64> for DltFtUInt {
     }
 }
 
-#[cfg(target_pointer_width = "32")]
-impl From<usize> for DltFtUInt {
-    fn from(value: usize) -> Self {
-        DltFtUInt::U32(value as u32)
-    }
-}
-
-#[cfg(target_pointer_width = "64")]
-#[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
-impl From<usize> for DltFtUInt {
-    fn from(value: usize) -> Self {
-        DltFtUInt::U64(value as u64)
-    }
-}
-
-#[cfg(target_pointer_width = "64")]
-#[cfg_attr(docsrs, doc(cfg(target_pointer_width = "64")))]
-impl From<DltFtUInt> for usize {
-    fn from(value: DltFtUInt) -> Self {
-        match value {
-            DltFtUInt::U16(v) => usize::from(v),
-            DltFtUInt::U32(v) => v as usize,
-            DltFtUInt::U64(v) => v as usize,
-        }
-    }
-}
-
 impl From<DltFtUInt> for u64 {
     fn from(value: DltFtUInt) -> Self {
         match value {
