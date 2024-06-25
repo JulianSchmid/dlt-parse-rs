@@ -140,9 +140,9 @@ impl DltFtBuffer {
         // reset the buffer
         self.data.clear();
         self.data
-            .try_reserve(u64::from(header.file_size) as usize)
+            .try_reserve(file_size as usize)
             .map_err(|_| FtReassembleError::AllocationFailure {
-                len: header.file_size.into(),
+                len: file_size as usize,
             })?;
         self.sections.clear();
 
