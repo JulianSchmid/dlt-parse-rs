@@ -122,11 +122,7 @@ impl DltFtBuffer {
             .checked_mul(header.number_of_packages.into())
             .ok_or_else(|| value_err.clone())?;
         let min_expected_size = if number_of_packages > 0 {
-            max_expected_size
-            .checked_sub(header.buffer_size.into())
-            .ok_or_else(|| value_err.clone())?
-            .checked_add(1)
-            .ok_or_else(|| value_err.clone())?
+            (max_expected_size - buffer_size) + 1
         } else {
             0
         };
@@ -357,8 +353,33 @@ mod test {
 
     #[cfg(target_pointer_width = "32")]
     #[test]
-    fn reinit_from_header_pkg() {
+    fn reinit_from_header_pkg_size_err_32() {
+        // setup base
+        let mut base = DltFtBuffer::new(&DltFtHeaderPkg {
+            file_serial_number: DltFtUInt::U32(0),
+            file_name: "base.txt",
+            file_size: DltFtUInt::U32(4),
+            creation_date: "0-0-0",
+            number_of_packages: DltFtUInt::U32(1),
+            buffer_size: DltFtUInt::U32(4),
+        }).unwrap();
 
+        // check for error if the file is bigger then representable
+        // in 32 bits
+        assert_eq!(
+            FtReassembleError::FileSizeTooBig {
+                file_size: usize::MAX as u64 + 1,
+                max_allowed: usize::MAX as u64,
+            },
+            buf.reinit_from_header_pkg(&DltFtHeaderPkg {
+                file_serial_number: DltFtUInt::U32(1234),
+                file_name: "file.txt",
+                file_size: DltFtUInt::U64(usize::MAX as u64 + 1),
+                creation_date: "2024-06-25",
+                number_of_packages: DltFtUInt::U32(2),
+                buffer_size: DltFtUInt::U32(5),
+            }).unwrap_err()
+        );
     }
 
     #[test]
@@ -406,6 +427,76 @@ mod test {
                 },
                 buf
             );
+        }
+
+        // empty file
+        {
+            let mut buf = base.clone();
+            buf.reinit_from_header_pkg(&DltFtHeaderPkg {
+                file_serial_number: DltFtUInt::U32(1234),
+                file_name: "file.txt",
+                file_size: DltFtUInt::U32(0),
+                creation_date: "2024-06-25",
+                number_of_packages: DltFtUInt::U32(0),
+                buffer_size: DltFtUInt::U32(0),
+            }).unwrap();
+            assert_eq!(
+                DltFtBuffer {
+                    data: Vec::new(),
+                    sections: Vec::new(),
+                    file_size: 0,
+                    number_of_packets: 0,
+                    buffer_size: 0,
+                    file_serial_number: DltFtUInt::U32(1234),
+                    file_name: "file.txt".to_owned(),
+                    creation_date: "2024-06-25".to_owned(),
+                    end_received: false,
+                },
+                buf
+            );
+        }
+
+        // tests for consistency error checks
+        {
+            use FtReassembleError::*;
+            let tests = [
+                // file_size, number_of_packages, buffer_size
+                // basic checks for zero values
+                (1, 0, 0),
+                (1, 1, 0),
+                (1, 0, 1),
+                // out of range errors
+                (5, 1, 4),
+                (3, 2, 4),
+                (9, 2, 4),
+                // overflow errors
+                (9, u64::MAX, 2),
+                (9, 2, u64::MAX),
+            ];
+            for (file_size, number_of_packages, buffer_size) in tests {
+                let mut buf = base.clone();
+                let err = buf.reinit_from_header_pkg(&DltFtHeaderPkg {
+                    file_serial_number: DltFtUInt::U32(1234),
+                    file_name: "file.txt",
+                    file_size: DltFtUInt::U64(file_size),
+                    creation_date: "2024-06-25",
+                    number_of_packages: DltFtUInt::U64(number_of_packages),
+                    buffer_size: DltFtUInt::U64(buffer_size),
+                }).unwrap_err();
+                assert_eq!(
+                    err,
+                    InconsitantHeaderLenValues {
+                        file_size,
+                        number_of_packages,
+                        buffer_size,
+                    }
+                );
+            }
+        }
+
+        // test allocation error
+        {
+            // TODO
         }
     }
 
