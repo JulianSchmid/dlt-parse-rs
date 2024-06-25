@@ -497,6 +497,21 @@ mod test {
         // test allocation error
         {
             // TODO
+            let mut buf = base.clone();
+            let err = buf.reinit_from_header_pkg(&DltFtHeaderPkg {
+                file_serial_number: DltFtUInt::U32(1234),
+                file_name: "file.txt",
+                file_size: DltFtUInt::U64(usize::MAX as u64),
+                creation_date: "2024-06-25",
+                number_of_packages: DltFtUInt::U64(1),
+                buffer_size: DltFtUInt::U64(usize::MAX as u64),
+            }).unwrap_err();
+            assert_eq!(
+                err,
+                FtReassembleError::AllocationFailure {
+                    len: usize::MAX
+                }
+            );
         }
     }
 
