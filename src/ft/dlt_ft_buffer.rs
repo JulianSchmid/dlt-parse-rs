@@ -1,4 +1,4 @@
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", target_pointer_width = "64"))]
 use crate::{error::FtReassembleError, ft::*};
 #[cfg(feature = "std")]
 use std::string::String;

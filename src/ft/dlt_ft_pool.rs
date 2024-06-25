@@ -1,8 +1,8 @@
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", target_pointer_width = "64"))]
 use crate::{error::*, ft::*};
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", target_pointer_width = "64"))]
 use core::hash::Hash;
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", target_pointer_width = "64"))]
 use std::{collections::HashMap, vec::Vec};
 
 /// Pool of buffers to reconstruct multiple DLT file transfer packet streams in
