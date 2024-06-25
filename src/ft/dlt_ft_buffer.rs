@@ -355,7 +355,7 @@ mod test {
     #[test]
     fn reinit_from_header_pkg_size_err_32() {
         // setup base
-        let mut base = DltFtBuffer::new(&DltFtHeaderPkg {
+        let mut buf = DltFtBuffer::new(&DltFtHeaderPkg {
             file_serial_number: DltFtUInt::U32(0),
             file_name: "base.txt",
             file_size: DltFtUInt::U32(4),
