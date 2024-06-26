@@ -19,7 +19,7 @@ pub struct DltFtBuffer {
     file_size: u64,
 
     /// Number of expected packets.
-    number_of_packets: u64,
+    number_of_packages: u64,
 
     /// Buffer size.
     buffer_size: u64,
@@ -40,6 +40,13 @@ pub struct DltFtBuffer {
 #[cfg(feature = "std")]
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl DltFtBuffer {
+
+    /// Returns the reconstructed section ranges.
+    #[inline]
+    pub fn sections(&self) -> &Vec<DltFtRange> {
+        &self.sections
+    }
+
     /// File serial number (usually inode).
     #[inline]
     pub fn file_serial_number(&self) -> DltFtUInt {
@@ -69,7 +76,7 @@ impl DltFtBuffer {
             data: Vec::new(),
             sections: Vec::with_capacity(4),
             file_size: 0,
-            number_of_packets: 0,
+            number_of_packages: 0,
             buffer_size: 0,
             file_serial_number: header.file_serial_number,
             file_name: String::with_capacity(header.file_name.len()),
@@ -85,7 +92,7 @@ impl DltFtBuffer {
         self.data.clear();
         self.sections.clear();
         self.file_size = 0;
-        self.number_of_packets = 0;
+        self.number_of_packages = 0;
         self.buffer_size = 0;
         self.file_serial_number = DltFtUInt::U64(0);
         self.file_name.clear();
@@ -144,7 +151,7 @@ impl DltFtBuffer {
 
         // set values
         self.file_size = header.file_size.into();
-        self.number_of_packets = header.number_of_packages.into();
+        self.number_of_packages = header.number_of_packages.into();
         self.buffer_size = header.buffer_size.into();
         self.file_serial_number = header.file_serial_number;
         self.file_name.clear();
@@ -167,9 +174,9 @@ impl DltFtBuffer {
     pub fn consume_data_pkg(&mut self, data: &DltFtDataPkg) -> Result<(), FtReassembleError> {
         // validate the package number
         let package_nr: u64 = data.package_nr.into();
-        if package_nr == 0 || package_nr > self.number_of_packets {
+        if package_nr == 0 || package_nr > self.number_of_packages {
             return Err(FtReassembleError::UnexpectedPackageNrInDataPkg {
-                expected_nr_of_packages: self.number_of_packets,
+                expected_nr_of_packages: self.number_of_packages,
                 package_nr,
             });
         }
@@ -178,7 +185,7 @@ impl DltFtBuffer {
         let insertion_start: usize = (package_nr as usize - 1) * (self.buffer_size as usize);
 
         // validate the data len of the package
-        let expected_len = if package_nr < self.number_of_packets {
+        let expected_len = if package_nr < self.number_of_packages {
             self.buffer_size
         } else {
             // the last package only contains the left overs
@@ -195,7 +202,7 @@ impl DltFtBuffer {
                 header_buffer_len: self.buffer_size,
                 data_pkt_len: data.data.len() as u64,
                 data_pkt_nr: package_nr,
-                number_of_packages: self.number_of_packets,
+                number_of_packages: self.number_of_packages,
             });
         }
 
@@ -244,10 +251,16 @@ impl DltFtBuffer {
 
     /// Returns true if the data has been completed and the end received.
     pub fn is_complete(&self) -> bool {
-        self.end_received
-            && 1 == self.sections.len()
-            && 0 == self.sections[0].start
-            && self.sections[0].end == self.file_size
+        self.end_received && (
+            (
+                1 == self.sections.len()
+                && 0 == self.sections[0].start
+                && self.sections[0].end == self.file_size
+            ) || (
+                0 == self.file_size &&
+                0 == self.sections.len()
+            )
+        )
     }
 
     /// Try finalizing the reconstructed file data and return a reference to it
@@ -271,6 +284,26 @@ mod test {
 
     use crate::{ft::*, error::FtReassembleError};
     use alloc::{borrow::ToOwned, vec::Vec, format};
+
+    #[test]
+    fn getters() {
+        let buf = DltFtBuffer{
+            data: Vec::new(),
+            sections: Vec::new(),
+            file_size: 1,
+            number_of_packages: 2,
+            buffer_size: 3,
+            file_serial_number: DltFtUInt::U32(4),
+            file_name: "5".to_owned(),
+            creation_date: "6".to_owned(),
+            end_received: true,
+        };
+        assert_eq!(buf.sections(), &Vec::new());
+        assert_eq!(buf.file_serial_number(), DltFtUInt::U32(4));
+        assert_eq!(buf.file_name(), "5".to_owned());
+        assert_eq!(buf.creation_date(), "6".to_owned());
+        assert_eq!(buf.end_received(), true);
+    }
 
     #[test]
     fn debug_clone_eq() {
@@ -319,7 +352,7 @@ mod test {
                     data: Vec::new(),
                     sections: Vec::new(),
                     file_size: 20,
-                    number_of_packets: 2,
+                    number_of_packages: 2,
                     buffer_size: 10,
                     file_serial_number: DltFtUInt::U32(1234),
                     file_name: "a.txt".to_owned(),
@@ -404,29 +437,49 @@ mod test {
 
         // ok init
         {
-            let mut buf = base.clone();
-            buf.reinit_from_header_pkg(&DltFtHeaderPkg {
-                file_serial_number: DltFtUInt::U32(1234),
-                file_name: "file.txt",
-                file_size: DltFtUInt::U32(10),
-                creation_date: "2024-06-25",
-                number_of_packages: DltFtUInt::U32(2),
-                buffer_size: DltFtUInt::U32(5),
-            }).unwrap();
-            assert_eq!(
-                DltFtBuffer {
-                    data: Vec::new(),
-                    sections: Vec::new(),
-                    file_size: 10,
-                    number_of_packets: 2,
-                    buffer_size: 5,
+            let tests = [
+                // file_size, number_of_packages, buffer_size
+                (0, 0, 0),
+                (0, 0, 4),
+                (1, 1, 4),
+                (2, 1, 4),
+                (3, 1, 4),
+                (4, 1, 4),
+                (5, 2, 4),
+                (6, 2, 4),
+                (7, 2, 4),
+                (8, 2, 4),
+                (9, 3, 4),
+                (10, 3, 4),
+                (11, 3, 4),
+                (12, 3, 4),
+                (13, 4, 4),
+            ];
+            for (file_size, number_of_packages, buffer_size) in tests {
+                let mut buf = base.clone();
+                buf.reinit_from_header_pkg(&DltFtHeaderPkg {
                     file_serial_number: DltFtUInt::U32(1234),
-                    file_name: "file.txt".to_owned(),
-                    creation_date: "2024-06-25".to_owned(),
-                    end_received: false,
-                },
-                buf
-            );
+                    file_name: "file.txt",
+                    file_size: DltFtUInt::U64(file_size),
+                    creation_date: "2024-06-25",
+                    number_of_packages: DltFtUInt::U64(number_of_packages),
+                    buffer_size: DltFtUInt::U64(buffer_size),
+                }).unwrap();
+                assert_eq!(
+                    DltFtBuffer {
+                        data: Vec::new(),
+                        sections: Vec::new(),
+                        file_size,
+                        number_of_packages,
+                        buffer_size,
+                        file_serial_number: DltFtUInt::U32(1234),
+                        file_name: "file.txt".to_owned(),
+                        creation_date: "2024-06-25".to_owned(),
+                        end_received: false,
+                    },
+                    buf
+                );
+            }
         }
 
         // empty file
@@ -445,7 +498,7 @@ mod test {
                     data: Vec::new(),
                     sections: Vec::new(),
                     file_size: 0,
-                    number_of_packets: 0,
+                    number_of_packages: 0,
                     buffer_size: 0,
                     file_serial_number: DltFtUInt::U32(1234),
                     file_name: "file.txt".to_owned(),
@@ -496,7 +549,6 @@ mod test {
 
         // test allocation error
         {
-            // TODO
             let mut buf = base.clone();
             let err = buf.reinit_from_header_pkg(&DltFtHeaderPkg {
                 file_serial_number: DltFtUInt::U32(1234),
@@ -512,6 +564,171 @@ mod test {
                     len: usize::MAX
                 }
             );
+        }
+    }
+
+    #[test]
+    fn set_end_received() {
+        let mut buf = DltFtBuffer::new(&DltFtHeaderPkg {
+            file_serial_number: DltFtUInt::U32(0),
+            file_name: "base.txt",
+            file_size: DltFtUInt::U32(4),
+            creation_date: "0-0-0",
+            number_of_packages: DltFtUInt::U32(1),
+            buffer_size: DltFtUInt::U32(4),
+        }).unwrap();
+        buf.consume_data_pkg(&DltFtDataPkg{
+            file_serial_number: DltFtUInt::U32(0),
+            package_nr: DltFtUInt::U32(1),
+            data: &[1,2,3,4],
+        }).unwrap();
+
+        assert_eq!(false, buf.end_received());
+        buf.set_end_received();
+        assert!(buf.end_received());
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn consume_data_pkg() {
+        let new_buf = |file_size: u64, number_of_packages: u64, buffer_size: u64| -> DltFtBuffer {
+            DltFtBuffer::new(&DltFtHeaderPkg {
+                file_serial_number: DltFtUInt::U32(0),
+                file_name: "base.txt",
+                file_size: DltFtUInt::U64(file_size),
+                creation_date: "0-0-0",
+                number_of_packages: DltFtUInt::U64(number_of_packages),
+                buffer_size: DltFtUInt::U64(buffer_size),
+            }).unwrap()
+        };
+        let assert_sequence = |buf: &DltFtBuffer| {
+            assert!(buf.is_complete());
+            let data = buf.try_finalize().unwrap();
+            assert_eq!(data.file_serial_number, buf.file_serial_number);
+            assert_eq!(data.file_name, buf.file_name);
+            assert_eq!(data.creation_date, buf.creation_date);
+            for (i, value) in data.data.iter().enumerate() {
+                assert_eq!(i as u8, *value);
+            }
+        };
+
+        // ok reconstruction
+        {
+            let tests: [((u64, u64, u64), &'static [(u64, &'static [u8])]);12] = [
+                ((0, 0, 4), &[]),
+                (
+                    (1, 1, 4), 
+                    &[(1, &[0]),]
+                ),
+                (
+                    (2, 1, 4), 
+                    &[(1, &[0,1]),]
+                ),
+                (
+                    (3, 1, 4), 
+                    &[(1, &[0,1,2]),]
+                ),
+                (
+                    (4, 1, 4), 
+                    &[(1, &[0,1,2,3]),]
+                ),
+                (
+                    (5, 2, 4), 
+                    &[
+                        (1, &[0,1,2,3]),
+                        (2, &[4]),
+                    ]
+                ),
+                (
+                    (7, 2, 4), 
+                    &[
+                        (1, &[0,1,2,3]),
+                        (2, &[4,5,6]),
+                    ]
+                ),
+                (
+                    (8, 2, 4), 
+                    &[
+                        (1, &[0,1,2,3]),
+                        (2, &[4,5,6,7]),
+                    ]
+                ),
+                (
+                    (9, 3, 4), 
+                    &[
+                        (1, &[0,1,2,3]),
+                        (2, &[4,5,6,7]),
+                        (3, &[8]),
+                    ]
+                ),
+                (
+                    (10, 3, 4), 
+                    &[
+                        (1, &[0,1,2,3]),
+                        (2, &[4,5,6,7]),
+                        (3, &[8,9]),
+                    ]
+                ),
+                // out of order
+                (
+                    (10, 3, 4), 
+                    &[
+                        (3, &[8,9]),
+                        (1, &[0,1,2,3]),
+                        (2, &[4,5,6,7]),
+                    ]
+                ),
+                (
+                    (10, 3, 4), 
+                    &[
+                        (1, &[0,1,2,3]),
+                        (3, &[8,9]),
+                        (2, &[4,5,6,7]),
+                    ]
+                ),
+            ];
+
+            // run with end at the end
+            for ((file_size, number_of_packages, buffer_size), consumes) in tests {
+                let mut buf = new_buf(file_size, number_of_packages, buffer_size);
+                for (package_nr, data) in consumes {
+                    assert_eq!(false, buf.is_complete());
+                    assert_eq!(None, buf.try_finalize());
+                    buf.consume_data_pkg(&DltFtDataPkg{
+                        file_serial_number: DltFtUInt::U32(0),
+                        package_nr: DltFtUInt::U64(*package_nr),
+                        data,
+                    }).unwrap();
+                }
+                buf.set_end_received();
+                assert_sequence(&buf);
+            }
+
+            // end at the start
+            for ((file_size, number_of_packages, buffer_size), consumes) in tests {
+                let mut buf = new_buf(file_size, number_of_packages, buffer_size);
+                buf.set_end_received();
+                for (package_nr, data) in consumes {
+                    assert_eq!(false, buf.is_complete());
+                    assert_eq!(None, buf.try_finalize());
+                    buf.consume_data_pkg(&DltFtDataPkg{
+                        file_serial_number: DltFtUInt::U32(0),
+                        package_nr: DltFtUInt::U64(*package_nr),
+                        data,
+                    }).unwrap();
+                }
+                assert_sequence(&buf);
+            }
+        }
+
+        // package number error
+        {
+            // TODO
+        }
+
+        // data len error
+        {
+            // TODO
         }
     }
 
