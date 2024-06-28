@@ -223,10 +223,9 @@ impl DltFtBuffer {
             self.data.as_mut_slice()[insertion_start..overwrite_end]
                 .clone_from_slice(&data.data[..overwrite_len]);
 
-            // in case some data still needs to appended do that as well
-            if overwrite_end < insert_end {
-                self.data.extend_from_slice(&data.data[overwrite_len..]);
-            }
+            // there should not be anything left to overwrite
+            // as all packets have a fixed size
+            debug_assert!(overwrite_end >= insert_end);
         }
 
         // update sections
@@ -589,6 +588,46 @@ mod test {
     }
 
     #[test]
+    fn clear() {
+        let mut buf = DltFtBuffer::new(&DltFtHeaderPkg {
+            file_serial_number: DltFtUInt::U32(123),
+            file_name: "base.txt",
+            file_size: DltFtUInt::U64(20*12),
+            creation_date: "0-0-0",
+            number_of_packages: DltFtUInt::U64(12),
+            buffer_size: DltFtUInt::U64(20),
+        }).unwrap();
+        buf.consume_data_pkg(&DltFtDataPkg{
+            file_serial_number: DltFtUInt::U32(123),
+            package_nr: DltFtUInt::U64(1),
+            data: &[0u8;20],
+        }).unwrap();
+        buf.set_end_received();
+
+        assert_eq!(20, buf.data.len());
+        assert_eq!(1, buf.sections.len());
+        assert_eq!(20*12, buf.file_size);
+        assert_eq!(12, buf.number_of_packages);
+        assert_eq!(20, buf.buffer_size);
+        assert_eq!(DltFtUInt::U32(123), buf.file_serial_number);
+        assert_eq!("base.txt", buf.file_name.as_str());
+        assert_eq!("0-0-0", buf.creation_date.as_str());
+        assert!(buf.end_received);
+
+        buf.clear();
+
+        assert_eq!(0, buf.data.len());
+        assert_eq!(0, buf.sections.len());
+        assert_eq!(0, buf.file_size);
+        assert_eq!(0, buf.number_of_packages);
+        assert_eq!(0, buf.buffer_size);
+        assert_eq!(DltFtUInt::U64(0), buf.file_serial_number);
+        assert_eq!("", buf.file_name.as_str());
+        assert_eq!("", buf.creation_date.as_str());
+        assert_eq!(false, buf.end_received);
+    }
+
+    #[test]
     #[rustfmt::skip]
     fn consume_data_pkg() {
         let new_buf = |file_size: u64, number_of_packages: u64, buffer_size: u64| -> DltFtBuffer {
@@ -723,252 +762,115 @@ mod test {
 
         // package number error
         {
-            // TODO
+            // zero
+            {
+                let mut buf = new_buf(12*20, 12, 20);
+                let err = buf.consume_data_pkg(&DltFtDataPkg{
+                    file_serial_number: DltFtUInt::U32(0),
+                    package_nr: DltFtUInt::U64(0),
+                    data: &[0u8;20],
+                });
+                assert_eq!(
+                    Err(FtReassembleError::UnexpectedPackageNrInDataPkg {
+                        expected_nr_of_packages: 12,
+                        package_nr: 0
+                    }),
+                    err
+                );
+            }
+
+            // above start
+            {
+                let mut buf = new_buf(12*20, 12, 20);
+                let err = buf.consume_data_pkg(&DltFtDataPkg{
+                    file_serial_number: DltFtUInt::U32(0),
+                    package_nr: DltFtUInt::U64(13),
+                    data: &[0u8;20],
+                });
+                assert_eq!(
+                    Err(FtReassembleError::UnexpectedPackageNrInDataPkg {
+                        expected_nr_of_packages: 12,
+                        package_nr: 13
+                    }),
+                    err
+                );
+            }
         }
 
         // data len error
         {
-            // TODO
-        }
-    }
-
-    /*
-    struct TestPacket {
-        offset: u32,
-        more_segments: bool,
-        payload: Vec<u8>,
-    }
-
-    impl TestPacket {
-        fn new(offset: u32, more_segments: bool, payload: &[u8]) -> TestPacket {
-            TestPacket {
-                offset,
-                more_segments,
-                payload: payload.iter().copied().collect(),
+            // middle package not matching buffer size (too small)
+            {
+                let mut buf = new_buf(12*20, 12, 20);
+                let err = buf.consume_data_pkg(&DltFtDataPkg{
+                    file_serial_number: DltFtUInt::U32(0),
+                    package_nr: DltFtUInt::U64(1),
+                    data: &[0u8;19],
+                });
+                assert_eq!(
+                    Err(FtReassembleError::DataLenNotMatchingBufferSize {
+                        header_buffer_len: 20,
+                        data_pkt_len: 19,
+                        data_pkt_nr: 1,
+                        number_of_packages: 12
+                    }),
+                    err
+                );
+            }
+            // middle package not matching buffer size (too big)
+            {
+                let mut buf = new_buf(12*20, 12, 20);
+                let err = buf.consume_data_pkg(&DltFtDataPkg{
+                    file_serial_number: DltFtUInt::U32(0),
+                    package_nr: DltFtUInt::U64(1),
+                    data: &[0u8;21],
+                });
+                assert_eq!(
+                    Err(FtReassembleError::DataLenNotMatchingBufferSize {
+                        header_buffer_len: 20,
+                        data_pkt_len: 21,
+                        data_pkt_nr: 1,
+                        number_of_packages: 12
+                    }),
+                    err
+                );
+            }
+            // end package not matching end size (too big)
+            {
+                let mut buf = new_buf(11*20 + 15, 12, 20);
+                let err = buf.consume_data_pkg(&DltFtDataPkg{
+                    file_serial_number: DltFtUInt::U32(0),
+                    package_nr: DltFtUInt::U64(1),
+                    data: &[0u8;16],
+                });
+                assert_eq!(
+                    Err(FtReassembleError::DataLenNotMatchingBufferSize {
+                        header_buffer_len: 20,
+                        data_pkt_len: 16,
+                        data_pkt_nr: 1,
+                        number_of_packages: 12
+                    }),
+                    err
+                );
+            }
+            // end package not matching end size (too small)
+            {
+                let mut buf = new_buf(11*20 + 15, 12, 20);
+                let err = buf.consume_data_pkg(&DltFtDataPkg{
+                    file_serial_number: DltFtUInt::U32(0),
+                    package_nr: DltFtUInt::U64(1),
+                    data: &[0u8;14],
+                });
+                assert_eq!(
+                    Err(FtReassembleError::DataLenNotMatchingBufferSize {
+                        header_buffer_len: 20,
+                        data_pkt_len: 14,
+                        data_pkt_nr: 1,
+                        number_of_packages: 12
+                    }),
+                    err
+                );
             }
         }
-
-        fn send_to_buffer(&self, buffer: &mut DltFtBuffer) -> Result<(), err::TpReassembleError> {
-            let packet = self.to_vec();
-            let slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-            buffer.consume_tp(slice)
-        }
-
-        fn to_vec(&self) -> Vec<u8> {
-            let header = SomeipHeader {
-                message_id: 1234,
-                length: 8 + 4 + self.payload.len() as u32,
-                request_id: 23,
-                interface_version: 1,
-                message_type: MessageType::Notification,
-                return_code: 0,
-                tp_header: {
-                    let mut tp = TpHeader::new(self.more_segments);
-                    tp.set_offset(self.offset).unwrap();
-                    Some(tp)
-                },
-            };
-            let mut result = Vec::with_capacity(SOMEIP_HEADER_LENGTH + 4 + self.payload.len());
-            result.extend_from_slice(&header.base_to_bytes());
-            result.extend_from_slice(&header.tp_header.as_ref().unwrap().to_bytes());
-            result.extend_from_slice(&self.payload);
-            result
-        }
-
-        fn result_header(payload_length: u32) -> SomeipHeader {
-            SomeipHeader {
-                message_id: 1234,
-                length: payload_length + 8,
-                request_id: 23,
-                interface_version: 1,
-                message_type: MessageType::Notification,
-                return_code: 0,
-                tp_header: None,
-            }
-        }
     }
-
-    #[test]
-    fn new() {
-        let actual = DltFtBuffer::new(DltFtBufferConfig::new(1024, 2048).unwrap());
-        assert!(actual.data.is_empty());
-        assert!(actual.sections.is_empty());
-        assert!(actual.end.is_none());
-        assert_eq!(1024, actual.config.tp_buffer_start_payload_alloc_len);
-        assert_eq!(2048, actual.config.tp_max_payload_len());
-    }
-
-    #[test]
-    fn clear() {
-        let mut actual = DltFtBuffer::new(DltFtBufferConfig::new(1024, 2048).unwrap());
-
-        actual.data.push(1);
-        actual.sections.push(TpRange { start: 2, end: 3 });
-        actual.end = Some(123);
-
-        actual.clear();
-
-        assert!(actual.data.is_empty());
-        assert!(actual.sections.is_empty());
-        assert!(actual.end.is_none());
-        assert_eq!(1024, actual.config.tp_buffer_start_payload_alloc_len);
-        assert_eq!(2048, actual.config.tp_max_payload_len());
-    }
-
-    /// Returns a u8 vec counting up from "start" until len is reached (truncating bits greater then u8).
-    fn sequence(start: usize, len: usize) -> Vec<u8> {
-        let mut result = Vec::with_capacity(len);
-        for i in start..start + len {
-            result.push((i & 0xff) as u8);
-        }
-        result
-    }
-
-    #[rustfmt::skip]
-    #[test]
-    fn consume() {
-        use err::TpReassembleError::*;
-
-        // normal reconstruction
-        {
-            let mut buffer = DltFtBuffer::new(DltFtBufferConfig::new(1024, 2048).unwrap());
-
-            let actions = [
-                (false, TestPacket::new(0, true, &sequence(0,16))),
-                (false, TestPacket::new(16, true, &sequence(16,32))),
-                (true, TestPacket::new(48, false, &sequence(48,16))),
-            ];
-            for a in actions {
-                a.1.send_to_buffer(&mut buffer).unwrap();
-                assert_eq!(a.0, buffer.is_complete());
-            }
-            let result = buffer.try_finalize().unwrap();
-            assert_eq!(result.to_header(), TestPacket::result_header(16*4));
-            assert_eq!(result.payload(), &sequence(0,16*4));
-        }
-
-        // overlapping reconstruction
-        {
-            let mut buffer = DltFtBuffer::new(DltFtBufferConfig::new(1024, 2048).unwrap());
-
-            let actions = [
-                (false, TestPacket::new(0, true, &sequence(0,16))),
-                // will be overwritten
-                (false, TestPacket::new(32, true, &sequence(0,16))),
-                // overwrites
-                (false, TestPacket::new(32, false, &sequence(32,16))),
-                // completes
-                (true, TestPacket::new(16, true, &sequence(16,16))),
-            ];
-            for a in actions {
-                a.1.send_to_buffer(&mut buffer).unwrap();
-                assert_eq!(a.0, buffer.is_complete());
-            }
-            let result = buffer.try_finalize().unwrap();
-            assert_eq!(result.to_header(), TestPacket::result_header(16*3));
-            assert_eq!(result.payload(), &sequence(0,16*3));
-        }
-
-        // reverse order
-        {
-            let mut buffer = DltFtBuffer::new(DltFtBufferConfig::new(1024, 2048).unwrap());
-
-            let actions = [
-                (false, TestPacket::new(48, false, &sequence(48,16))),
-                (false, TestPacket::new(16, true, &sequence(16,32))),
-                (true, TestPacket::new(0, true, &sequence(0,16))),
-            ];
-            for a in actions {
-                a.1.send_to_buffer(&mut buffer).unwrap();
-                assert_eq!(a.0, buffer.is_complete());
-            }
-            let result = buffer.try_finalize().unwrap();
-            assert_eq!(result.to_header(), TestPacket::result_header(16*4));
-            assert_eq!(result.payload(), &sequence(0,16*4));
-        }
-
-        // error tp packet bigger then max (offset only)
-        {
-            let mut buffer = DltFtBuffer::new(DltFtBufferConfig::new(32, 32).unwrap());
-            assert_eq!(
-                SegmentTooBig { offset: 32 + 16, payload_len: 16, max: 32 },
-                TestPacket::new(32 + 16, true, &sequence(0,16)).send_to_buffer(&mut buffer).unwrap_err()
-            );
-        }
-
-        // error tp packet bigger then max (offset + payload)
-        {
-            let mut buffer = DltFtBuffer::new(DltFtBufferConfig::new(32, 32).unwrap());
-            assert_eq!(
-                SegmentTooBig { offset: 16, payload_len: 32, max: 32 },
-                TestPacket::new(16, true, &sequence(0,32)).send_to_buffer(&mut buffer).unwrap_err()
-            );
-        }
-
-        // check packets that fill exactly to the max work
-        {
-            let mut buffer = DltFtBuffer::new(DltFtBufferConfig::new(32, 32).unwrap());
-            let test_packet = TestPacket::new(16, false, &sequence(0,16));
-
-            let packet = test_packet.to_vec();
-            let slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-
-            assert_eq!(Ok(()), buffer.consume_tp(slice));
-        }
-
-        // packets conflicting with previously seen end
-        for bad_offset in 1..16 {
-            let mut buffer = DltFtBuffer::new(DltFtBufferConfig::new(16*100, 16*100).unwrap());
-            let test_packet = TestPacket::new(48, true, &sequence(0,32 + bad_offset));
-
-            let packet = test_packet.to_vec();
-            let slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-
-            assert_eq!(
-                UnalignedTpPayloadLen { offset: 48, payload_len: 32 + bad_offset },
-                buffer.consume_tp(slice).unwrap_err()
-            );
-        }
-
-        // test that conflicting ends trigger errors (received a different end)
-        {
-            let mut buffer = DltFtBuffer::new(DltFtBufferConfig::new(1024, 2048).unwrap());
-
-            // setup an end (aka no more segements)
-            TestPacket::new(32, false, &sequence(32,16)).send_to_buffer(&mut buffer).unwrap();
-
-            // test that a "non end" going over the end package triggers an error
-            assert_eq!(
-                ConflictingEnd { previous_end: 32 + 16, conflicting_end: 48 + 16 },
-                TestPacket::new(48, true, &sequence(48,16)).send_to_buffer(&mut buffer).unwrap_err()
-            );
-
-            // test that a new end at an earlier position triggers an error
-            assert_eq!(
-                ConflictingEnd { previous_end: 32 + 16, conflicting_end: 16 + 16 },
-                TestPacket::new(16, false, &sequence(16,16)).send_to_buffer(&mut buffer).unwrap_err()
-            );
-        }
-    }
-
-    #[test]
-    fn try_finalize() {
-        let mut buffer = DltFtBuffer::new(DltFtBufferConfig::new(1024, 2048).unwrap());
-
-        // not ended
-        assert_eq!(buffer.try_finalize(), None);
-        TestPacket::new(0, true, &sequence(0, 16))
-            .send_to_buffer(&mut buffer)
-            .unwrap();
-        assert_eq!(buffer.try_finalize(), None);
-
-        // ended
-        TestPacket::new(16, false, &sequence(16, 16))
-            .send_to_buffer(&mut buffer)
-            .unwrap();
-        let result = buffer.try_finalize().unwrap();
-        assert_eq!(result.to_header(), TestPacket::result_header(16 * 2));
-        assert_eq!(result.payload(), &sequence(0, 16 * 2));
-    }
-     */
 }
