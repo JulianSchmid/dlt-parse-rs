@@ -67,12 +67,22 @@ where
                         let m = entry.get_mut();
                         m.0.reinit_from_header_pkg(header_pkg)?;
                         m.1 = timestamp;
-
-                        // TODO add error
+                        // Note: Not sure if an error should be returned here as
+                        // an other potentially active data stream was discarded.
+                        //
+                        // Or should the stream even be discarded to begin with?
                         Ok(None)
                     }
                     Vacant(vac) => {
-                        vac.insert((DltFtBuffer::new(header_pkg)?, timestamp));
+                        vac.insert((
+                            if let Some(mut buf) = self.finished.pop() {
+                                buf.reinit_from_header_pkg(header_pkg)?;
+                                buf
+                            } else {
+                                DltFtBuffer::new(header_pkg)?
+                            },
+                            timestamp,
+                        ));
                         Ok(None)
                     }
                 }
@@ -194,6 +204,234 @@ mod tests {
         let pool: DltFtPool<(), ()> = Default::default();
         let _ = format!("{:?}", pool);
         assert_eq!(pool, pool.clone());
+    }
+
+    #[test]
+    fn consume() {
+        let get_data = |from: u64, to: u64| -> Vec<u8> {
+            let mut result = Vec::with_capacity((to - from) as usize);
+            for i in from..to {
+                result.push(i as u8);
+            }
+            result
+        };
+
+        // normal package reconstruction
+        {
+            let mut pool = DltFtPool::<u8, u32>::new();
+            {
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        2,
+                        &DltFtPkg::Header(DltFtHeaderPkg {
+                            file_serial_number: DltFtUInt::U32(123),
+                            file_name: "a.txt",
+                            file_size: DltFtUInt::U32(20 * 3),
+                            creation_date: "2024-06-28",
+                            number_of_packages: DltFtUInt::U32(3),
+                            buffer_size: DltFtUInt::U32(20),
+                        })
+                    ),
+                    Ok(None)
+                );
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        3,
+                        &DltFtPkg::Data(DltFtDataPkg {
+                            file_serial_number: DltFtUInt::U32(123),
+                            package_nr: DltFtUInt::U32(1),
+                            data: &get_data(0, 20),
+                        })
+                    ),
+                    Ok(None)
+                );
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        4,
+                        &DltFtPkg::Data(DltFtDataPkg {
+                            file_serial_number: DltFtUInt::U32(123),
+                            package_nr: DltFtUInt::U32(2),
+                            data: &get_data(20, 40),
+                        })
+                    ),
+                    Ok(None)
+                );
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        5,
+                        &DltFtPkg::Data(DltFtDataPkg {
+                            file_serial_number: DltFtUInt::U32(123),
+                            package_nr: DltFtUInt::U32(3),
+                            data: &get_data(40, 60),
+                        })
+                    ),
+                    Ok(None)
+                );
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        5,
+                        &DltFtPkg::End(DltFtEndPkg {
+                            file_serial_number: DltFtUInt::U32(123)
+                        })
+                    ),
+                    Ok(Some(DltFtCompleteInMemFile {
+                        file_serial_number: DltFtUInt::U32(123),
+                        file_name: "a.txt",
+                        creation_date: "2024-06-28",
+                        data: &get_data(0, 60)
+                    }))
+                );
+            }
+
+            // reconstruction with end in data (twice to check that buffer re-using works correctly)
+            for _ in 0..2 {
+                assert!(pool.active.is_empty());
+                assert_eq!(1, pool.finished.len());
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        2,
+                        &DltFtPkg::Header(DltFtHeaderPkg {
+                            file_serial_number: DltFtUInt::U32(123),
+                            file_name: "a.txt",
+                            file_size: DltFtUInt::U32(20 * 3),
+                            creation_date: "2024-06-28",
+                            number_of_packages: DltFtUInt::U32(3),
+                            buffer_size: DltFtUInt::U32(20),
+                        })
+                    ),
+                    Ok(None)
+                );
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        3,
+                        &DltFtPkg::Data(DltFtDataPkg {
+                            file_serial_number: DltFtUInt::U32(123),
+                            package_nr: DltFtUInt::U32(1),
+                            data: &get_data(0, 20),
+                        })
+                    ),
+                    Ok(None)
+                );
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        4,
+                        &DltFtPkg::Data(DltFtDataPkg {
+                            file_serial_number: DltFtUInt::U32(123),
+                            package_nr: DltFtUInt::U32(2),
+                            data: &get_data(20, 40),
+                        })
+                    ),
+                    Ok(None)
+                );
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        5,
+                        &DltFtPkg::End(DltFtEndPkg {
+                            file_serial_number: DltFtUInt::U32(123)
+                        })
+                    ),
+                    Ok(None)
+                );
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        5,
+                        &DltFtPkg::Data(DltFtDataPkg {
+                            file_serial_number: DltFtUInt::U32(123),
+                            package_nr: DltFtUInt::U32(3),
+                            data: &get_data(40, 60),
+                        })
+                    ),
+                    Ok(Some(DltFtCompleteInMemFile {
+                        file_serial_number: DltFtUInt::U32(123),
+                        file_name: "a.txt",
+                        creation_date: "2024-06-28",
+                        data: &get_data(0, 60)
+                    }))
+                );
+            }
+        }
+
+        // package reconstruction with a stream overwrite even though not finished
+        {
+            let base = {
+                let mut pool = DltFtPool::<u8, u32>::new();
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        2,
+                        &DltFtPkg::Header(DltFtHeaderPkg {
+                            file_serial_number: DltFtUInt::U32(123),
+                            file_name: "a.txt",
+                            file_size: DltFtUInt::U32(20 * 3),
+                            creation_date: "2024-06-28",
+                            number_of_packages: DltFtUInt::U32(3),
+                            buffer_size: DltFtUInt::U32(20),
+                        })
+                    ),
+                    Ok(None)
+                );
+                assert_eq!(
+                    pool.active.get(&(1, DltFtUInt::U32(123))).unwrap().0.file_name(),
+                    "a.txt"
+                );
+                pool
+            };
+
+            // ok case
+            {
+                let mut pool = base.clone();
+                assert_eq!(
+                    pool.consume(
+                        1,
+                        2,
+                        &DltFtPkg::Header(DltFtHeaderPkg {
+                            file_serial_number: DltFtUInt::U32(123), // same fid
+                            file_name: "b.txt", // different name
+                            file_size: DltFtUInt::U32(20 * 3),
+                            creation_date: "2024-06-28",
+                            number_of_packages: DltFtUInt::U32(3),
+                            buffer_size: DltFtUInt::U32(20),
+                        })
+                    ),
+                    Ok(None)
+                );
+                assert_eq!(
+                    pool.active.get(&(1, DltFtUInt::U32(123))).unwrap().0.file_name(),
+                    "b.txt"
+                );
+            }
+
+            // error case
+            {
+                let mut pool = base.clone();
+                pool.consume(
+                    1,
+                    2,
+                    &DltFtPkg::Header(DltFtHeaderPkg {
+                        file_serial_number: DltFtUInt::U32(123), // same fid
+                        file_name: "b.txt",
+                        file_size: DltFtUInt::U32(20 * 3),
+                        creation_date: "2024-06-28",
+                        number_of_packages: DltFtUInt::U32(2), // bad num of package
+                        buffer_size: DltFtUInt::U32(20),
+                    })
+                ).unwrap_err();
+                assert_eq!(
+                    pool.active.get(&(1, DltFtUInt::U32(123))).unwrap().0.file_name(),
+                    "a.txt"
+                );
+            }
+        }
     }
 
     /*
