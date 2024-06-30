@@ -432,231 +432,281 @@ mod tests {
                 );
             }
         }
-    }
 
-    /*
-
-
-    struct TestPacket {
-        request_id: u32,
-        offset: u32,
-        more_segments: bool,
-        payload: Vec<u8>,
-    }
-
-    impl TestPacket {
-        fn new(request_id: u32, offset: u32, more_segments: bool, payload: &[u8]) -> TestPacket {
-            TestPacket {
-                request_id,
-                offset,
-                more_segments,
-                payload: payload.iter().copied().collect(),
-            }
-        }
-
-        fn to_vec(&self) -> Vec<u8> {
-            let header = SomeipHeader {
-                message_id: 1234,
-                length: 8 + 4 + self.payload.len() as u32,
-                request_id: self.request_id,
-                interface_version: 1,
-                message_type: MessageType::Notification,
-                return_code: 0,
-                tp_header: {
-                    let mut tp = TpHeader::new(self.more_segments);
-                    tp.set_offset(self.offset).unwrap();
-                    Some(tp)
-                },
-            };
-            let mut result = Vec::with_capacity(SOMEIP_HEADER_LENGTH + 4 + self.payload.len());
-            result.extend_from_slice(&header.base_to_bytes());
-            result.extend_from_slice(&header.tp_header.as_ref().unwrap().to_bytes());
-            result.extend_from_slice(&self.payload);
-            result
-        }
-
-        fn result_header(&self, payload_length: u32) -> SomeipHeader {
-            SomeipHeader {
-                message_id: 1234,
-                length: payload_length + 8,
-                request_id: self.request_id,
-                interface_version: 1,
-                message_type: MessageType::Notification,
-                return_code: 0,
-                tp_header: None,
-            }
-        }
-    }
-
-    /// Returns a u8 vec counting up from "start" until len is reached (truncating bits greater then u8).
-    fn sequence(start: usize, len: usize) -> Vec<u8> {
-        let mut result = Vec::with_capacity(len);
-        for i in start..start + len {
-            result.push((i & 0xff) as u8);
-        }
-        result
-    }
-
-    #[rustfmt::skip]
-    #[test]
-    fn consume() {
-        use err::TpReassembleError::*;
-
-        // simple packet forwarding (without TP effect)
+        // error in new stream (no buffer)
         {
-            // build a non tp packet
-            let header = SomeipHeader {
-                message_id: 1234,
-                length: 8 + 8 as u32,
-                request_id: 234,
-                interface_version: 1,
-                message_type: MessageType::Notification,
-                return_code: 0,
-                // no tp header
-                tp_header: None,
-            };
-            let mut result = Vec::with_capacity(SOMEIP_HEADER_LENGTH + 8);
-            result.extend_from_slice(&header.base_to_bytes());
-            result.extend_from_slice(&[0;8]);
-
-            let someip_slice = SomeipMsgSlice::from_slice(&result).unwrap();
-
-            let mut pool: DltFtPool<(), ()> = DltFtPool::new(TpBufConfig::new(1024, 2048).unwrap());
-            let result = pool.consume((), (), someip_slice.clone()).unwrap();
-            assert_eq!(Some(someip_slice), result);
+            let mut pool = DltFtPool::<u8, u32>::new();
+            pool.consume(
+                1,
+                2,
+                &DltFtPkg::Header(DltFtHeaderPkg {
+                    file_serial_number: DltFtUInt::U32(123),
+                    file_name: "a.txt",
+                    file_size: DltFtUInt::U32(20 * 3),
+                    creation_date: "2024-06-28",
+                    number_of_packages: DltFtUInt::U32(2), // bad number of packages
+                    buffer_size: DltFtUInt::U32(20),
+                })
+            ).unwrap_err();
         }
 
-        // normal reconstruction (without additional id)
+        // error in new stream (with buffer)
         {
-            let mut pool: DltFtPool<(), ()> = DltFtPool::new(TpBufConfig::new(1024, 2048).unwrap());
+            let mut pool = DltFtPool::<u8, u32>::new();
 
-            let actions = [
-                // start two streams in parallel
-                (TestPacket::new(1, 0, true, &sequence(1,16)), None, 1, 0),
-                (TestPacket::new(2, 0, true, &sequence(2,32)), None, 2, 0),
-                // stream 1 ends
-                (TestPacket::new(1, 16, false, &sequence(1 + 16,16)), Some(sequence(1,32)), 1, 1),
-                // stream 3 which imidiatly ends
-                (TestPacket::new(3, 0, false, &sequence(3,16*4)), Some(sequence(3, 16*4)), 1, 1),
-                // end stream 2
-                (TestPacket::new(2, 32, true, &sequence(32 + 2,16*4)), None, 1, 1),
-                (TestPacket::new(2, 16*6, false, &sequence(16*6 + 2,16*3)), Some(sequence(2, 16*9)), 0, 2),
-            ];
-            for a in actions {
-                let packet = a.0.to_vec();
-                let slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-                let result = pool.consume((), (), slice).unwrap();
-                if let Some(expected_payload) = a.1 {
-                    let msg = result.unwrap();
-                    assert_eq!(msg.to_header(), a.0.result_header(expected_payload.len() as u32));
-                    assert_eq!(msg.payload(), expected_payload);
-                } else {
-                    assert!(result.is_none());
-                }
-                assert_eq!(a.2, pool.active_bufs().len());
-                assert_eq!(a.3, pool.finished_bufs().len());
-            }
+            // start and end a stream
+            pool.consume(
+                1,
+                2,
+                &DltFtPkg::Header(DltFtHeaderPkg {
+                    file_serial_number: DltFtUInt::U32(123),
+                    file_name: "a.txt",
+                    file_size: DltFtUInt::U32(0),
+                    creation_date: "2024-06-28",
+                    number_of_packages: DltFtUInt::U32(0),
+                    buffer_size: DltFtUInt::U32(20),
+                })
+            ).unwrap();
+            pool.consume(
+                1,
+                2,
+                &DltFtPkg::End(DltFtEndPkg {
+                    file_serial_number: DltFtUInt::U32(123),
+                })
+            ).unwrap();
+
+            assert!(pool.active_bufs().is_empty());
+            assert_eq!(1, pool.finished_bufs().len());
+
+            // trigger an error
+            pool.consume(
+                1,
+                2,
+                &DltFtPkg::Header(DltFtHeaderPkg {
+                    file_serial_number: DltFtUInt::U32(123),
+                    file_name: "a.txt",
+                    file_size: DltFtUInt::U32(20 * 3),
+                    creation_date: "2024-06-28",
+                    number_of_packages: DltFtUInt::U32(2), // bad number of packages
+                    buffer_size: DltFtUInt::U32(20),
+                })
+            ).unwrap_err();
         }
 
-        // normal reconstruction (with additional id)
+        // error in data package
         {
-            let mut pool: DltFtPool<u32, ()> = DltFtPool::new(TpBufConfig::new(1024, 2048).unwrap());
+            let mut pool = DltFtPool::<u8, u32>::new();
 
-            // all actions have the same request id have differing id's
-            let actions = [
-                // start two streams in parallel
-                (123, TestPacket::new(1, 0, true, &sequence(1,16)), None),
-                (234, TestPacket::new(1, 0, true, &sequence(2,32)), None),
-                // stream 1 ends
-                (123, TestPacket::new(1, 16, false, &sequence(1 + 16,16)), Some(sequence(1,32))),
-                // stream 3 which imidiatly ends
-                (345, TestPacket::new(1, 0, false, &sequence(3,16*4)), Some(sequence(3, 16*4))),
-                // end stream 2
-                (234, TestPacket::new(1, 32, true, &sequence(32 + 2,16*4)), None),
-                (234, TestPacket::new(1, 16*6, false, &sequence(16*6 + 2,16*3)), Some(sequence(2, 16*9))),
-            ];
-            for a in actions {
-                let packet = a.1.to_vec();
-                let slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-                let result = pool.consume(a.0.clone(), (), slice).unwrap();
-                if let Some(expected_payload) = a.2 {
-                    let msg = result.unwrap();
-                    assert_eq!(msg.to_header(), a.1.result_header(expected_payload.len() as u32));
-                    assert_eq!(msg.payload(), expected_payload);
-                } else {
-                    assert!(result.is_none());
-                }
-            }
+            // start and end a stream
+            pool.consume(
+                1,
+                2,
+                &DltFtPkg::Header(DltFtHeaderPkg {
+                    file_serial_number: DltFtUInt::U32(123),
+                    file_name: "a.txt",
+                    file_size: DltFtUInt::U32(20),
+                    creation_date: "2024-06-28",
+                    number_of_packages: DltFtUInt::U32(1),
+                    buffer_size: DltFtUInt::U32(20),
+                })
+            ).unwrap();
+            pool.consume(
+                1,
+                2,
+                &DltFtPkg::Data(DltFtDataPkg {
+                    file_serial_number: DltFtUInt::U32(123),
+                    package_nr: DltFtUInt::U32(2), // bad package number
+                    data: &[],
+                })
+            ).unwrap_err();
         }
 
-        // error during reconstruction (at start)
+        // error unknown data package stream
         {
-            let mut pool: DltFtPool<(), ()> = DltFtPool::new(TpBufConfig::new(1024, 2048).unwrap());
+            let mut pool = DltFtPool::<u8, u32>::new();
 
-            // should trigger an error as the payload is not a multiple of 1
-            let packet = TestPacket::new(1, 0, true, &sequence(1,15)).to_vec();
-            let someip_slice = SomeipMsgSlice::from_slice(&packet).unwrap();
+            // start and end a stream
+            pool.consume(
+                1,
+                2,
+                &DltFtPkg::Header(DltFtHeaderPkg {
+                    file_serial_number: DltFtUInt::U32(123),
+                    file_name: "a.txt",
+                    file_size: DltFtUInt::U32(20),
+                    creation_date: "2024-06-28",
+                    number_of_packages: DltFtUInt::U32(1),
+                    buffer_size: DltFtUInt::U32(20),
+                })
+            ).unwrap();
             assert_eq!(
-                pool.consume((), (), someip_slice).unwrap_err(),
-                UnalignedTpPayloadLen { offset: 0, payload_len: 15 }
+                    pool.consume(
+                    1,
+                    2,
+                    &DltFtPkg::Data(DltFtDataPkg {
+                        file_serial_number: DltFtUInt::U32(234), // unknown data stream
+                        package_nr: DltFtUInt::U32(2), 
+                        data: &[],
+                    })
+                ),
+                Err(FtPoolError::DataForUnknownStream { file_serial_number: DltFtUInt::U32(234) })
             );
         }
 
-        // error during reconstruction (after start)
+        // end unknown data stream error
         {
-            let mut pool: DltFtPool<(), ()> = DltFtPool::new(TpBufConfig::new(1024, 2048).unwrap());
-
-            {
-                let packet = TestPacket::new(1, 0, true, &sequence(1,16)).to_vec();
-                let someip_slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-                pool.consume((), (), someip_slice).unwrap();
-            }
-
-            // should trigger an error as the payload is not a multiple of 1
-            let packet = TestPacket::new(1, 16, true, &sequence(1,15)).to_vec();
-            let someip_slice = SomeipMsgSlice::from_slice(&packet).unwrap();
+            let mut pool = DltFtPool::<u8, u32>::new();
             assert_eq!(
-                pool.consume((), (), someip_slice).unwrap_err(),
-                UnalignedTpPayloadLen { offset: 16, payload_len: 15 }
+                    pool.consume(
+                    1,
+                    2,
+                    &DltFtPkg::End(DltFtEndPkg {
+                        file_serial_number: DltFtUInt::U32(234), // unknown data stream
+                    })
+                ),
+                Err(FtPoolError::EndForUnknownStream { file_serial_number: DltFtUInt::U32(234) })
             );
+        }
+
+        // error package for unknown stream
+        {
+            let mut pool = DltFtPool::<u8, u32>::new();
+            assert_eq!(
+                    pool.consume(
+                    1,
+                    2,
+                    &DltFtPkg::Error(DltFtErrorPkg {
+                        file_serial_number:DltFtUInt::U32(234),
+                        error_code: DltFtErrorCode(DltFtInt::I32(123)),
+                        linux_error_code: DltFtInt::I32(123),
+                        file_name: "a.txt",
+                        file_size: DltFtUInt::U32(123),
+                        creation_date: "0-0-0",
+                        number_of_packages: DltFtUInt::U32(1)
+                    })
+                ),
+                Ok(None)
+            );
+        }
+
+        // error package for known stream
+        {
+            let mut pool = DltFtPool::<u8, u32>::new();
+            pool.consume(
+                1,
+                2,
+                &DltFtPkg::Header(DltFtHeaderPkg {
+                    file_serial_number: DltFtUInt::U32(123),
+                    file_name: "a.txt",
+                    file_size: DltFtUInt::U32(20),
+                    creation_date: "2024-06-28",
+                    number_of_packages: DltFtUInt::U32(1),
+                    buffer_size: DltFtUInt::U32(20),
+                })
+            ).unwrap();
+            assert_eq!(
+                    pool.consume(
+                    1,
+                    2,
+                    &DltFtPkg::Error(DltFtErrorPkg {
+                        file_serial_number:DltFtUInt::U32(123),
+                        error_code: DltFtErrorCode(DltFtInt::I32(123)),
+                        linux_error_code: DltFtInt::I32(123),
+                        file_name: "a.txt",
+                        file_size: DltFtUInt::U32(123),
+                        creation_date: "0-0-0",
+                        number_of_packages: DltFtUInt::U32(1)
+                    })
+                ),
+                Ok(None)
+            );
+            assert!(pool.active.is_empty());
+            assert_eq!(pool.finished.len(), 1);
+        }
+
+        // file not exist error package
+        {
+            let mut pool = DltFtPool::<u8, u32>::new();
+            assert_eq!(
+                    pool.consume(
+                    1,
+                    2,
+                    &DltFtPkg::FileNotExistsError(DltFtFileNotExistErrorPkg {
+                        error_code: DltFtErrorCode(DltFtInt::I32(123)),
+                        linux_error_code: DltFtInt::I32(123),
+                        file_name: "a.txt",
+                    })
+                ),
+                Ok(None)
+            );
+            assert!(pool.active.is_empty());
+            assert!(pool.finished.is_empty());
+        }
+
+        // file info package
+        {
+            let mut pool = DltFtPool::<u8, u32>::new();
+            assert_eq!(
+                    pool.consume(
+                    1,
+                    2,
+                    &DltFtPkg::Info(DltFtInfoPkg {
+                        file_serial_number: DltFtUInt::U32(123),
+                        file_name: "a.txt",
+                        file_size: DltFtUInt::U32(20),
+                        creation_date: "2024-06-28",
+                        number_of_packages: DltFtUInt::U32(1),
+                    })
+                ),
+                Ok(None)
+            );
+            assert!(pool.active.is_empty());
+            assert!(pool.finished.is_empty());
         }
 
     }
 
     #[test]
     fn retain() {
-        let mut pool: DltFtPool<u16, u32> = DltFtPool::new(Default::default());
-        // request id 1, channel id 2, timestamp 123
-        {
-            let packet = TestPacket::new(1, 0, true, &sequence(1, 16)).to_vec();
-            let slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-            let result = pool.consume(2u16, 123u32, slice).unwrap();
-            assert!(result.is_none());
-            assert_eq!(123, pool.active_bufs().get(&(2u16, 1u32)).unwrap().1);
-        }
-        // request id 1, channel id 2, timestamp 124
-        {
-            let packet = TestPacket::new(1, 16, true, &sequence(16, 16)).to_vec();
-            let slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-            let result = pool.consume(2u16, 124u32, slice).unwrap();
-            assert!(result.is_none());
-            // check the timestamp was overwritten by the newer packet
-            assert_eq!(124, pool.active_bufs().get(&(2u16, 1u32)).unwrap().1);
-        }
-        // request id 1, channel id 3, timestamp 125
-        {
-            let packet = TestPacket::new(1, 16, true, &sequence(16, 16)).to_vec();
-            let slice = SomeipMsgSlice::from_slice(&packet).unwrap();
-            let result = pool.consume(3u16, 125u32, slice).unwrap();
-            assert!(result.is_none());
-        }
+        let mut pool = DltFtPool::<u8, u32>::new();
 
-        // discard streams with a timestamp smaller then 125
-        pool.retain(|timestamp| *timestamp >= 125);
+        // start two streams
+        assert_eq!(
+            pool.consume(
+                1,
+                2,
+                &DltFtPkg::Header(DltFtHeaderPkg {
+                    file_serial_number: DltFtUInt::U32(123),
+                    file_name: "a.txt",
+                    file_size: DltFtUInt::U32(20 * 3),
+                    creation_date: "2024-06-28",
+                    number_of_packages: DltFtUInt::U32(3),
+                    buffer_size: DltFtUInt::U32(20),
+                })
+            ),
+            Ok(None)
+        );
+        assert_eq!(
+            pool.consume(
+                1,
+                3,
+                &DltFtPkg::Header(DltFtHeaderPkg {
+                    file_serial_number: DltFtUInt::U32(234),
+                    file_name: "b.txt",
+                    file_size: DltFtUInt::U32(20 * 3),
+                    creation_date: "2024-06-29",
+                    number_of_packages: DltFtUInt::U32(3),
+                    buffer_size: DltFtUInt::U32(20),
+                })
+            ),
+            Ok(None)
+        );
 
-        assert_eq!(1, pool.active.len());
-        assert_eq!(1, pool.finished.len());
-        assert_eq!(125, pool.active_bufs().get(&(3u16, 1u32)).unwrap().1);
+        // retain the second stream only
+        pool.retain(|t| *t > 2);
+
+        assert_eq!(pool.active.len(), 1);
+        assert_eq!(pool.finished.len(), 1);
+        assert!(pool.active.get(&(1, DltFtUInt::U32(234))).is_some());
     }
-     */
+
 }
