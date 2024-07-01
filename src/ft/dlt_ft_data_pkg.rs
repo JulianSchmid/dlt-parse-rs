@@ -16,4 +16,8 @@ pub struct DltFtDataPkg<'a> {
 impl<'a> DltFtDataPkg<'a> {
     /// Verbose string at the start and end of the "DLT File Transfer Data" package.
     pub const PKG_FLAG: &'static str = "FLDA";
+
+    /// Number of verbose arguments in a file transfer "data package" written
+    /// in the DLT extended header.
+    pub const NUM_ARGS: u16 = 5;
 }

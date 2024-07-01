@@ -32,4 +32,8 @@ pub struct DltFtErrorPkg<'a, 'b> {
 impl<'a, 'b> DltFtErrorPkg<'a, 'b> {
     /// Verbose string at the start and end of the "DLT File Transfer Error" package.
     pub const PKG_FLAG: &'static str = "FLER";
+
+    /// Number of verbose arguments in a file transfer "error package" written
+    /// in the DLT extended header.
+    pub const NUM_ARGS: u16 = 9;
 }

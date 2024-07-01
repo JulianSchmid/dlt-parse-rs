@@ -25,4 +25,8 @@ pub struct DltFtInfoPkg<'a, 'b> {
 impl<'a, 'b> DltFtInfoPkg<'a, 'b> {
     /// Verbose string at the start and end of the "DLT File Transfer Info" package.
     pub const PKG_FLAG: &'static str = "FLIF";
+
+    /// Number of verbose arguments in a file transfer "info package" written
+    /// in the DLT extended header.
+    pub const NUM_ARGS: u16 = 7;
 }

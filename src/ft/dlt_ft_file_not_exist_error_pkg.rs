@@ -17,4 +17,8 @@ pub struct DltFtFileNotExistErrorPkg<'a> {
 impl<'a> DltFtFileNotExistErrorPkg<'a> {
     /// Verbose string at the start and end of the "DLT File Transfer Error" package.
     pub const PKG_FLAG: &'static str = "FLER";
+
+    /// Number of verbose arguments in a file transfer "file does not exist error
+    /// package" written in the DLT extended header.
+    pub const NUM_ARGS: u16 = 5;
 }

@@ -156,3 +156,177 @@ impl<'a, 'b> DltFtPkg<'a, 'b> {
         Some(())
     }
 }
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use arrayvec::ArrayVec;
+
+    #[test]
+    fn try_from() {
+        // TODO
+    }
+
+    #[test]
+    fn try_take_str_from_iter() {
+        // ok case
+        {
+            let mut bytes = ArrayVec::<u8, 1000>::new();
+            StringValue{
+                name: None,
+                value: "a",
+            }.add_to_msg(&mut bytes, false).unwrap();
+            assert_eq!(
+                DltFtPkg::try_take_str_from_iter(&mut VerboseIter::new(
+                    false, 1, &bytes[..]
+                )),
+                Some("a")
+            );
+        }
+
+        // name error case
+        {
+            let mut bytes = ArrayVec::<u8, 1000>::new();
+            StringValue{
+                name: Some("name"),
+                value: "a",
+            }.add_to_msg(&mut bytes, false).unwrap();
+            assert_eq!(
+                DltFtPkg::try_take_str_from_iter(&mut VerboseIter::new(
+                    false, 1, &bytes[..]
+                )),
+                None
+            );
+        }
+
+        // non string value
+        {
+            let mut bytes = ArrayVec::<u8, 1000>::new();
+            U64Value{
+                variable_info: None,
+                scaling: None,
+                value: 1,
+            }.add_to_msg(&mut bytes, false).unwrap();
+            assert_eq!(
+                DltFtPkg::try_take_str_from_iter(&mut VerboseIter::new(
+                    false, 1, &bytes[..]
+                )),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn try_take_raw_from_iter() {
+        // ok case
+        {
+            let mut bytes = ArrayVec::<u8, 1000>::new();
+            RawValue{
+                name: None,
+                data: &[1,2,3],
+            }.add_to_msg(&mut bytes, false).unwrap();
+            assert_eq!(
+                DltFtPkg::try_take_raw_from_iter(&mut VerboseIter::new(
+                    false, 1, &bytes[..]
+                )),
+                Some(&[1u8,2,3][..])
+            );
+        }
+
+        // name error case
+        {
+            let mut bytes = ArrayVec::<u8, 1000>::new();
+            RawValue{
+                name: Some("name"),
+                data: &[1,2,3],
+            }.add_to_msg(&mut bytes, false).unwrap();
+            assert_eq!(
+                DltFtPkg::try_take_raw_from_iter(&mut VerboseIter::new(
+                    false, 1, &bytes[..]
+                )),
+                None
+            );
+        }
+
+        // non raw value
+        {
+            let mut bytes = ArrayVec::<u8, 1000>::new();
+            U64Value{
+                variable_info: None,
+                scaling: None,
+                value: 1,
+            }.add_to_msg(&mut bytes, false).unwrap();
+            assert_eq!(
+                DltFtPkg::try_take_raw_from_iter(&mut VerboseIter::new(
+                    false, 1, &bytes[..]
+                )),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn check_for_str() {
+        // ok case
+        {
+            let mut bytes = ArrayVec::<u8, 1000>::new();
+            StringValue{
+                name: None,
+                value: "a",
+            }.add_to_msg(&mut bytes, false).unwrap();
+            assert_eq!(
+                DltFtPkg::check_for_str("a", &mut VerboseIter::new(
+                    false, 1, &bytes[..]
+                )),
+                Some(())
+            );
+        }
+
+        // non matching string
+        {
+            let mut bytes = ArrayVec::<u8, 1000>::new();
+            StringValue{
+                name: None,
+                value: "a",
+            }.add_to_msg(&mut bytes, false).unwrap();
+            assert_eq!(
+                DltFtPkg::check_for_str("b", &mut VerboseIter::new(
+                    false, 1, &bytes[..]
+                )),
+                None
+            );
+        }
+
+        // name error case
+        {
+            let mut bytes = ArrayVec::<u8, 1000>::new();
+            StringValue{
+                name: Some("name"),
+                value: "a",
+            }.add_to_msg(&mut bytes, false).unwrap();
+            assert_eq!(
+                DltFtPkg::check_for_str("a", &mut VerboseIter::new(
+                    false, 1, &bytes[..]
+                )),
+                None
+            );
+        }
+
+        // non string value
+        {
+            let mut bytes = ArrayVec::<u8, 1000>::new();
+            U64Value{
+                variable_info: None,
+                scaling: None,
+                value: 1,
+            }.add_to_msg(&mut bytes, false).unwrap();
+            assert_eq!(
+                DltFtPkg::check_for_str("a", &mut VerboseIter::new(
+                    false, 1, &bytes[..]
+                )),
+                None
+            );
+        }
+    }
+}

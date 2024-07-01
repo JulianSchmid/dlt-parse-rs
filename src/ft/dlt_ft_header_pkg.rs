@@ -25,4 +25,8 @@ pub struct DltFtHeaderPkg<'a, 'b> {
 impl<'a, 'b> DltFtHeaderPkg<'a, 'b> {
     /// Verbose string at the start and end of the "DLT File Transfer Header" package.
     pub const PKG_FLAG: &'static str = "FLST";
+
+    /// Number of verbose arguments in a file transfer "header package" written
+    /// in the DLT extended header.
+    pub const NUM_ARGS: u16 = 8;
 }
