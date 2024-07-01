@@ -63,6 +63,7 @@ impl StorageHeader {
 
     ///Deserialize a DltHeader & TpHeader from the given reader.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<StorageHeader, error::ReadError> {
         let mut bytes: [u8; 16] = [0; 16];
         reader.read_exact(&mut bytes)?;
@@ -71,6 +72,7 @@ impl StorageHeader {
 
     ///Serializes the header to the given writer.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())?;
         Ok(())

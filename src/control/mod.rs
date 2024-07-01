@@ -1,4 +1,3 @@
-
 /// "Set Log Level" service id
 pub const CMD_ID_SET_LOG_LEVEL: u32 = 0x01;
 /// "Set Log Level" name
@@ -119,7 +118,7 @@ mod test {
     use super::*;
     use proptest::prelude::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn test_get_control_command_name(
             unknown_id in 0x24..0xFFFu32,

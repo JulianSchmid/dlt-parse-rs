@@ -1,4 +1,4 @@
-use crate::{*, verbose::VerboseIter};
+use crate::{verbose::VerboseIter, *};
 
 /// Typed payload of a DLT log message based on the message info in the DLT
 /// extended header.

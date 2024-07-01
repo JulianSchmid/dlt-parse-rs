@@ -27,6 +27,7 @@ impl core::fmt::Display for PacketSliceError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for PacketSliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use PacketSliceError::*;

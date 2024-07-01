@@ -47,26 +47,38 @@ mod tests {
 
     #[test]
     fn from() {
-        let data = [5,6,7,8];
+        let data = [5, 6, 7, 8];
         let msg_id = 1234_5678u32;
         let payload = &data;
 
         // LogNvPayload
         assert_eq!(
-            NvPayload::from(LogNvPayload{ msg_id, payload, log_level: DltLogLevel::Info }),
-            NvPayload{ msg_id, payload }
+            NvPayload::from(LogNvPayload {
+                msg_id,
+                payload,
+                log_level: DltLogLevel::Info
+            }),
+            NvPayload { msg_id, payload }
         );
 
         // TraceNvPayload
         assert_eq!(
-            NvPayload::from(TraceNvPayload{ msg_id, payload, trace_type: DltTraceType::State }),
-            NvPayload{ msg_id, payload }
+            NvPayload::from(TraceNvPayload {
+                msg_id,
+                payload,
+                trace_type: DltTraceType::State
+            }),
+            NvPayload { msg_id, payload }
         );
 
         // TraceNvPayload
         assert_eq!(
-            NvPayload::from(NetworkNvPayload{msg_id,payload, net_type: DltNetworkType::Flexray }),
-            NvPayload{ msg_id, payload }
+            NvPayload::from(NetworkNvPayload {
+                msg_id,
+                payload,
+                net_type: DltNetworkType::Flexray
+            }),
+            NvPayload { msg_id, payload }
         );
     }
 }

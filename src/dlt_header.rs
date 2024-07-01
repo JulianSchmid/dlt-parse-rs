@@ -307,6 +307,7 @@ impl DltHeader {
 
     ///Deserialize a DltHeader & TpHeader from the given reader.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<DltHeader, error::ReadError> {
         use crate::error::UnsupportedDltVersionError;
 
@@ -382,6 +383,7 @@ impl DltHeader {
 
     ///Serializes the header to the given writer.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         {
             let length_be = self.length.to_be_bytes();
