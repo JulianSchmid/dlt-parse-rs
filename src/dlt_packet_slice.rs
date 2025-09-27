@@ -842,7 +842,7 @@ mod tests {
                     result
                 }
 
-                fn to_slice(&self) -> DltPacketSlice {
+                fn to_slice(&self) -> DltPacketSlice<'_> {
                     DltPacketSlice::from_slice(&self.packet).unwrap()
                 }
 
@@ -854,7 +854,7 @@ mod tests {
                     [0x10, 0x11]
                 }
 
-                fn verb_iter(&self) -> VerboseIter {
+                fn verb_iter(&self) -> VerboseIter<'_> {
                     VerboseIter::new(
                         self.header.is_big_endian,
                         self.header.extended_header.as_ref().map(|v| v.number_of_arguments).unwrap_or_default().into(),
