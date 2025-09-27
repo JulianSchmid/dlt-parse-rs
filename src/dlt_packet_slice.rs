@@ -13,7 +13,7 @@ pub struct DltPacketSlice<'a> {
 
 impl<'a> DltPacketSlice<'a> {
     ///Read the dlt header and create a slice containing the dlt header & payload.
-    pub fn from_slice(slice: &'a [u8]) -> Result<DltPacketSlice<'_>, error::PacketSliceError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<DltPacketSlice<'a>, error::PacketSliceError> {
         use error::{PacketSliceError::*, *};
 
         if slice.len() < 4 {
