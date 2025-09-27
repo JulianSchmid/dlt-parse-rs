@@ -13,7 +13,7 @@ pub struct DltPacketSlice<'a> {
 
 impl<'a> DltPacketSlice<'a> {
     ///Read the dlt header and create a slice containing the dlt header & payload.
-    pub fn from_slice(slice: &'a [u8]) -> Result<DltPacketSlice<'_>, error::PacketSliceError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<DltPacketSlice<'a>, error::PacketSliceError> {
         use error::{PacketSliceError::*, *};
 
         if slice.len() < 4 {
@@ -842,7 +842,7 @@ mod tests {
                     result
                 }
 
-                fn to_slice(&self) -> DltPacketSlice {
+                fn to_slice(&self) -> DltPacketSlice<'_> {
                     DltPacketSlice::from_slice(&self.packet).unwrap()
                 }
 
@@ -854,7 +854,7 @@ mod tests {
                     [0x10, 0x11]
                 }
 
-                fn verb_iter(&self) -> VerboseIter {
+                fn verb_iter(&self) -> VerboseIter<'_> {
                     VerboseIter::new(
                         self.header.is_big_endian,
                         self.header.extended_header.as_ref().map(|v| v.number_of_arguments).unwrap_or_default().into(),

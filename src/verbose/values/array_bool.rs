@@ -172,6 +172,13 @@ impl Iterator for ArrayBoolIterator<'_> {
     }
 }
 
+impl ExactSizeIterator for ArrayBoolIterator<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.rest.len()
+    }
+}
+
 impl<'a> IntoIterator for &'a ArrayBool<'a> {
     type Item = bool;
     type IntoIter = ArrayBoolIterator<'a>;
@@ -581,8 +588,12 @@ mod test {
                 assert_eq!(it.rest.len(), content.len() - i - 1);
             }
             assert_eq!(arr.into_iter().nth(content.len()), None);
+
+            // test len
+            assert_eq!(arr.into_iter().len(), content.len());
         }
     }
+
     #[cfg(feature = "serde")]
     #[test]
     fn serialization() {

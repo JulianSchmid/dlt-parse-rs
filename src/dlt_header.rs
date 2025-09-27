@@ -428,23 +428,20 @@ impl DltHeader {
         }
 
         //write the extended header if it exists
-        match &self.extended_header {
-            Some(value) => {
-                let bytes: [u8; 10] = [
-                    value.message_info.0,
-                    value.number_of_arguments,
-                    value.application_id[0],
-                    value.application_id[1],
-                    value.application_id[2],
-                    value.application_id[3],
-                    value.context_id[0],
-                    value.context_id[1],
-                    value.context_id[2],
-                    value.context_id[3],
-                ];
-                writer.write_all(&bytes)?;
-            }
-            None => {}
+        if let Some(value) = &self.extended_header {
+            let bytes: [u8; 10] = [
+                value.message_info.0,
+                value.number_of_arguments,
+                value.application_id[0],
+                value.application_id[1],
+                value.application_id[2],
+                value.application_id[3],
+                value.context_id[0],
+                value.context_id[1],
+                value.context_id[2],
+                value.context_id[3],
+            ];
+            writer.write_all(&bytes)?;
         }
         Ok(())
     }

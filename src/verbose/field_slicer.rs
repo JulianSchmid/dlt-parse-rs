@@ -13,7 +13,7 @@ pub(crate) struct FieldSlicer<'a> {
 
 impl<'a> FieldSlicer<'a> {
     #[inline]
-    pub fn new(data: &[u8], offset: usize) -> FieldSlicer {
+    pub fn new(data: &'a [u8], offset: usize) -> FieldSlicer<'a> {
         FieldSlicer { rest: data, offset }
     }
 

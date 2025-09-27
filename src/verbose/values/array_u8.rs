@@ -216,6 +216,13 @@ impl Iterator for ArrayU8Iterator<'_> {
     }
 }
 
+impl ExactSizeIterator for ArrayU8Iterator<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.rest.len()
+    }
+}
+
 impl<'a> IntoIterator for &'a ArrayU8<'a> {
     type Item = u8;
     type IntoIter = ArrayU8Iterator<'a>;
@@ -992,6 +999,9 @@ mod test {
                 assert_eq!(it.rest.len(), content.len() - i - 1);
             }
             assert_eq!(arr.into_iter().nth(content.len()), None);
+
+            // test len
+            assert_eq!(arr.into_iter().len(), content.len());
         }
     }
 
