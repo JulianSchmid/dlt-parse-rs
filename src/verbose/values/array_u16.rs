@@ -179,6 +179,81 @@ impl Iterator for ArrayU16Iterator<'_> {
             Some(result)
         }
     }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.rest.len() / 2, Some(self.rest.len() / 2))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.rest.len() / 2
+    }
+
+    #[inline]
+    fn last(self) -> Option<Self::Item> {
+        if self.rest.len() < 2 {
+            None
+        } else {
+            let last_index = ((self.rest.len() / 2) - 1) * 2;
+            let bytes = unsafe {
+                // SAFETY: Safe as len checked to be at least 2.
+                [
+                    *self.rest.get_unchecked(last_index),
+                    *self.rest.get_unchecked(last_index + 1),
+                ]
+            };
+            Some(if self.is_big_endian {
+                u16::from_be_bytes(bytes)
+            } else {
+                u16::from_le_bytes(bytes)
+            })
+        }
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        // Formula converted to ensure no overflow occurs:
+        //    n*2 + 2 <= self.rest.len()
+        //    n*2 <= self.rest.len() - 2
+        //    n <= (self.rest.len() - 2) / 2
+        if self.rest.len() >= 2 && n <= (self.rest.len() - 2) / 2 {
+            let index = n * 2;
+            let bytes = unsafe {
+                [
+                    // SAFETY: Safe as the length is checked beforehand to be at least n*2 + 2
+                    *self.rest.get_unchecked(index),
+                    *self.rest.get_unchecked(index + 1),
+                ]
+            };
+            let result = if self.is_big_endian {
+                u16::from_be_bytes(bytes)
+            } else {
+                u16::from_le_bytes(bytes)
+            };
+            self.rest = unsafe {
+                // SAFETY: Safe as the length is checked beforehand to be at least n*2 + 2
+                core::slice::from_raw_parts(
+                    self.rest.as_ptr().add(index + 2),
+                    self.rest.len() - index - 2,
+                )
+            };
+            Some(result)
+        } else {
+            self.rest = unsafe {
+                // SAFETY: Safe as the slice gets moved to its end with len 0.
+                core::slice::from_raw_parts(self.rest.as_ptr().add(self.rest.len()), 0)
+            };
+            None
+        }
+    }
+}
+
+impl ExactSizeIterator for ArrayU16Iterator<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.rest.len() / 2
+    }
 }
 
 impl<'a> IntoIterator for &'a ArrayU16<'a> {
@@ -950,6 +1025,229 @@ mod test {
                 }
 
                 }
+        }
+    }
+
+    fn two_values_bytes_for(is_big_endian: bool, value0: u16, value1: u16) -> [u8; 4 + 1] {
+        let v0_bytes = if is_big_endian {
+            value0.to_be_bytes()
+        } else {
+            value0.to_le_bytes()
+        };
+        let v1_bytes = if is_big_endian {
+            value1.to_be_bytes()
+        } else {
+            value1.to_le_bytes()
+        };
+        [v0_bytes[0], v0_bytes[1], v1_bytes[0], v1_bytes[1], 0]
+    }
+
+    proptest! {
+        #[test]
+        fn next(
+            value0 in any::<u16>(),
+            value1 in any::<u16>()
+        ) {
+
+            // empty
+            {
+                let mut iter = ArrayU16Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert!(iter.next().is_none());
+            }
+
+            // run through the different variants
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=1 {
+                    let mut iter = ArrayU16Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    assert_eq!(
+                        Some(value0),
+                        iter.next()
+                    );
+
+                    assert_eq!(
+                        Some(value1),
+                        iter.next()
+                    );
+
+                    assert_eq!(
+                        None,
+                        iter.next()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn size_hint_count_len(
+            value0 in any::<u16>(),
+            value1 in any::<u16>()
+        ) {
+
+            // empty
+            {
+                let iter = ArrayU16Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert_eq!(0, iter.len());
+                assert_eq!(0, iter.clone().count());
+                assert_eq!((0, Some(0)), iter.size_hint());
+            }
+
+            // run through the different variants
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=1 {
+                    let mut iter = ArrayU16Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    assert_eq!((2, Some(2)), iter.size_hint());
+                    assert_eq!(2, iter.clone().count());
+                    assert_eq!(2, iter.len());
+                    assert_eq!(
+                        Some(value0),
+                        iter.next()
+                    );
+
+                    assert_eq!((1, Some(1)), iter.size_hint());
+                    assert_eq!(1, iter.clone().count());
+                    assert_eq!(1, iter.len());
+                    assert_eq!(
+                        Some(value1),
+                        iter.next()
+                    );
+
+                    assert_eq!((0, Some(0)), iter.size_hint());
+                    assert_eq!(0, iter.clone().count());
+                    assert_eq!(0, iter.len());
+                    assert_eq!(
+                        None,
+                        iter.next()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn last(
+            value0 in any::<u16>(),
+            value1 in any::<u16>()
+        ) {
+
+            // empty
+            {
+                let iter = ArrayU16Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert!(iter.last().is_none());
+            }
+
+            // run through the different variants
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=1 {
+                    let mut iter = ArrayU16Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    assert_eq!(Some(value1), iter.clone().last());
+                    assert_eq!(
+                        Some(value0),
+                        iter.next()
+                    );
+
+                    assert_eq!(Some(value1), iter.clone().last());
+                    assert_eq!(
+                        Some(value1),
+                        iter.next()
+                    );
+
+                    assert_eq!(None, iter.clone().last());
+                    assert_eq!(
+                        None,
+                        iter.next()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn nth(
+            value0 in any::<u16>(),
+            value1 in any::<u16>()
+        ) {
+
+            // empty
+            {
+                let mut iter = ArrayU16Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert!(iter.nth(0).is_none());
+                assert!(iter.nth(1).is_none());
+            }
+
+            // run through the different variants
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=1 {
+                    let iter = ArrayU16Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+                    {
+                        let mut iter = iter.clone();
+                        assert_eq!(
+                            Some(value0),
+                            iter.nth(0)
+                        );
+                        assert_eq!(
+                            Some(value1),
+                            iter.nth(0)
+                        );
+                        assert_eq!(
+                            None,
+                            iter.nth(0)
+                        );
+                    }
+                    {
+                        let mut iter = iter.clone();
+                        assert_eq!(
+                            Some(value1),
+                            iter.nth(1)
+                        );
+                        assert_eq!(
+                            None,
+                            iter.nth(0)
+                        );
+                    }
+                    {
+                        let mut iter = iter.clone();
+                        assert_eq!(
+                            None,
+                            iter.nth(2)
+                        );
+                    }
+                }
+            }
         }
     }
 

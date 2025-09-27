@@ -166,6 +166,7 @@ pub struct ArrayI64Iterator<'a> {
 impl Iterator for ArrayI64Iterator<'_> {
     type Item = i64;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.rest.len() < 8 {
             None
@@ -196,6 +197,93 @@ impl Iterator for ArrayI64Iterator<'_> {
             self.rest = &self.rest[8..];
             Some(result)
         }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.rest.len() / 8, Some(self.rest.len() / 8))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.rest.len() / 8
+    }
+
+    #[inline]
+    fn last(self) -> Option<Self::Item> {
+        if self.rest.len() < 8 {
+            None
+        } else {
+            let last_index = ((self.rest.len() / 8) - 1) * 8;
+            let bytes = unsafe {
+                // SAFETY: Safe as len checked to be at least 8.
+                [
+                    *self.rest.get_unchecked(last_index),
+                    *self.rest.get_unchecked(last_index + 1),
+                    *self.rest.get_unchecked(last_index + 2),
+                    *self.rest.get_unchecked(last_index + 3),
+                    *self.rest.get_unchecked(last_index + 4),
+                    *self.rest.get_unchecked(last_index + 5),
+                    *self.rest.get_unchecked(last_index + 6),
+                    *self.rest.get_unchecked(last_index + 7),
+                ]
+            };
+            Some(if self.is_big_endian {
+                i64::from_be_bytes(bytes)
+            } else {
+                i64::from_le_bytes(bytes)
+            })
+        }
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        // Formula converted to ensure no overflow occurs:
+        //    n*8 + 8 <= self.rest.len()
+        //    n*8 <= self.rest.len() - 8
+        //    n <= (self.rest.len() - 8) / 8
+        if self.rest.len() >= 8 && n <= (self.rest.len() - 8) / 8 {
+            let index = n * 8;
+            let bytes = unsafe {
+                [
+                    // SAFETY: Safe as the length is checked beforehand to be at least n*8 + 8
+                    *self.rest.get_unchecked(index),
+                    *self.rest.get_unchecked(index + 1),
+                    *self.rest.get_unchecked(index + 2),
+                    *self.rest.get_unchecked(index + 3),
+                    *self.rest.get_unchecked(index + 4),
+                    *self.rest.get_unchecked(index + 5),
+                    *self.rest.get_unchecked(index + 6),
+                    *self.rest.get_unchecked(index + 7),
+                ]
+            };
+            let result = if self.is_big_endian {
+                i64::from_be_bytes(bytes)
+            } else {
+                i64::from_le_bytes(bytes)
+            };
+            self.rest = unsafe {
+                // SAFETY: Safe as the length is checked beforehand to be at least n*8 + 8
+                core::slice::from_raw_parts(
+                    self.rest.as_ptr().add(index + 8),
+                    self.rest.len() - index - 8,
+                )
+            };
+            Some(result)
+        } else {
+            self.rest = unsafe {
+                // SAFETY: Safe as the slice gets moved to its end with len 0.
+                core::slice::from_raw_parts(self.rest.as_ptr().add(self.rest.len()), 0)
+            };
+            None
+        }
+    }
+}
+
+impl ExactSizeIterator for ArrayI64Iterator<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.rest.len() / 8
     }
 }
 
@@ -1065,6 +1153,253 @@ mod test {
                 }
         }
     }
+
+    fn two_values_bytes_for(is_big_endian: bool, value0: i64, value1: i64) -> [u8; 16 + 7] {
+        let v0_bytes = if is_big_endian {
+            value0.to_be_bytes()
+        } else {
+            value0.to_le_bytes()
+        };
+        let v1_bytes = if is_big_endian {
+            value1.to_be_bytes()
+        } else {
+            value1.to_le_bytes()
+        };
+        [
+            v0_bytes[0],
+            v0_bytes[1],
+            v0_bytes[2],
+            v0_bytes[3],
+            v0_bytes[4],
+            v0_bytes[5],
+            v0_bytes[6],
+            v0_bytes[7],
+            v1_bytes[0],
+            v1_bytes[1],
+            v1_bytes[2],
+            v1_bytes[3],
+            v1_bytes[4],
+            v1_bytes[5],
+            v1_bytes[6],
+            v1_bytes[7],
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+    }
+
+    proptest! {
+        #[test]
+        fn next(
+            value0 in any::<i64>(),
+            value1 in any::<i64>()
+        ) {
+
+            // empty
+            {
+                let mut iter = ArrayI64Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert!(iter.next().is_none());
+            }
+
+            // run through the different variants
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=7 {
+                    let mut iter = ArrayI64Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    assert_eq!(
+                        Some(value0),
+                        iter.next()
+                    );
+
+                    assert_eq!(
+                        Some(value1),
+                        iter.next()
+                    );
+
+                    assert_eq!(
+                        None,
+                        iter.next()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn size_hint_count_len(
+            value0 in any::<i64>(),
+            value1 in any::<i64>()
+        ) {
+
+            // empty
+            {
+                let iter = ArrayI64Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert_eq!(0, iter.len());
+                assert_eq!(0, iter.clone().count());
+                assert_eq!((0, Some(0)), iter.size_hint());
+            }
+
+            // run through the different variants
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=7 {
+                    let mut iter = ArrayI64Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    assert_eq!((2, Some(2)), iter.size_hint());
+                    assert_eq!(2, iter.clone().count());
+                    assert_eq!(2, iter.len());
+                    assert_eq!(
+                        Some(value0),
+                        iter.next()
+                    );
+
+                    assert_eq!((1, Some(1)), iter.size_hint());
+                    assert_eq!(1, iter.clone().count());
+                    assert_eq!(1, iter.len());
+                    assert_eq!(
+                        Some(value1),
+                        iter.next()
+                    );
+
+                    assert_eq!((0, Some(0)), iter.size_hint());
+                    assert_eq!(0, iter.clone().count());
+                    assert_eq!(0, iter.len());
+                    assert_eq!(
+                        None,
+                        iter.next()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn last(
+            value0 in any::<i64>(),
+            value1 in any::<i64>()
+        ) {
+
+            // empty
+            {
+                let iter = ArrayI64Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert!(iter.last().is_none());
+            }
+
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=7 {
+                    let mut iter = ArrayI64Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    assert_eq!(Some(value1), iter.clone().last());
+                    assert_eq!(
+                        Some(value0),
+                        iter.next()
+                    );
+
+                    assert_eq!(Some(value1), iter.clone().last());
+                    assert_eq!(
+                        Some(value1),
+                        iter.next()
+                    );
+
+                    assert_eq!(None, iter.clone().last());
+                    assert_eq!(
+                        None,
+                        iter.next()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn nth(
+            value0 in any::<i64>(),
+            value1 in any::<i64>()
+        ) {
+
+            // empty
+            {
+                let mut iter = ArrayI64Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert!(iter.nth(0).is_none());
+                assert!(iter.nth(1).is_none());
+            }
+
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=7 {
+                    let iter = ArrayI64Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    {
+                        let mut iter = iter.clone();
+                        assert_eq!(
+                            Some(value0),
+                            iter.nth(0)
+                        );
+                        assert_eq!(
+                            Some(value1),
+                            iter.nth(0)
+                        );
+                        assert_eq!(
+                            None,
+                            iter.nth(0)
+                        );
+                    }
+                    {
+                        let mut iter = iter.clone();
+                        assert_eq!(
+                            Some(value1),
+                            iter.nth(1)
+                        );
+                        assert_eq!(
+                            None,
+                            iter.nth(0)
+                        );
+                    }
+                    {
+                        let mut iter = iter.clone();
+                        assert_eq!(
+                            None,
+                            iter.nth(2)
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     #[cfg(feature = "serde")]
     #[test]
     fn serialization() {

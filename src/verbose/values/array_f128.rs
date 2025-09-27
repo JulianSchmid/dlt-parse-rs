@@ -109,6 +109,7 @@ impl<'a> Serialize for ArrayF128<'a> {
 impl Iterator for ArrayF128Iterator<'_> {
     type Item = RawF128;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.rest.len() < 16 {
             None
@@ -241,6 +242,13 @@ impl Iterator for ArrayF128Iterator<'_> {
             };
             None
         }
+    }
+}
+
+impl ExactSizeIterator for ArrayF128Iterator<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.rest.len() / 16
     }
 }
 
@@ -687,6 +695,276 @@ mod test {
         }
     }
 
+    fn two_values_bytes_for(is_big_endian: bool, value0: u128, value1: u128) -> [u8; 32 + 15] {
+        let v0_bytes = if is_big_endian {
+            value0.to_be_bytes()
+        } else {
+            value0.to_le_bytes()
+        };
+        let v1_bytes = if is_big_endian {
+            value1.to_be_bytes()
+        } else {
+            value1.to_le_bytes()
+        };
+        [
+            v0_bytes[0],
+            v0_bytes[1],
+            v0_bytes[2],
+            v0_bytes[3],
+            v0_bytes[4],
+            v0_bytes[5],
+            v0_bytes[6],
+            v0_bytes[7],
+            v0_bytes[8],
+            v0_bytes[9],
+            v0_bytes[10],
+            v0_bytes[11],
+            v0_bytes[12],
+            v0_bytes[13],
+            v0_bytes[14],
+            v0_bytes[15],
+            v1_bytes[0],
+            v1_bytes[1],
+            v1_bytes[2],
+            v1_bytes[3],
+            v1_bytes[4],
+            v1_bytes[5],
+            v1_bytes[6],
+            v1_bytes[7],
+            v1_bytes[8],
+            v1_bytes[9],
+            v1_bytes[10],
+            v1_bytes[11],
+            v1_bytes[12],
+            v1_bytes[13],
+            v1_bytes[14],
+            v1_bytes[15],
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+    }
+
+    proptest! {
+        #[test]
+        fn next(
+            value0 in any::<u128>(),
+            value1 in any::<u128>()
+        ) {
+
+            // empty
+            {
+                let mut iter = ArrayF128Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert!(iter.next().is_none());
+            }
+
+            // run through the different variants
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=15 {
+                    let mut iter = ArrayF128Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    assert_eq!(
+                        Some(value0),
+                        iter.next().map(|v| v.to_bits())
+                    );
+
+                    assert_eq!(
+                        Some(value1),
+                        iter.next().map(|v| v.to_bits())
+                    );
+
+                    assert_eq!(
+                        None,
+                        iter.next()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn size_hint_count_len(
+            value0 in any::<u128>(),
+            value1 in any::<u128>()
+        ) {
+
+            // empty
+            {
+                let iter = ArrayF128Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert_eq!(0, iter.len());
+                assert_eq!(0, iter.clone().count());
+                assert_eq!((0, Some(0)), iter.size_hint());
+            }
+
+            // run through the different variants
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=15 {
+                    let mut iter = ArrayF128Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    assert_eq!((2, Some(2)), iter.size_hint());
+                    assert_eq!(2, iter.clone().count());
+                    assert_eq!(2, iter.len());
+                    assert_eq!(
+                        Some(value0),
+                        iter.next().map(|v| v.to_bits())
+                    );
+
+                    assert_eq!((1, Some(1)), iter.size_hint());
+                    assert_eq!(1, iter.clone().count());
+                    assert_eq!(1, iter.len());
+                    assert_eq!(
+                        Some(value1),
+                        iter.next().map(|v| v.to_bits())
+                    );
+
+                    assert_eq!((0, Some(0)), iter.size_hint());
+                    assert_eq!(0, iter.clone().count());
+                    assert_eq!(0, iter.len());
+                    assert_eq!(
+                        None,
+                        iter.next()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn last(
+            value0 in any::<u128>(),
+            value1 in any::<u128>()
+        ) {
+
+            // empty
+            {
+                let iter = ArrayF128Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert!(iter.last().is_none());
+            }
+
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=15 {
+                    let mut iter = ArrayF128Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    assert_eq!(Some(value1), iter.clone().last().map(|v| v.to_bits()));
+                    assert_eq!(
+                        Some(value0),
+                        iter.next().map(|v| v.to_bits())
+                    );
+
+                    assert_eq!(Some(value1), iter.clone().last().map(|v| v.to_bits()));
+                    assert_eq!(
+                        Some(value1),
+                        iter.next().map(|v| v.to_bits())
+                    );
+
+                    assert_eq!(None, iter.clone().last());
+                    assert_eq!(
+                        None,
+                        iter.next()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn nth(
+            value0 in any::<u128>(),
+            value1 in any::<u128>()
+        ) {
+
+            // empty
+            {
+                let mut iter = ArrayF128Iterator{
+                    is_big_endian: false,
+                    rest: &[],
+                };
+                assert!(iter.nth(0).is_none());
+                assert!(iter.nth(1).is_none());
+            }
+
+            for is_big_endian in [false, true] {
+                let bytes = two_values_bytes_for(is_big_endian, value0, value1);
+                for padding_offset in 0..=15 {
+                    let iter = ArrayF128Iterator{
+                        is_big_endian,
+                        rest: &bytes[.. bytes.len() - padding_offset],
+                    };
+
+                    {
+                        let mut iter = iter.clone();
+                        assert_eq!(
+                            Some(value0),
+                            iter.nth(0).map(|v| v.to_bits())
+                        );
+                        assert_eq!(
+                            Some(value1),
+                            iter.nth(0).map(|v| v.to_bits())
+                        );
+                        assert_eq!(
+                            None,
+                            iter.nth(0)
+                        );
+                    }
+                    {
+                        let mut iter = iter.clone();
+                        assert_eq!(
+                            Some(value1),
+                            iter.nth(1).map(|v| v.to_bits())
+                        );
+                        assert_eq!(
+                            None,
+                            iter.nth(0)
+                        );
+                    }
+                    {
+                        let mut iter = iter.clone();
+                        assert_eq!(
+                            None,
+                            iter.nth(2)
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     #[cfg(feature = "serde")]
     #[test]
     fn serialization() {
@@ -910,508 +1188,6 @@ mod test {
 
             let convert_content = "{\"variable_info\":null,\"data\":[[[[[0,1,2,3,4],[5,6,7,8,9],[10,11,12,13,14],[15,16,17,18,19]],[[20,21,22,23,24],[25,26,27,28,29],[30,31,32,33,34],[35,36,37,38,39]],[[40,41,42,43,44],[45,46,47,48,49],[50,51,52,53,54],[55,56,57,58,59]]],[[[60,61,62,63,64],[65,66,67,68,69],[70,71,72,73,74],[75,76,77,78,79]],[[80,81,82,83,84],[85,86,87,88,89],[90,91,92,93,94],[95,96,97,98,99]],[[100,101,102,103,104],[105,106,107,108,109],[110,111,112,113,114],[115,116,117,118,119]]]]]}".to_string();
             assert_eq!(convert_content, serde_json::to_string(&arr).unwrap());
-        }
-    }
-
-    fn combine(a: [u8; 16], b: [u8; 16]) -> [u8; 32] {
-        [
-            a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], a[13],
-            a[14], a[15], b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11],
-            b[12], b[13], b[14], b[15],
-        ]
-    }
-
-    fn combine_unaligned(a: [u8; 16], b: [u8; 16]) -> [u8; 47] {
-        [
-            a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], a[13],
-            a[14], a[15], b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11],
-            b[12], b[13], b[14], b[15], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ]
-    }
-
-    proptest! {
-        #[test]
-        fn next(
-            value0 in any::<u128>(),
-            value1 in any::<u128>()
-        ) {
-
-            // empty
-            {
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &[],
-                };
-                assert!(iter.next().is_none());
-            }
-
-            let value0_be = value0.to_be_bytes();
-            let value1_be = value1.to_be_bytes();
-            let value0_le = value0.to_le_bytes();
-            let value1_le = value1.to_le_bytes();
-
-            // big endian (aligned)
-            {
-                let bytes = combine(value0_be, value1_be);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: true,
-                    rest: &bytes,
-                };
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-
-            // little endian (aligned)
-            {
-                let bytes = combine(value0_le, value1_le);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &bytes,
-                };
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-
-            // big endian (unaligned)
-            {
-                let bytes = combine_unaligned(value0_be, value1_be);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: true,
-                    rest: &bytes,
-                };
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-
-            // little endian (unaligned)
-            {
-                let bytes = combine_unaligned(value0_le, value1_le);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &bytes,
-                };
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn size_hint(
-            value0 in any::<u128>(),
-            value1 in any::<u128>()
-        ) {
-
-            // empty
-            {
-                let iter = ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &[],
-                };
-                assert_eq!((0, Some(0)), iter.size_hint());
-            }
-
-            let value0_be = value0.to_be_bytes();
-            let value1_be = value1.to_be_bytes();
-
-            // Aligned
-            {
-                let bytes = combine(value0_be, value1_be);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: true,
-                    rest: &bytes,
-                };
-
-                assert_eq!((2, Some(2)), iter.size_hint());
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!((1, Some(1)), iter.size_hint());
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!((0, Some(0)), iter.size_hint());
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-
-            // Unaligned
-            {
-                let bytes = combine_unaligned(value0_be, value1_be);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: true,
-                    rest: &bytes,
-                };
-
-                assert_eq!((2, Some(2)), iter.size_hint());
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!((1, Some(1)), iter.size_hint());
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!((0, Some(0)), iter.size_hint());
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn count(
-            value0 in any::<u128>(),
-            value1 in any::<u128>()
-        ) {
-
-            // empty
-            {
-                let iter = ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &[],
-                };
-                assert_eq!(0, iter.count());
-            }
-
-            let value0_be = value0.to_be_bytes();
-            let value1_be = value1.to_be_bytes();
-
-            // Aligned
-            {
-                let bytes = combine(value0_be, value1_be);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: true,
-                    rest: &bytes,
-                };
-
-                assert_eq!(2, iter.clone().count());
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(1, iter.clone().count());
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(0, iter.clone().count());
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-
-            // Unaligned
-            {
-                let bytes = combine_unaligned(value0_be, value1_be);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: true,
-                    rest: &bytes,
-                };
-
-                assert_eq!(2, iter.clone().count());
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(1, iter.clone().count());
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(0, iter.clone().count());
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn last(
-            value0 in any::<u128>(),
-            value1 in any::<u128>()
-        ) {
-
-            // empty
-            {
-                let iter = ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &[],
-                };
-                assert!(iter.last().is_none());
-            }
-
-            let value0_be = value0.to_be_bytes();
-            let value1_be = value1.to_be_bytes();
-            let value0_le = value0.to_le_bytes();
-            let value1_le = value1.to_le_bytes();
-
-            // big endian (aligned)
-            {
-                let bytes = combine(value0_be, value1_be);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: true,
-                    rest: &bytes,
-                };
-
-                assert_eq!(Some(value1), iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(Some(value1), iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(None, iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-
-            // little endian (aligned)
-            {
-                let bytes = combine(value0_le, value1_le);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &bytes,
-                };
-
-                assert_eq!(Some(value1), iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(Some(value1), iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(None, iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-
-            // big endian (unaligned)
-            {
-                let bytes = combine_unaligned(value0_be, value1_be);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: true,
-                    rest: &bytes,
-                };
-
-                assert_eq!(Some(value1), iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(Some(value1), iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(None, iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-
-            // little endian (unaligned)
-            {
-                let bytes = combine_unaligned(value0_le, value1_le);
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &bytes,
-                };
-
-                assert_eq!(Some(value1), iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    Some(value0),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(Some(value1), iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    Some(value1),
-                    iter.next().map(|v| v.to_bits())
-                );
-
-                assert_eq!(None, iter.clone().last().map(|v| v.to_bits()));
-                assert_eq!(
-                    None,
-                    iter.next().map(|v| v.to_bits())
-                );
-            }
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn nth(
-            value0 in any::<u128>(),
-            value1 in any::<u128>()
-        ) {
-
-            // empty
-            {
-                let mut iter = ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &[],
-                };
-                assert!(iter.nth(0).is_none());
-                assert!(iter.nth(1).is_none());
-            }
-
-            let value0_be = value0.to_be_bytes();
-            let value1_be = value1.to_be_bytes();
-            let value0_le = value0.to_le_bytes();
-            let value1_le = value1.to_le_bytes();
-
-            let test_nth = |iter: ArrayF128Iterator| {
-                {
-                    let mut iter = iter.clone();
-                    assert_eq!(
-                        Some(value0),
-                        iter.nth(0).map(|v| v.to_bits())
-                    );
-                    assert_eq!(
-                        Some(value1),
-                        iter.nth(0).map(|v| v.to_bits())
-                    );
-                    assert_eq!(
-                        None,
-                        iter.nth(0).map(|v| v.to_bits())
-                    );
-                }
-                {
-                    let mut iter = iter.clone();
-                    assert_eq!(
-                        Some(value1),
-                        iter.nth(1).map(|v| v.to_bits())
-                    );
-                    assert_eq!(
-                        None,
-                        iter.nth(0).map(|v| v.to_bits())
-                    );
-                }
-                {
-                    let mut iter = iter.clone();
-                    assert_eq!(
-                        None,
-                        iter.nth(2).map(|v| v.to_bits())
-                    );
-                }
-            };
-
-            // big endian (aligned)
-            {
-                let bytes = combine(value0_be, value1_be);
-                test_nth(ArrayF128Iterator{
-                    is_big_endian: true,
-                    rest: &bytes,
-                });
-            }
-
-            // little endian (aligned)
-            {
-                let bytes = combine(value0_le, value1_le);
-                test_nth(ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &bytes,
-                });
-            }
-
-            // big endian (unaligned)
-            {
-                let bytes = combine_unaligned(value0_be, value1_be);
-                test_nth(ArrayF128Iterator{
-                    is_big_endian: true,
-                    rest: &bytes,
-                });
-            }
-
-            // little endian (unaligned)
-            {
-                let bytes = combine_unaligned(value0_le, value1_le);
-                test_nth(ArrayF128Iterator{
-                    is_big_endian: false,
-                    rest: &bytes,
-                });
-            }
         }
     }
 }
