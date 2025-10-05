@@ -49,12 +49,14 @@ use crate::{storage::StorageHeader, DltPacketSlice};
 /// ).expect("failed to write dlt packet");
 /// ```
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug)]
 pub struct DltStorageWriter<W: Write> {
     writer: W,
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<W: Write> DltStorageWriter<W> {
     /// Creates a new writer that allows writing dlt packets to a storage file.
     pub fn new(writer: W) -> DltStorageWriter<W> {

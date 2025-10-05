@@ -227,6 +227,9 @@ pub mod control;
 /// Errors that can be returned by functions in dlt_parse.
 pub mod error;
 
+/// DLT file transfer related structs & functions (used to tranfer files via DLT).
+pub mod ft;
+
 /// Module containing "verbose DLT" encoding & decoding structs & functions.
 pub mod verbose;
 
