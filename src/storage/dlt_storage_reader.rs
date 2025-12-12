@@ -1,4 +1,4 @@
-use std::io::{BufRead, ErrorKind, Read};
+use std::io::{BufRead, ErrorKind, Read, Seek, SeekFrom};
 #[cfg(not(test))]
 use std::vec::Vec;
 
@@ -31,27 +31,35 @@ use super::StorageSlice;
 /// ```
 #[cfg(feature = "std")]
 #[derive(Debug)]
-pub struct DltStorageReader<R: Read + BufRead> {
+pub struct DltStorageReader<R: Read + BufRead + Seek> {
     reader: R,
     /// Continue search for next storage header if it is missing.
     is_seeking_storage_pattern: bool,
+    /// When length of message is wrong, then continue to search for next storage header starting from payload of corrupted message.
+    rescan_corrupted_message_payload: bool,
+    seek_back: bool,
     last_packet: Vec<u8>,
     read_error: bool,
     num_read_packets: usize,
     num_pattern_seeks: usize,
+    /// Position in the stream after reading the storage header of the previous packet.
+    recovery_seek_back_position: Option<u64>,
 }
 
 #[cfg(feature = "std")]
-impl<R: Read + BufRead> DltStorageReader<R> {
+impl<R: Read + BufRead + Seek> DltStorageReader<R> {
     /// Creates a new reader.
     pub fn new(reader: R) -> DltStorageReader<R> {
         DltStorageReader {
             reader,
             is_seeking_storage_pattern: true,
+            rescan_corrupted_message_payload: false,
+            seek_back: false,
             last_packet: Vec::with_capacity(u16::MAX as usize),
             read_error: false,
             num_read_packets: 0,
             num_pattern_seeks: 0,
+            recovery_seek_back_position: None,
         }
     }
 
@@ -62,10 +70,30 @@ impl<R: Read + BufRead> DltStorageReader<R> {
         DltStorageReader {
             reader,
             is_seeking_storage_pattern: false,
+            rescan_corrupted_message_payload: false,
+            seek_back: false,
             last_packet: Vec::with_capacity(u16::MAX as usize),
             read_error: false,
             num_read_packets: 0,
             num_pattern_seeks: 0,
+            recovery_seek_back_position: None,
+        }
+    }
+
+    /// Creates a new reader that will seek storage headers and attempt
+    /// to recover corrupted messages by searching for the next storage
+    /// pattern in the previous packet's payload when corruption is detected.
+    pub fn new_with_rescan(reader: R) -> DltStorageReader<R> {
+        DltStorageReader {
+            reader,
+            is_seeking_storage_pattern: true,
+            rescan_corrupted_message_payload: true,
+            seek_back: false,
+            last_packet: Vec::with_capacity(u16::MAX as usize),
+            read_error: false,
+            num_read_packets: 0,
+            num_pattern_seeks: 0,
+            recovery_seek_back_position: None,
         }
     }
 
@@ -188,7 +216,25 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                 // seek the next storage header pattern
                 let mut pattern_elements_found = 0;
                 let mut storage_pattern_error = false;
+
+                // Search for pattern in the reader if not already found
                 while pattern_elements_found < StorageHeader::PATTERN_AT_START.len() {
+                    if self.seek_back {
+                        self.seek_back = false;
+
+                        // Seek back to previous packet payload position
+                        if let Some(recovery_seek_back_position) =
+                            self.recovery_seek_back_position.take()
+                        {
+                            if let Err(err) = self
+                                .reader
+                                .seek(SeekFrom::Start(recovery_seek_back_position))
+                            {
+                                self.read_error = true;
+                                return Some(Err(err.into()));
+                            }
+                        }
+                    }
                     // load data
                     let slice = match self.reader.fill_buf() {
                         Ok(slice) => {
@@ -212,14 +258,22 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                         } else {
                             storage_pattern_error = true;
                             pattern_elements_found = 0;
+                            if self.rescan_corrupted_message_payload
+                                && self.recovery_seek_back_position.is_some()
+                            {
+                                self.seek_back = true;
+                                break;
+                            }
                         }
                         consumed_len += 1;
                         if pattern_elements_found >= StorageHeader::PATTERN_AT_START.len() {
                             break;
                         }
                     }
+
                     self.reader.consume(consumed_len);
                 }
+
                 if storage_pattern_error {
                     self.num_pattern_seeks += 1;
                 }
@@ -319,6 +373,16 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                 // packet successfully read
                 self.num_read_packets += 1;
 
+                // Store position for potential recovery if enabled
+                if self.rescan_corrupted_message_payload {
+                    if let Ok(current_pos) = self.reader.stream_position() {
+                        // Calculate recovery position right after the storage header of last packet
+                        let recovery_seek_back_start = current_pos - self.last_packet.len() as u64
+                            + StorageHeader::BYTE_LEN as u64;
+                        self.recovery_seek_back_position = Some(recovery_seek_back_start);
+                    }
+                }
+
                 return Some(Ok(StorageSlice {
                     storage_header,
                     packet,
@@ -350,6 +414,12 @@ mod dlt_storage_reader_tests {
         }
 
         fn consume(&mut self, _amt: usize) {}
+    }
+
+    impl Seek for BufferFillErrorReader {
+        fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
+            Ok(0)
+        }
     }
 
     #[test]
