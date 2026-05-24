@@ -35,21 +35,31 @@ pub struct DltStorageReader<R: Read + BufRead> {
     reader: R,
     /// Continue search for next storage header if it is missing.
     is_seeking_storage_pattern: bool,
-    last_packet: Vec<u8>,
-    read_error: bool,
+    buf: Vec<u8>,
+    state: DltStorageReaderState,
     num_read_packets: usize,
     num_pattern_seeks: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum DltStorageReaderState {
+    Start,
+    /// State after the first packet was stored in the `buf`
+    /// (+ the size of the packet present in the `buf`)
+    Running(usize),
+    Error,
+}
+
 #[cfg(feature = "std")]
 impl<R: Read + BufRead> DltStorageReader<R> {
+
     /// Creates a new reader.
     pub fn new(reader: R) -> DltStorageReader<R> {
         DltStorageReader {
             reader,
             is_seeking_storage_pattern: true,
-            last_packet: Vec::with_capacity(u16::MAX as usize),
-            read_error: false,
+            buf: Vec::with_capacity(u16::MAX as usize),
+            state: DltStorageReaderState::Start,
             num_read_packets: 0,
             num_pattern_seeks: 0,
         }
@@ -62,8 +72,8 @@ impl<R: Read + BufRead> DltStorageReader<R> {
         DltStorageReader {
             reader,
             is_seeking_storage_pattern: false,
-            last_packet: Vec::with_capacity(u16::MAX as usize),
-            read_error: false,
+            buf: Vec::with_capacity(u16::MAX as usize + StorageHeader::BYTE_LEN),
+            state: DltStorageReaderState::Start,
             num_read_packets: 0,
             num_pattern_seeks: 0,
         }
@@ -92,9 +102,16 @@ impl<R: Read + BufRead> DltStorageReader<R> {
 
     /// Returns the next DLT packet.
     pub fn next_packet(&mut self) -> Option<Result<StorageSlice<'_>, ReadError>> {
+        use DltStorageReaderState::*;
+
         // check if iteration is done based as
-        if self.read_error {
+        if matches!(self.state, Error) {
             return None;
+        }
+
+        // drop the last packet data & unset self.last_packet_size
+        if let Running(num_last) = self.state {
+            self.buf.drain(0..num_last);
         }
 
         // goto & read storage header
@@ -107,7 +124,7 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                     }
                 }
                 Err(err) => {
-                    self.read_error = true;
+                    self.state = Error;
                     return Some(Err(err.into()));
                 }
             }
@@ -115,13 +132,13 @@ impl<R: Read + BufRead> DltStorageReader<R> {
             // in the non seeking version a storage header is expected to be directly present
             let mut storage_header_data = [0u8; StorageHeader::BYTE_LEN];
             if let Err(err) = self.reader.read_exact(&mut storage_header_data) {
-                self.read_error = true;
+                self.state = Error;
                 return Some(Err(err.into()));
             }
             let storage_header = match StorageHeader::from_bytes(storage_header_data) {
                 Ok(value) => value,
                 Err(err) => {
-                    self.read_error = true;
+                    self.state = Error;
                     return Some(Err(err.into()));
                 }
             };
@@ -129,14 +146,14 @@ impl<R: Read + BufRead> DltStorageReader<R> {
             // read the start
             let mut header_start = [0u8; 4];
             if let Err(err) = self.reader.read_exact(&mut header_start) {
-                self.read_error = true;
+                self.state = Error;
                 return Some(Err(err.into()));
             }
 
             // check version
             let version = (header_start[0] >> 5) & MAX_VERSION;
             if 0 != version && 1 != version {
-                self.read_error = true;
+                self.state = Error;
                 return Some(Err(ReadError::UnsupportedDltVersion(
                     UnsupportedDltVersionError {
                         unsupported_version: version,
@@ -147,7 +164,7 @@ impl<R: Read + BufRead> DltStorageReader<R> {
             // check length to be at least 4
             let length = u16::from_be_bytes([header_start[2], header_start[3]]) as usize;
             if length < 4 {
-                self.read_error = true;
+                self.state = Error;
                 return Some(Err(ReadError::DltMessageLengthTooSmall(
                     DltMessageLengthTooSmallError {
                         required_length: 4,
@@ -157,18 +174,17 @@ impl<R: Read + BufRead> DltStorageReader<R> {
             }
 
             // read the complete packet
-            self.last_packet.clear();
-            self.last_packet.reserve(length);
-            self.last_packet.extend_from_slice(&header_start);
+            self.buf.clear();
+            self.buf.extend_from_slice(&header_start);
             if length > 4 {
-                self.last_packet.resize(length, 0);
-                if let Err(err) = self.reader.read_exact(&mut self.last_packet[4..]) {
+                self.buf.resize(length, 0);
+                if let Err(err) = self.reader.read_exact(&mut self.buf[4..]) {
                     self.read_error = true;
                     return Some(Err(err.into()));
                 }
             }
 
-            let packet = match DltPacketSlice::from_slice(&self.last_packet) {
+            let packet = match DltPacketSlice::from_slice(&self.buf) {
                 Ok(packet) => packet,
                 Err(err) => {
                     self.read_error = true;
@@ -184,6 +200,10 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                 packet,
             }))
         } else {
+
+
+
+            /*
             loop {
                 // seek the next storage header pattern
                 let mut pattern_elements_found = 0;
@@ -293,12 +313,12 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                 }
 
                 // read the complete packet
-                self.last_packet.clear();
-                self.last_packet.reserve(length);
-                self.last_packet.extend_from_slice(&header_start);
+                self.last_packet_buf.clear();
+                self.last_packet_buf.reserve(length);
+                self.last_packet_buf.extend_from_slice(&header_start);
                 if length > 4 {
-                    self.last_packet.resize(length, 0);
-                    if let Err(err) = self.reader.read_exact(&mut self.last_packet[4..]) {
+                    self.last_packet_buf.resize(length, 0);
+                    if let Err(err) = self.reader.read_exact(&mut self.last_packet_buf[4..]) {
                         self.read_error = true;
                         if err.kind() == ErrorKind::UnexpectedEof {
                             return None;
@@ -308,7 +328,7 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                     }
                 }
 
-                let packet = match DltPacketSlice::from_slice(&self.last_packet) {
+                let packet = match DltPacketSlice::from_slice(&self.last_packet_buf) {
                     Ok(packet) => packet,
                     Err(err) => {
                         self.read_error = true;
@@ -323,7 +343,7 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                     storage_header,
                     packet,
                 }));
-            }
+            } */
         }
     }
 }
