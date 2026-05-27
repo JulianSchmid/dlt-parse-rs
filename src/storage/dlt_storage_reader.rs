@@ -1,4 +1,4 @@
-use std::io::{BufRead, ErrorKind, Read};
+use std::io::{BufRead, ErrorKind, Read, Seek, SeekFrom};
 #[cfg(not(test))]
 use std::vec::Vec;
 
@@ -6,7 +6,7 @@ use crate::error::{DltMessageLengthTooSmallError, ReadError, UnsupportedDltVersi
 use crate::storage::StorageHeader;
 use crate::*;
 
-use super::StorageSlice;
+use super::{StorageSlice, StorageSliceWithPosition};
 
 /// Reader to parse a dlt storage file.
 ///
@@ -31,27 +31,35 @@ use super::StorageSlice;
 /// ```
 #[cfg(feature = "std")]
 #[derive(Debug)]
-pub struct DltStorageReader<R: Read + BufRead> {
+pub struct DltStorageReader<R: Read + BufRead + Seek> {
     reader: R,
     /// Continue search for next storage header if it is missing.
     is_seeking_storage_pattern: bool,
+    /// When length of message is wrong, then continue to search for next storage header starting from payload of corrupted message.
+    rescan_corrupted_message_payload: bool,
+    seek_back: bool,
     last_packet: Vec<u8>,
     read_error: bool,
     num_read_packets: usize,
     num_pattern_seeks: usize,
+    /// Position in the stream after reading the storage header of the previous packet.
+    recovery_seek_back_position: Option<u64>,
 }
 
 #[cfg(feature = "std")]
-impl<R: Read + BufRead> DltStorageReader<R> {
+impl<R: Read + BufRead + Seek> DltStorageReader<R> {
     /// Creates a new reader.
     pub fn new(reader: R) -> DltStorageReader<R> {
         DltStorageReader {
             reader,
             is_seeking_storage_pattern: true,
+            rescan_corrupted_message_payload: false,
+            seek_back: false,
             last_packet: Vec::with_capacity(u16::MAX as usize),
             read_error: false,
             num_read_packets: 0,
             num_pattern_seeks: 0,
+            recovery_seek_back_position: None,
         }
     }
 
@@ -62,10 +70,30 @@ impl<R: Read + BufRead> DltStorageReader<R> {
         DltStorageReader {
             reader,
             is_seeking_storage_pattern: false,
+            rescan_corrupted_message_payload: false,
+            seek_back: false,
             last_packet: Vec::with_capacity(u16::MAX as usize),
             read_error: false,
             num_read_packets: 0,
             num_pattern_seeks: 0,
+            recovery_seek_back_position: None,
+        }
+    }
+
+    /// Creates a new reader that will seek storage headers and attempt
+    /// to recover corrupted messages by searching for the next storage
+    /// pattern in the previous packet's payload when corruption is detected.
+    pub fn new_with_rescan(reader: R) -> DltStorageReader<R> {
+        DltStorageReader {
+            reader,
+            is_seeking_storage_pattern: true,
+            rescan_corrupted_message_payload: true,
+            seek_back: false,
+            last_packet: Vec::with_capacity(u16::MAX as usize),
+            read_error: false,
+            num_read_packets: 0,
+            num_pattern_seeks: 0,
+            recovery_seek_back_position: None,
         }
     }
 
@@ -90,9 +118,36 @@ impl<R: Read + BufRead> DltStorageReader<R> {
         self.num_pattern_seeks
     }
 
-    /// Returns the next DLT packet.
+    /// Returns the next DLT packet (without position tracking).
+    ///
+    /// This is a convenience wrapper around [`Self::next_packet_seek`]
+    /// that discards the position information.
     pub fn next_packet(&mut self) -> Option<Result<StorageSlice<'_>, ReadError>> {
-        // check if iteration is done based as
+        self.next_packet_seek(None)
+            .map(|r| r.map(|swp| swp.slice))
+    }
+
+    /// Returns the next DLT packet together with its byte position in the source.
+    ///
+    /// When `seek_to` is [`Some`], the reader seeks to the given byte position
+    /// before reading. This also resets any previous error state so the reader
+    /// can be reused after an error.
+    pub fn next_packet_seek(
+        &mut self,
+        seek_to: Option<u64>,
+    ) -> Option<Result<StorageSliceWithPosition<'_>, ReadError>> {
+        // handle explicit seek
+        if let Some(pos) = seek_to {
+            self.read_error = false;
+            self.seek_back = false;
+            self.recovery_seek_back_position = None;
+            if let Err(err) = self.reader.seek(SeekFrom::Start(pos)) {
+                self.read_error = true;
+                return Some(Err(err.into()));
+            }
+        }
+
+        // check if iteration is done
         if self.read_error {
             return None;
         }
@@ -111,6 +166,15 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                     return Some(Err(err.into()));
                 }
             }
+
+            // capture the byte position before reading the storage header
+            let position = match self.reader.stream_position() {
+                Ok(pos) => pos,
+                Err(err) => {
+                    self.read_error = true;
+                    return Some(Err(err.into()));
+                }
+            };
 
             // in the non seeking version a storage header is expected to be directly present
             let mut storage_header_data = [0u8; StorageHeader::BYTE_LEN];
@@ -179,16 +243,37 @@ impl<R: Read + BufRead> DltStorageReader<R> {
             // packet successfully read
             self.num_read_packets += 1;
 
-            Some(Ok(StorageSlice {
-                storage_header,
-                packet,
+            Some(Ok(StorageSliceWithPosition {
+                position,
+                slice: StorageSlice {
+                    storage_header,
+                    packet,
+                },
             }))
         } else {
             loop {
                 // seek the next storage header pattern
                 let mut pattern_elements_found = 0;
                 let mut storage_pattern_error = false;
+
+                // Search for pattern in the reader if not already found
                 while pattern_elements_found < StorageHeader::PATTERN_AT_START.len() {
+                    if self.seek_back {
+                        self.seek_back = false;
+
+                        // Seek back to previous packet payload position
+                        if let Some(recovery_seek_back_position) =
+                            self.recovery_seek_back_position.take()
+                        {
+                            if let Err(err) = self
+                                .reader
+                                .seek(SeekFrom::Start(recovery_seek_back_position))
+                            {
+                                self.read_error = true;
+                                return Some(Err(err.into()));
+                            }
+                        }
+                    }
                     // load data
                     let slice = match self.reader.fill_buf() {
                         Ok(slice) => {
@@ -212,14 +297,22 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                         } else {
                             storage_pattern_error = true;
                             pattern_elements_found = 0;
+                            if self.rescan_corrupted_message_payload
+                                && self.recovery_seek_back_position.is_some()
+                            {
+                                self.seek_back = true;
+                                break;
+                            }
                         }
                         consumed_len += 1;
                         if pattern_elements_found >= StorageHeader::PATTERN_AT_START.len() {
                             break;
                         }
                     }
+
                     self.reader.consume(consumed_len);
                 }
+
                 if storage_pattern_error {
                     self.num_pattern_seeks += 1;
                 }
@@ -242,6 +335,15 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                         bytes[4], bytes[5], bytes[6], bytes[7],
                     ]),
                     ecu_id: [bytes[8], bytes[9], bytes[10], bytes[11]],
+                };
+
+                // capture position (stream is right after the 16-byte storage header)
+                let position = match self.reader.stream_position() {
+                    Ok(pos) => pos - StorageHeader::BYTE_LEN as u64,
+                    Err(err) => {
+                        self.read_error = true;
+                        return Some(Err(err.into()));
+                    }
                 };
 
                 // read the start
@@ -319,9 +421,22 @@ impl<R: Read + BufRead> DltStorageReader<R> {
                 // packet successfully read
                 self.num_read_packets += 1;
 
-                return Some(Ok(StorageSlice {
-                    storage_header,
-                    packet,
+                // Store position for potential recovery if enabled
+                if self.rescan_corrupted_message_payload {
+                    if let Ok(current_pos) = self.reader.stream_position() {
+                        // Calculate recovery position right after the storage header of last packet
+                        let recovery_seek_back_start = current_pos - self.last_packet.len() as u64
+                            + StorageHeader::BYTE_LEN as u64;
+                        self.recovery_seek_back_position = Some(recovery_seek_back_start);
+                    }
+                }
+
+                return Some(Ok(StorageSliceWithPosition {
+                    position,
+                    slice: StorageSlice {
+                        storage_header,
+                        packet,
+                    },
                 }));
             }
         }
@@ -350,6 +465,12 @@ mod dlt_storage_reader_tests {
         }
 
         fn consume(&mut self, _amt: usize) {}
+    }
+
+    impl Seek for BufferFillErrorReader {
+        fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
+            Ok(0)
+        }
     }
 
     #[test]
@@ -768,5 +889,228 @@ mod dlt_storage_reader_tests {
             assert!(reader.next_packet().is_none());
             assert!(reader.next_packet().is_none());
         }
+    }
+
+    #[test]
+    fn next_packet_seek_positions() {
+        use std::vec::Vec;
+
+        // build two packets
+        let storage_header0 = StorageHeader {
+            timestamp_seconds: 1,
+            timestamp_microseconds: 2,
+            ecu_id: [0, 0, 0, 0],
+        };
+        let packet0 = {
+            let mut packet = Vec::new();
+            let mut header = DltHeader {
+                is_big_endian: true,
+                message_counter: 1,
+                length: 0,
+                ecu_id: None,
+                session_id: None,
+                timestamp: None,
+                extended_header: None,
+            };
+            header.length = header.header_len() + 4;
+            header.write(&mut packet).unwrap();
+            // set version to 0
+            packet[0] = packet[0] & 0b0001_1111;
+            packet.extend_from_slice(&[1, 2, 3, 4]);
+            packet
+        };
+
+        let storage_header1 = StorageHeader {
+            timestamp_seconds: 3,
+            timestamp_microseconds: 4,
+            ecu_id: [5, 6, 7, 8],
+        };
+        let packet1 = {
+            let mut packet = Vec::new();
+            let mut header = DltHeader {
+                is_big_endian: true,
+                message_counter: 2,
+                length: 0,
+                ecu_id: None,
+                session_id: None,
+                timestamp: None,
+                extended_header: None,
+            };
+            header.length = header.header_len() + 6;
+            header.write(&mut packet).unwrap();
+            packet.extend_from_slice(&[10, 11, 12, 13, 14, 15]);
+            packet
+        };
+
+        // compose data
+        let mut v = Vec::new();
+        v.extend_from_slice(&storage_header0.to_bytes());
+        v.extend_from_slice(&packet0);
+        v.extend_from_slice(&storage_header1.to_bytes());
+        v.extend_from_slice(&packet1);
+
+        let pos0 = 0u64;
+        let pos1 = (StorageHeader::BYTE_LEN + packet0.len()) as u64;
+
+        // sequential reading with next_packet_seek(None) returns correct positions
+        {
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
+
+            let result = reader.next_packet_seek(None).unwrap().unwrap();
+            assert_eq!(result.position, pos0);
+            assert_eq!(result.slice.storage_header, storage_header0);
+
+            let result = reader.next_packet_seek(None).unwrap().unwrap();
+            assert_eq!(result.position, pos1);
+            assert_eq!(result.slice.storage_header, storage_header1);
+
+            assert!(reader.next_packet_seek(None).is_none());
+        }
+
+        // seek to second packet directly
+        {
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
+
+            let result = reader.next_packet_seek(Some(pos1)).unwrap().unwrap();
+            assert_eq!(result.position, pos1);
+            assert_eq!(result.slice.storage_header, storage_header1);
+        }
+
+        // seek back to position 0 after reading both packets
+        {
+            let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
+
+            let _ = reader.next_packet_seek(None).unwrap().unwrap();
+            let _ = reader.next_packet_seek(None).unwrap().unwrap();
+
+            let result = reader.next_packet_seek(Some(0)).unwrap().unwrap();
+            assert_eq!(result.position, pos0);
+            assert_eq!(result.slice.storage_header, storage_header0);
+        }
+
+        // strict mode positions
+        {
+            let mut reader =
+                DltStorageReader::new_strict(BufReader::new(Cursor::new(&v[..])));
+
+            let result = reader.next_packet_seek(None).unwrap().unwrap();
+            assert_eq!(result.position, pos0);
+
+            let result = reader.next_packet_seek(None).unwrap().unwrap();
+            assert_eq!(result.position, pos1);
+
+            assert!(reader.next_packet_seek(None).is_none());
+        }
+
+        // strict mode seek
+        {
+            let mut reader =
+                DltStorageReader::new_strict(BufReader::new(Cursor::new(&v[..])));
+
+            let result = reader.next_packet_seek(Some(pos1)).unwrap().unwrap();
+            assert_eq!(result.position, pos1);
+            assert_eq!(result.slice.storage_header, storage_header1);
+        }
+    }
+
+    #[test]
+    fn next_packet_seek_after_error() {
+        use std::vec::Vec;
+
+        let storage_header = StorageHeader {
+            timestamp_seconds: 1,
+            timestamp_microseconds: 2,
+            ecu_id: [0, 0, 0, 0],
+        };
+        let packet = {
+            let mut packet = Vec::new();
+            let mut header = DltHeader {
+                is_big_endian: true,
+                message_counter: 1,
+                length: 0,
+                ecu_id: None,
+                session_id: None,
+                timestamp: None,
+                extended_header: None,
+            };
+            header.length = header.header_len() + 4;
+            header.write(&mut packet).unwrap();
+            // set version to 0
+            packet[0] = packet[0] & 0b0001_1111;
+            packet.extend_from_slice(&[1, 2, 3, 4]);
+            packet
+        };
+
+        let pos0 = 0u64;
+
+        // compose data: valid packet, then bad storage header
+        let mut v = Vec::new();
+        v.extend_from_slice(&storage_header.to_bytes());
+        v.extend_from_slice(&packet);
+        v.extend_from_slice(&[0u8; StorageHeader::BYTE_LEN]); // bad storage header
+
+        let mut reader =
+            DltStorageReader::new_strict(BufReader::new(Cursor::new(&v[..])));
+
+        // read first valid packet
+        let result = reader.next_packet().unwrap().unwrap();
+        assert_eq!(result.storage_header, storage_header);
+
+        // this should error on the bad storage header
+        assert_matches!(
+            reader.next_packet(),
+            Some(Err(ReadError::StorageHeaderStartPattern(_)))
+        );
+
+        // reader is now in error state — next_packet returns None
+        assert!(reader.next_packet().is_none());
+
+        // seek back to position 0 should reset error state and read successfully
+        let result = reader.next_packet_seek(Some(pos0)).unwrap().unwrap();
+        assert_eq!(result.position, pos0);
+        assert_eq!(result.slice.storage_header, storage_header);
+    }
+
+    #[test]
+    fn next_packet_seek_with_corruption_positions() {
+        use std::vec::Vec;
+
+        let storage_header = StorageHeader {
+            timestamp_seconds: 1,
+            timestamp_microseconds: 2,
+            ecu_id: [0, 0, 0, 0],
+        };
+        let packet = {
+            let mut packet = Vec::new();
+            let mut header = DltHeader {
+                is_big_endian: true,
+                message_counter: 1,
+                length: 0,
+                ecu_id: None,
+                session_id: None,
+                timestamp: None,
+                extended_header: None,
+            };
+            header.length = header.header_len() + 4;
+            header.write(&mut packet).unwrap();
+            // set version to 0
+            packet[0] = packet[0] & 0b0001_1111;
+            packet.extend_from_slice(&[1, 2, 3, 4]);
+            packet
+        };
+
+        // compose data with 3 bytes of garbage before a valid packet
+        let mut v = Vec::new();
+        v.extend_from_slice(&[0xFF, 0xFF, 0xFF]); // garbage
+        v.extend_from_slice(&storage_header.to_bytes());
+        v.extend_from_slice(&packet);
+
+        let expected_pos = 3u64; // after the 3 garbage bytes
+
+        let mut reader = DltStorageReader::new(BufReader::new(Cursor::new(&v[..])));
+        let result = reader.next_packet_seek(None).unwrap().unwrap();
+        assert_eq!(result.position, expected_pos);
+        assert_eq!(result.slice.storage_header, storage_header);
+        assert_eq!(1, reader.num_pattern_seeks());
     }
 }
